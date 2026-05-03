@@ -245,6 +245,7 @@ def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return ddb.create_cafe(
         user_id=user_id,
         name=args["name"],
+        neighborhood=args.get("neighborhood"),
         city=args.get("city"),
         country=args.get("country"),
         website=args.get("website"),
@@ -785,6 +786,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "required": ["name"],
                     "properties": {
                         "name": {"type": "string"},
+                        "neighborhood": {"type": "string", "description": "Neighborhood or specific location, e.g. Balboa"},
                         "city": {"type": "string"},
                         "country": {"type": "string", "default": "US"},
                         "website": {"type": "string"},
@@ -820,6 +822,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "properties": {
                         "cafeId": {"type": "string"},
                         "name": {"type": "string"},
+                        "neighborhood": {"type": "string"},
                         "city": {"type": "string"},
                         "country": {"type": "string"},
                         "website": {"type": "string"},
