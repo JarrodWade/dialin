@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build artifacts
+build/
+dist/
+lambda/build/
+lambda/package/
+lambda.zip
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+tfplan
+*.tfplan
+
+# AWS / secrets
+.aws/
+*.pem
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

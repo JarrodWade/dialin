@@ -1,0 +1,16 @@
+output "api_endpoint" {
+  description = "Base URL for the HTTP API."
+  value       = aws_apigatewayv2_api.http.api_endpoint
+}
+
+output "table_name" {
+  value = aws_dynamodb_table.main.name
+}
+
+output "lambda_function_name" {
+  value = aws_lambda_function.api.function_name
+}
+
+output "log_group" {
+  value = aws_cloudwatch_log_group.lambda.name
+}

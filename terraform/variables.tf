@@ -1,0 +1,46 @@
+variable "project_name" {
+  description = "Short name used to prefix all created resources."
+  type        = string
+  default     = "dialin"
+}
+
+variable "region" {
+  description = "AWS region for all resources."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "bedrock_model_id" {
+  description = "Bedrock model ID. Claude Haiku 4.5 via the US cross-region inference profile gives best-in-class tool-use + strong world knowledge for cafe recommendations, at very low cost."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "max_output_tokens" {
+  description = "Hard cap on tokens generated per response."
+  type        = number
+  default     = 600
+}
+
+variable "max_tool_iterations" {
+  description = "Maximum tool-use loop iterations per chat turn (safety cap). Larger because the bot may chain: list_coffees -> list_equipment -> summarize_coffee -> get_preferences."
+  type        = number
+  default     = 8
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention for the Lambda function."
+  type        = number
+  default     = 7
+}
+
+variable "monthly_budget_usd" {
+  description = "AWS Budgets monthly cost cap for the project (USD)."
+  type        = number
+  default     = 10
+}
+
+variable "budget_alert_email" {
+  description = "Email address that receives AWS Budgets alerts."
+  type        = string
+}

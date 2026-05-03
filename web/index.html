@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dialin · brew journal</title>
+    <style>
+      :root {
+        --bg: #f4ede2;
+        --bg-2: #ebe1cf;
+        --paper: #fbf6ec;
+        --ink: #2b1d12;
+        --ink-2: #5b4633;
+        --muted: #8a7762;
+        --line: #d8c8b0;
+        --accent: #6b3f1d;       /* espresso */
+        --accent-2: #b1582b;      /* terracotta */
+        --good: #4a7c3b;
+        --warn: #b1582b;
+        --bad: #a83a3a;
+        --user-bubble: #efe4d2;
+        --bot-bubble: #fffaf0;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg); color: var(--ink);
+      }
+      header {
+        padding: 14px 20px; border-bottom: 1px solid var(--line);
+        background: var(--bg-2); display: flex; gap: 12px; align-items: center;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        color: var(--accent);
+      }
+      header h1 span { color: var(--ink-2); font-weight: 400; font-style: italic; font-size: 14px; margin-left: 6px; }
+      header .grow { flex: 1; }
+      header label { font-size: 12px; color: var(--muted); margin-right: 6px; }
+      header input {
+        background: var(--paper); color: var(--ink);
+        border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px;
+        font-size: 13px; min-width: 240px;
+      }
+      header input.user { min-width: 130px; }
+      header button {
+        background: var(--accent); color: var(--paper); border: none;
+        padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      }
+      header button.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+
+      /* preferences chip */
+      .prefs-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--paper); border: 1px solid var(--line);
+        padding: 5px 10px 5px 12px; border-radius: 999px;
+        font-size: 12px; color: var(--ink-2); cursor: pointer;
+        max-width: 360px;
+      }
+      .prefs-chip:hover { background: var(--bg-2); }
+      .prefs-chip .dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--accent-2); display: inline-block;
+      }
+      .prefs-chip .text {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 280px;
+      }
+      .prefs-chip .edit { color: var(--accent); font-weight: 600; font-size: 11px; }
+
+      main {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 14px; padding: 14px;
+        height: calc(100vh - 64px);
+      }
+      .col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+      .panel {
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: 10px; display: flex; flex-direction: column; min-height: 0;
+        box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+      }
+      .panel h2 {
+        margin: 0; padding: 12px 14px; font-size: 12px; font-weight: 700;
+        color: var(--ink-2); border-bottom: 1px solid var(--line);
+        text-transform: uppercase; letter-spacing: 0.08em;
+        display: flex; align-items: center; gap: 8px;
+      }
+      .panel h2 button.tiny {
+        background: var(--accent); color: var(--paper); border: none;
+        padding: 3px 10px; border-radius: 999px; font-size: 11px;
+        font-weight: 600; cursor: pointer; letter-spacing: 0.04em;
+      }
+      .panel h2 .grow { flex: 1; }
+
+      /* --- chat --- */
+      .messages {
+        flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+      }
+      .bubble {
+        max-width: 85%; padding: 10px 12px; border-radius: 12px;
+        font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
+        border: 1px solid var(--line);
+      }
+      .bubble.user { background: var(--user-bubble); align-self: flex-end; border-bottom-right-radius: 4px; }
+      .bubble.bot  { background: var(--bot-bubble); align-self: flex-start; border-bottom-left-radius: 4px; }
+      .bubble small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+      .composer {
+        display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
+      }
+      .composer input {
+        flex: 1; background: var(--paper); color: var(--ink);
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; font-size: 14px;
+      }
+      .composer button {
+        background: var(--accent); color: var(--paper); border: none;
+        border-radius: 8px; padding: 0 16px; cursor: pointer; font-size: 14px;
+      }
+      .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      /* --- coffee cards --- */
+      .coffee-list { padding: 10px; overflow-y: auto; flex: 1; }
+      .coffee-card {
+        background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; margin-bottom: 8px;
+      }
+      .coffee-card .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+      .coffee-card .name {
+        font-family: ui-serif, Georgia, serif; font-size: 15px; font-weight: 600; color: var(--ink);
+      }
+      .coffee-card .roaster { color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+      .coffee-card .meta {
+        color: var(--muted); font-size: 12px; margin-top: 4px;
+        display: flex; gap: 10px; flex-wrap: wrap;
+      }
+      .coffee-card .actions { display: flex; gap: 6px; margin-top: 8px; }
+      .coffee-card button {
+        background: transparent; color: var(--accent); border: 1px solid var(--line);
+        padding: 3px 9px; border-radius: 6px; font-size: 11px; cursor: pointer;
+      }
+      .coffee-card button:hover { background: var(--bg); }
+      .coffee-card .stock {
+        font-variant-numeric: tabular-nums; font-weight: 600;
+        color: var(--ink-2); font-size: 12px;
+      }
+      .coffee-card.low .stock { color: var(--warn); }
+
+      /* --- brews timeline --- */
+      .brews { padding: 10px; overflow-y: auto; flex: 1; }
+      .brew-row {
+        display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+        padding: 8px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+      }
+      .brew-row:last-child { border-bottom: none; }
+      .brew-row .when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+      .brew-row .what {
+        display: flex; flex-direction: column; gap: 2px;
+      }
+      .brew-row .what .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+      .brew-row .method {
+        background: var(--accent); color: var(--paper); padding: 1px 8px;
+        border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+      }
+      .brew-row .params { color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+      .brew-row .taste { color: var(--muted); font-size: 12px; font-style: italic; margin-top: 2px; }
+      .brew-row .rating {
+        color: var(--accent-2); font-weight: 700; font-variant-numeric: tabular-nums;
+      }
+
+      /* --- roasters --- */
+      .roaster-list { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+      .roaster-row {
+        display: flex; align-items: baseline; gap: 10px;
+        padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+      }
+      .roaster-row:last-child { border-bottom: none; }
+      .roaster-row .rname { font-weight: 600; color: var(--ink); flex: 1; }
+      .roaster-row .rcity { color: var(--muted); font-size: 12px; }
+      .roaster-row .actions { display: flex; gap: 4px; }
+      .roaster-row .actions button {
+        background: transparent; color: var(--accent); border: 1px solid var(--line);
+        padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
+      }
+      .roaster-row .actions button:hover { background: var(--bg-2); }
+      .roaster-row .actions button.danger { color: var(--bad); }
+
+      /* --- equipment --- */
+      .equip-list { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+      .equip-row {
+        display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: baseline;
+        padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+      }
+      .equip-row:last-child { border-bottom: none; }
+      .equip-row .type {
+        background: var(--bg-2); color: var(--ink-2); padding: 1px 8px;
+        border-radius: 4px; font-size: 10px; font-weight: 700;
+        letter-spacing: 0.06em; text-align: center;
+      }
+      .equip-row .name { font-weight: 600; color: var(--ink); }
+      .equip-row .meta { color: var(--muted); font-size: 12px; }
+      .equip-row .actions { display: flex; gap: 4px; margin-top: 4px; }
+      .equip-row .actions button {
+        background: transparent; color: var(--accent); border: 1px solid var(--line);
+        padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
+      }
+      .equip-row .actions button:hover { background: var(--bg-2); }
+      .equip-row .actions button.danger { color: var(--bad); }
+
+      .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; font-style: italic; }
+
+      /* lists in prefs modal */
+      .chip-input-group { display: flex; flex-wrap: wrap; gap: 4px; }
+      .chip {
+        background: var(--bg-2); border: 1px solid var(--line);
+        border-radius: 999px; padding: 2px 8px; font-size: 11px;
+        display: inline-flex; align-items: center; gap: 4px;
+      }
+      .chip button {
+        background: none; border: none; color: var(--muted);
+        cursor: pointer; padding: 0; font-size: 14px; line-height: 1;
+      }
+      .chip-input { flex: 1; min-width: 100px; border: none; background: transparent;
+        font-size: 12px; padding: 2px 4px; outline: none; }
+
+      /* --- modal --- */
+      .modal-bg {
+        position: fixed; inset: 0; background: rgba(43,29,18,0.4);
+        display: none; align-items: center; justify-content: center; z-index: 50;
+      }
+      .modal-bg.show { display: flex; }
+      .modal {
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+        padding: 16px; min-width: 380px; max-width: 460px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      }
+      .modal h3 {
+        margin: 0 0 12px; font-family: ui-serif, Georgia, serif;
+        font-size: 18px; color: var(--accent);
+      }
+      .modal .grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      }
+      .modal label {
+        display: flex; flex-direction: column; font-size: 11px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.04em; gap: 3px;
+      }
+      .modal input, .modal select, .modal textarea {
+        background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 9px; font-size: 13px;
+        font-family: inherit;
+      }
+      .modal textarea { min-height: 60px; resize: vertical; }
+      .modal .full { grid-column: 1 / -1; }
+      .modal-actions {
+        display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;
+      }
+      .modal-actions button {
+        background: transparent; color: var(--ink); border: 1px solid var(--line);
+        padding: 7px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+      }
+      .modal-actions button.primary {
+        background: var(--accent); color: var(--paper); border-color: var(--accent);
+      }
+
+      .toast {
+        position: fixed; bottom: 20px; right: 20px;
+        background: var(--paper); border: 1px solid var(--line);
+        padding: 10px 14px; border-radius: 8px; font-size: 13px;
+        opacity: 0; transition: opacity 0.2s; z-index: 100;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      }
+      .toast.show { opacity: 1; }
+      .toast.error { border-color: var(--bad); color: var(--bad); }
+      code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>dialin <span>brew journal</span></h1>
+      <div>
+        <label>API</label>
+        <input id="api-base" placeholder="https://xxx.execute-api.us-east-1.amazonaws.com" />
+      </div>
+      <div>
+        <label>User</label>
+        <input id="user-id" class="user" value="jarrod" />
+      </div>
+      <div class="grow"></div>
+      <button id="prefs-chip" class="prefs-chip" type="button" title="Edit preferences">
+        <span class="dot"></span>
+        <span class="text" id="prefs-chip-text">Set your taste preferences →</span>
+        <span class="edit">edit</span>
+      </button>
+      <button id="refresh">Refresh</button>
+      <button id="reset" class="ghost">Clear chat</button>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>chat</h2>
+        <div id="messages" class="messages"></div>
+        <form id="composer" class="composer">
+          <input id="msg" placeholder="Logged a brew? Tell me about it…" autocomplete="off" />
+          <button id="send" type="submit">Send</button>
+        </form>
+      </section>
+
+      <div class="col">
+        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
+          <h2>my roasters <div class="grow"></div>
+            <button class="tiny" id="add-roaster-btn">+ add</button>
+          </h2>
+          <div id="roaster-list" class="roaster-list"></div>
+        </section>
+
+        <section class="panel" style="flex: 1 1 0; min-height: 120px;">
+          <h2>my coffees <div class="grow"></div>
+            <button class="tiny" id="add-coffee-btn">+ add</button>
+          </h2>
+          <div id="coffee-list" class="coffee-list"></div>
+        </section>
+
+        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
+          <h2>my gear <div class="grow"></div>
+            <button class="tiny" id="add-equip-btn">+ add</button>
+          </h2>
+          <div id="equip-list" class="equip-list"></div>
+        </section>
+
+        <section class="panel" style="flex: 1 1 0; min-height: 140px;">
+          <h2>recent brews <div class="grow"></div>
+            <button class="tiny" id="add-brew-btn">+ log</button>
+          </h2>
+          <div id="brews" class="brews"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Add coffee modal -->
+    <div class="modal-bg" id="coffee-modal">
+      <div class="modal">
+        <h3>Add a coffee</h3>
+        <form id="coffee-form" class="grid">
+          <label class="full">Roaster
+            <select name="roasterId" required><option value="">—</option></select>
+          </label>
+          <label>Coffee name<input name="name" required placeholder="Wote Ethiopia" /></label>
+          <label>Origin<input name="origin" placeholder="Ethiopia" /></label>
+          <label>Process<input name="process" placeholder="washed" /></label>
+          <label>Roast date<input name="roastDate" type="date" /></label>
+          <label>Bag weight (g)<input name="weightG" type="number" step="1" min="0" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="flavor notes from the bag…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="coffee-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add / edit roaster modal -->
+    <div class="modal-bg" id="roaster-modal">
+      <div class="modal">
+        <h3 id="roaster-modal-title">Add a roaster</h3>
+        <form id="roaster-form" class="grid">
+          <label>Name<input name="name" required placeholder="Sey" /></label>
+          <label>City<input name="city" placeholder="Brooklyn" /></label>
+          <label>Country<input name="country" placeholder="US" value="US" /></label>
+          <label>Website<input name="website" placeholder="https://seycoffee.com" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="ships fresh, great Ethiopians…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="roaster-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log brew modal -->
+    <div class="modal-bg" id="brew-modal">
+      <div class="modal">
+        <h3>Log a brew</h3>
+        <form id="brew-form" class="grid">
+          <label class="full">Coffee
+            <select name="coffeeId" required></select>
+          </label>
+          <label>Method
+            <select name="method" required>
+              <option>V60</option><option>AeroPress</option><option>Espresso</option>
+              <option>Chemex</option><option>Kalita</option><option>Origami</option>
+              <option>FrenchPress</option><option>Moka</option><option>ColdBrew</option>
+            </select>
+          </label>
+          <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
+          <label>Dose (g)<input name="doseG" type="number" step="0.1" min="0" /></label>
+          <label>Yield / water (g)<input name="yieldG" type="number" step="1" min="0" /></label>
+          <label>Time (sec)<input name="timeS" type="number" min="0" /></label>
+          <label>Temp (°C)<input name="tempC" type="number" step="0.5" min="0" /></label>
+          <label>Grind setting<input name="grind" placeholder="Ode 18" /></label>
+          <label>Grinder
+            <select name="grinderId"><option value="">—</option></select>
+          </label>
+          <label>Machine
+            <select name="machineId"><option value="">—</option></select>
+          </label>
+          <label>Brewer
+            <select name="brewerId"><option value="">—</option></select>
+          </label>
+          <label class="full">Taste<input name="taste" placeholder="balanced, sour, bitter…" /></label>
+          <label class="full">Notes<textarea name="notes"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="brew-submit">Log</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add equipment modal -->
+    <div class="modal-bg" id="equip-modal">
+      <div class="modal">
+        <h3>Add gear</h3>
+        <form id="equip-form" class="grid">
+          <label>Type
+            <select name="equipType" required>
+              <option value="GRINDER">Grinder</option>
+              <option value="MACHINE">Espresso machine</option>
+              <option value="BREWER">Brewer</option>
+              <option value="KETTLE">Kettle</option>
+            </select>
+          </label>
+          <label>Name<input name="name" placeholder="Niche Zero" required /></label>
+          <label>Brand<input name="brand" placeholder="Niche" /></label>
+          <label>Model<input name="model" placeholder="Zero" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="burrs, mods, anything memorable…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="equip-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preferences modal -->
+    <div class="modal-bg" id="prefs-modal">
+      <div class="modal" style="min-width: 460px; max-width: 560px;">
+        <h3>Taste preferences</h3>
+        <form id="prefs-form" class="grid">
+          <label>Home city<input name="homeCity" placeholder="Brooklyn, NY" /></label>
+          <label>Roast level
+            <select name="preferredRoastLevel">
+              <option value="">—</option>
+              <option value="light">light</option>
+              <option value="medium-light">medium-light</option>
+              <option value="medium">medium</option>
+              <option value="medium-dark">medium-dark</option>
+              <option value="dark">dark</option>
+            </select>
+          </label>
+          <label class="full">Preferred origins
+            <div class="chip-input-group" data-field="preferredOrigins">
+              <input class="chip-input" placeholder="Type and press Enter (Ethiopia, Kenya…)" />
+            </div>
+          </label>
+          <label class="full">Preferred processes
+            <div class="chip-input-group" data-field="preferredProcesses">
+              <input class="chip-input" placeholder="washed, natural, anaerobic…" />
+            </div>
+          </label>
+          <label class="full">Favorite roasters
+            <div class="chip-input-group" data-field="favoriteRoasters">
+              <input class="chip-input" placeholder="Sey, Onyx, Hydrangea…" />
+            </div>
+          </label>
+          <label class="full">Favorite cafes
+            <div class="chip-input-group" data-field="favoriteCafes">
+              <input class="chip-input" placeholder="Devoción, Heart, Sey…" />
+            </div>
+          </label>
+          <label class="full">Disliked notes
+            <div class="chip-input-group" data-field="dislikedNotes">
+              <input class="chip-input" placeholder="smoky, ashy, dark chocolate…" />
+            </div>
+          </label>
+          <label class="full">Notes<textarea name="notes" placeholder="anything else the bot should remember"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="prefs-submit">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+      // ---------- state ----------
+      const apiInput = document.getElementById("api-base");
+      const userInput = document.getElementById("user-id");
+      const messagesEl = document.getElementById("messages");
+      const composer = document.getElementById("composer");
+      const msgInput = document.getElementById("msg");
+      const sendBtn = document.getElementById("send");
+      const roasterListEl = document.getElementById("roaster-list");
+      const coffeeListEl = document.getElementById("coffee-list");
+      const equipListEl = document.getElementById("equip-list");
+      const brewsEl = document.getElementById("brews");
+      const refreshBtn = document.getElementById("refresh");
+      const resetBtn = document.getElementById("reset");
+      const toastEl = document.getElementById("toast");
+      const prefsChipBtn = document.getElementById("prefs-chip");
+      const prefsChipText = document.getElementById("prefs-chip-text");
+
+      const coffeeModal = document.getElementById("coffee-modal");
+      const brewModal = document.getElementById("brew-modal");
+      const equipModal = document.getElementById("equip-modal");
+      const roasterModal = document.getElementById("roaster-modal");
+      const prefsModal = document.getElementById("prefs-modal");
+      const coffeeForm = document.getElementById("coffee-form");
+      const brewForm = document.getElementById("brew-form");
+      const equipForm = document.getElementById("equip-form");
+      const roasterForm = document.getElementById("roaster-form");
+      const prefsForm = document.getElementById("prefs-form");
+
+      let _equipmentCache = [];
+      let _roasterCache = [];
+      let _prefsCache = {};
+      let _pendingRoasterSelectField = null; // "roasterId" when coffee form triggers add-roaster
+      // When the user picks "+ Add new gear…" from a brew form dropdown, this
+      // remembers which select to repopulate + reselect after the new gear is saved.
+      let _pendingGearSelectField = null;
+
+      apiInput.value = localStorage.getItem("dialin.apiBase") || "";
+      userInput.value = localStorage.getItem("dialin.userId") || "jarrod";
+
+      apiInput.addEventListener("input", () => localStorage.setItem("dialin.apiBase", apiInput.value.trim()));
+      apiInput.addEventListener("change", loadAll);
+      userInput.addEventListener("input", () => localStorage.setItem("dialin.userId", userInput.value.trim()));
+      userInput.addEventListener("change", () => { renderChat(); loadAll(); });
+
+      function chatStorageKey() { return "dialin.chat." + (userInput.value.trim() || "_"); }
+      function loadChat() {
+        try { return JSON.parse(localStorage.getItem(chatStorageKey()) || "[]"); }
+        catch { return []; }
+      }
+      function saveChat(history) {
+        localStorage.setItem(chatStorageKey(), JSON.stringify(history.slice(-40)));
+      }
+
+      // ---------- helpers ----------
+      function toast(msg, isError = false) {
+        toastEl.textContent = msg;
+        toastEl.classList.toggle("error", isError);
+        toastEl.classList.add("show");
+        setTimeout(() => toastEl.classList.remove("show"), 2800);
+      }
+
+      function apiBase() {
+        const v = apiInput.value.trim().replace(/\/$/, "");
+        if (!v) { toast("Set the API URL first", true); throw new Error("no api base"); }
+        return v;
+      }
+      function userId() {
+        const v = userInput.value.trim();
+        if (!v) { toast("Set a user id first", true); throw new Error("no user id"); }
+        return v;
+      }
+
+      async function api(path, opts = {}) {
+        const url = apiBase() + path;
+        const res = await fetch(url, {
+          ...opts,
+          headers: { "content-type": "application/json", ...(opts.headers || {}) },
+        });
+        const text = await res.text();
+        let data;
+        try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+        if (!res.ok) throw new Error(data?.error || res.statusText);
+        return data;
+      }
+
+      function fmtTime(iso) {
+        if (!iso) return "";
+        try {
+          const d = new Date(iso);
+          return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        } catch { return iso; }
+      }
+      function daysSince(dateStr) {
+        if (!dateStr) return null;
+        const ms = Date.now() - new Date(dateStr).getTime();
+        return Math.floor(ms / 86400000);
+      }
+
+      // ---------- chat ----------
+      function addBubble(role, text) {
+        const div = document.createElement("div");
+        div.className = "bubble " + (role === "USER" ? "user" : "bot");
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function renderChat() {
+        messagesEl.innerHTML = "";
+        const hist = loadChat();
+        if (!hist.length) {
+          messagesEl.innerHTML =
+            '<div class="empty">Tell me about a brew, ask for dial-in advice,<br>'+
+            'or have me catalog a new bag.</div>';
+          return;
+        }
+        hist.forEach((m) => addBubble(m.role, m.text));
+      }
+
+      composer.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = msgInput.value.trim();
+        if (!text) return;
+        // optimistic add
+        const history = loadChat();
+        addBubble("USER", text);
+        msgInput.value = "";
+        sendBtn.disabled = true;
+        try {
+          const data = await api("/chat", {
+            method: "POST",
+            body: JSON.stringify({ userId: userId(), message: text, history }),
+          });
+          if (data.history) saveChat(data.history);
+          else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
+          addBubble("BOT", data.reply || "(no reply)");
+          loadRoasters(); loadCoffees(); loadEquipment(); loadBrews(); loadPreferences();
+        } catch (err) {
+          addBubble("BOT", "[error] " + err.message);
+        } finally {
+          sendBtn.disabled = false;
+          msgInput.focus();
+        }
+      });
+
+      resetBtn.addEventListener("click", () => {
+        localStorage.removeItem(chatStorageKey());
+        renderChat();
+      });
+
+      // ---------- coffees ----------
+      async function loadCoffees() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/coffees?userId=${encodeURIComponent(userId())}`);
+          renderCoffees(data.coffees || []);
+          fillCoffeeSelect(data.coffees || []);
+        } catch (err) {
+          coffeeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderCoffees(items) {
+        if (!items.length) {
+          coffeeListEl.innerHTML = '<div class="empty">No coffees yet. Click + add.</div>';
+          return;
+        }
+        coffeeListEl.innerHTML = "";
+        items.forEach((c) => {
+          const days = daysSince(c.roastDate);
+          const remaining = Number(c.gramsRemaining ?? 0);
+          const total = Number(c.weightG ?? 0);
+          const lowStock = total > 0 && remaining / total < 0.2;
+          const div = document.createElement("div");
+          div.className = "coffee-card" + (lowStock ? " low" : "");
+          div.innerHTML = `
+            <div class="row">
+              <div>
+                <div class="roaster">${escapeHtml(c.roaster || "")}</div>
+                <div class="name">${escapeHtml(c.name || "")}</div>
+              </div>
+              <div class="stock">${remaining ? remaining.toFixed(0) : "?"}${total ? " / " + total.toFixed(0) : ""} g</div>
+            </div>
+            <div class="meta">
+              ${c.origin ? `<span>${escapeHtml(c.origin)}</span>` : ""}
+              ${c.process ? `<span>${escapeHtml(c.process)}</span>` : ""}
+              ${days !== null ? `<span>${days}d off roast</span>` : ""}
+            </div>
+            <div class="actions">
+              <button data-action="archive" data-id="${c.coffeeId}">Archive</button>
+            </div>
+          `;
+          coffeeListEl.appendChild(div);
+        });
+        coffeeListEl.querySelectorAll('button[data-action="archive"]').forEach((b) => {
+          b.addEventListener("click", async () => {
+            try {
+              await api(`/coffees/${encodeURIComponent(b.dataset.id)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ userId: userId(), archived: true }),
+              });
+              toast("Archived");
+              loadCoffees();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function fillCoffeeSelect(items) {
+        const sel = brewForm.elements.coffeeId;
+        const prev = sel.value;
+        sel.innerHTML = "";
+        items.forEach((c) => {
+          const opt = document.createElement("option");
+          opt.value = c.coffeeId;
+          opt.textContent = `${c.roaster} — ${c.name}`;
+          sel.appendChild(opt);
+        });
+        if (prev) sel.value = prev;
+      }
+
+      // ---------- brews ----------
+      async function loadBrews() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/brews?userId=${encodeURIComponent(userId())}&limit=20`);
+          renderBrews(data.brews || []);
+        } catch (err) {
+          brewsEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderBrews(items) {
+        if (!items.length) {
+          brewsEl.innerHTML = '<div class="empty">No brews logged yet.</div>';
+          return;
+        }
+        brewsEl.innerHTML = "";
+        items.forEach((b) => {
+          const dose = b.doseG, yld = b.yieldG ?? b.waterG;
+          const ratio = b.ratio ? `1:${Number(b.ratio).toFixed(1)}` : "";
+          const time = b.timeS ? `${Math.floor(b.timeS/60)}:${String(b.timeS%60).padStart(2,"0")}` : "";
+          const params = [
+            dose ? `${dose}g` : "",
+            yld ? `→ ${yld}g` : "",
+            ratio,
+            time,
+            b.grind ? `grind ${b.grind}` : "",
+          ].filter(Boolean).join("  ·  ");
+
+          const row = document.createElement("div");
+          row.className = "brew-row";
+          row.innerHTML = `
+            <div class="when">${fmtTime(b.createdAt)}</div>
+            <div class="what">
+              <div class="top">
+                <span class="method">${escapeHtml(b.method)}</span>
+                <span class="params">${escapeHtml(params)}</span>
+              </div>
+              ${b.taste ? `<div class="taste">${escapeHtml(b.taste)}${b.notes ? " — " + escapeHtml(b.notes) : ""}</div>` : (b.notes ? `<div class="taste">${escapeHtml(b.notes)}</div>` : "")}
+            </div>
+            <div class="rating">${b.rating ? b.rating + "/10" : ""}</div>
+          `;
+          brewsEl.appendChild(row);
+        });
+      }
+
+      // ---------- roasters ----------
+      async function loadRoasters() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/roasters?userId=${encodeURIComponent(userId())}`);
+          _roasterCache = data.roasters || [];
+          renderRoasters(_roasterCache);
+          fillRoasterSelect(_roasterCache);
+        } catch (err) {
+          roasterListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderRoasters(items) {
+        if (!items.length) {
+          roasterListEl.innerHTML = '<div class="empty">No roasters yet. Click + add.</div>';
+          return;
+        }
+        roasterListEl.innerHTML = "";
+        items.forEach((r) => {
+          const row = document.createElement("div");
+          row.className = "roaster-row";
+          row.innerHTML = `
+            <div class="rname">${escapeHtml(r.name)}</div>
+            ${r.city ? `<div class="rcity">${escapeHtml(r.city)}${r.country && r.country !== "US" ? ", " + escapeHtml(r.country) : ""}</div>` : ""}
+            <div class="actions">
+              <button data-action="edit" data-id="${r.roasterId}">Edit</button>
+              <button data-action="archive" data-id="${r.roasterId}" class="danger">Retire</button>
+            </div>
+          `;
+          roasterListEl.appendChild(row);
+        });
+
+        roasterListEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const item = _roasterCache.find((r) => r.roasterId === btn.dataset.id);
+            if (item) openEditRoasterModal(item);
+          });
+        });
+
+        roasterListEl.querySelectorAll('[data-action="archive"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Retire this roaster? It stays linked to past coffees but won't appear in new ones.")) return;
+            try {
+              await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ userId: userId(), archived: true }),
+              });
+              toast("Roaster retired");
+              loadRoasters();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function fillRoasterSelect(items) {
+        const sel = coffeeForm.elements.roasterId;
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">—</option>';
+        items.forEach((r) => {
+          const opt = document.createElement("option");
+          opt.value = r.roasterId;
+          opt.textContent = r.city ? `${r.name} (${r.city})` : r.name;
+          sel.appendChild(opt);
+        });
+        const addNew = document.createElement("option");
+        addNew.value = "__add_new_roaster__";
+        addNew.textContent = "+ Add new roaster…";
+        sel.appendChild(addNew);
+        if (prev && prev !== "__add_new_roaster__") sel.value = prev;
+
+        sel.onchange = () => {
+          if (sel.value !== "__add_new_roaster__") return;
+          sel.value = "";
+          _pendingRoasterSelectField = "roasterId";
+          resetRoasterModal();
+          openModal(roasterModal);
+        };
+      }
+
+      let _editingRoasterId = null;
+
+      function resetRoasterModal() {
+        _editingRoasterId = null;
+        roasterForm.reset();
+        roasterForm.elements.country.value = "US";
+        document.getElementById("roaster-modal-title").textContent = "Add a roaster";
+        document.getElementById("roaster-submit").textContent = "Add";
+      }
+
+      function openEditRoasterModal(item) {
+        _editingRoasterId = item.roasterId;
+        roasterForm.elements.name.value = item.name || "";
+        roasterForm.elements.city.value = item.city || "";
+        roasterForm.elements.country.value = item.country || "US";
+        roasterForm.elements.website.value = item.website || "";
+        roasterForm.elements.notes.value = item.notes || "";
+        document.getElementById("roaster-modal-title").textContent = "Edit roaster";
+        document.getElementById("roaster-submit").textContent = "Save";
+        openModal(roasterModal);
+      }
+
+      // ---------- equipment ----------
+      const EQUIP_TYPE_LABELS = {
+        GRINDER: "Grinder",
+        MACHINE: "Machine",
+        BREWER: "Brewer",
+        KETTLE: "Kettle",
+      };
+
+      async function loadEquipment() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/equipment?userId=${encodeURIComponent(userId())}`);
+          _equipmentCache = data.equipment || [];
+          renderEquipment(_equipmentCache);
+          fillEquipSelects(_equipmentCache);
+        } catch (err) {
+          equipListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderEquipment(items) {
+        if (!items.length) {
+          equipListEl.innerHTML = '<div class="empty">No gear yet. Click + add.</div>';
+          return;
+        }
+        equipListEl.innerHTML = "";
+        items.forEach((e) => {
+          const sub = [e.brand, e.model].filter(Boolean).join(" ");
+          const row = document.createElement("div");
+          row.className = "equip-row";
+          row.innerHTML = `
+            <div class="type">${escapeHtml(EQUIP_TYPE_LABELS[e.equipType] || e.equipType)}</div>
+            <div>
+              <div class="name">${escapeHtml(e.name)}</div>
+              ${sub ? `<div class="meta">${escapeHtml(sub)}</div>` : ""}
+              <div class="actions">
+                <button data-action="edit" data-id="${e.equipId}">Edit</button>
+                <button data-action="archive" data-id="${e.equipId}" class="danger">Retire</button>
+              </div>
+            </div>
+          `;
+          equipListEl.appendChild(row);
+        });
+
+        equipListEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const item = _equipmentCache.find((e) => e.equipId === btn.dataset.id);
+            if (item) openEditEquipModal(item);
+          });
+        });
+
+        equipListEl.querySelectorAll('[data-action="archive"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm(`Retire this gear? It'll stay linked to past brews but won't appear in new ones.`)) return;
+            try {
+              await api(`/equipment/${encodeURIComponent(btn.dataset.id)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ userId: userId(), archived: true }),
+              });
+              toast("Gear retired");
+              loadEquipment();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      const GEAR_FIELD_TO_TYPE = {
+        grinderId: "GRINDER",
+        machineId: "MACHINE",
+        brewerId: "BREWER",
+      };
+      const ADD_NEW_VALUE = "__add_new__";
+
+      function fillEquipSelects(items) {
+        for (const [field, type] of Object.entries(GEAR_FIELD_TO_TYPE)) {
+          const sel = brewForm.elements[field];
+          if (!sel) continue;
+          const prev = sel.value;
+          sel.innerHTML = '<option value="">—</option>';
+          items.filter((e) => e.equipType === type).forEach((e) => {
+            const opt = document.createElement("option");
+            opt.value = e.equipId;
+            opt.textContent = e.name;
+            sel.appendChild(opt);
+          });
+          const addNew = document.createElement("option");
+          addNew.value = ADD_NEW_VALUE;
+          addNew.textContent = "+ Add new gear…";
+          sel.appendChild(addNew);
+          if (prev && prev !== ADD_NEW_VALUE) sel.value = prev;
+        }
+      }
+
+      function wireBrewGearSelects() {
+        for (const field of Object.keys(GEAR_FIELD_TO_TYPE)) {
+          const sel = brewForm.elements[field];
+          if (!sel) continue;
+          sel.addEventListener("change", () => {
+            if (sel.value !== ADD_NEW_VALUE) return;
+            sel.value = ""; // reset so the dropdown doesn't show "+ Add new gear…"
+            _pendingGearSelectField = field;
+            equipForm.elements.equipType.value = GEAR_FIELD_TO_TYPE[field];
+            openModal(equipModal);
+          });
+        }
+      }
+
+      // ---------- edit equipment ----------
+      let _editingEquipId = null;
+
+      function openEditEquipModal(item) {
+        _editingEquipId = item.equipId;
+        equipForm.elements.equipType.value = item.equipType || "GRINDER";
+        equipForm.elements.name.value = item.name || "";
+        equipForm.elements.brand.value = item.brand || "";
+        equipForm.elements.model.value = item.model || "";
+        equipForm.elements.notes.value = item.notes || "";
+        equipModal.querySelector("h3").textContent = "Edit gear";
+        document.getElementById("equip-submit").textContent = "Save";
+        openModal(equipModal);
+      }
+
+      function resetEquipModal() {
+        _editingEquipId = null;
+        equipForm.reset();
+        equipModal.querySelector("h3").textContent = "Add gear";
+        document.getElementById("equip-submit").textContent = "Add";
+      }
+
+      // ---------- preferences ----------
+      const CHIP_FIELDS = [
+        "preferredOrigins",
+        "preferredProcesses",
+        "favoriteRoasters",
+        "favoriteCafes",
+        "dislikedNotes",
+      ];
+
+      async function loadPreferences() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          _prefsCache = data.profile || {};
+          renderPrefsChip(_prefsCache);
+        } catch (err) {
+          prefsChipText.textContent = "Set your taste preferences →";
+        }
+      }
+
+      function renderPrefsChip(p) {
+        const parts = [];
+        if (p.homeCity) parts.push(p.homeCity);
+        if (p.preferredRoastLevel) parts.push(p.preferredRoastLevel + " roasts");
+        if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.slice(0, 3).join(", "));
+        if (p.preferredProcesses?.length) parts.push(p.preferredProcesses.slice(0, 2).join("/"));
+        prefsChipText.textContent = parts.length ? parts.join(" · ") : "Set your taste preferences →";
+      }
+
+      function openPrefsModal() {
+        const p = _prefsCache || {};
+        prefsForm.elements.homeCity.value = p.homeCity || "";
+        prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
+        prefsForm.elements.notes.value = p.notes || "";
+        CHIP_FIELDS.forEach((f) => renderChipField(f, p[f] || []));
+        openModal(prefsModal);
+      }
+
+      function renderChipField(field, values) {
+        const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
+        if (!group) return;
+        const input = group.querySelector(".chip-input");
+        group.querySelectorAll(".chip").forEach((c) => c.remove());
+        values.forEach((v) => {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.dataset.value = v;
+          chip.innerHTML = `${escapeHtml(v)}<button type="button" aria-label="remove">×</button>`;
+          chip.querySelector("button").addEventListener("click", () => {
+            chip.remove();
+          });
+          group.insertBefore(chip, input);
+        });
+      }
+
+      function readChipField(field) {
+        const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
+        if (!group) return [];
+        return Array.from(group.querySelectorAll(".chip")).map((c) => c.dataset.value);
+      }
+
+      // chip-input behavior: Enter or comma adds a chip
+      function wireChipInputs() {
+        prefsForm.querySelectorAll(".chip-input-group").forEach((group) => {
+          const input = group.querySelector(".chip-input");
+          const field = group.dataset.field;
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === ",") {
+              ev.preventDefault();
+              const val = input.value.trim().replace(/,$/, "");
+              if (!val) return;
+              const existing = readChipField(field).map((v) => v.toLowerCase());
+              if (!existing.includes(val.toLowerCase())) {
+                renderChipField(field, [...readChipField(field), val]);
+              }
+              input.value = "";
+            } else if (ev.key === "Backspace" && !input.value) {
+              const chips = group.querySelectorAll(".chip");
+              if (chips.length) chips[chips.length - 1].remove();
+            }
+          });
+          input.addEventListener("blur", () => {
+            const val = input.value.trim();
+            if (val) {
+              const existing = readChipField(field).map((v) => v.toLowerCase());
+              if (!existing.includes(val.toLowerCase())) {
+                renderChipField(field, [...readChipField(field), val]);
+              }
+              input.value = "";
+            }
+          });
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+        }[c]));
+      }
+
+      // ---------- modals ----------
+      function openModal(m) { m.classList.add("show"); }
+      function closeModal(m) { m.classList.remove("show"); }
+      document.querySelectorAll("[data-close]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const bg = b.closest(".modal-bg");
+          closeModal(bg);
+          if (bg === equipModal)   { _pendingGearSelectField = null; resetEquipModal(); }
+          if (bg === roasterModal) { _pendingRoasterSelectField = null; resetRoasterModal(); }
+        });
+      });
+      document.querySelectorAll(".modal-bg").forEach((bg) => {
+        bg.addEventListener("click", (e) => {
+          if (e.target !== bg) return;
+          closeModal(bg);
+          if (bg === equipModal)   { _pendingGearSelectField = null; resetEquipModal(); }
+          if (bg === roasterModal) { _pendingRoasterSelectField = null; resetRoasterModal(); }
+        });
+      });
+      document.getElementById("add-roaster-btn").addEventListener("click", () => { resetRoasterModal(); openModal(roasterModal); });
+      document.getElementById("add-coffee-btn").addEventListener("click", () => openModal(coffeeModal));
+      document.getElementById("add-brew-btn").addEventListener("click", () => openModal(brewModal));
+      document.getElementById("add-equip-btn").addEventListener("click", () => openModal(equipModal));
+      prefsChipBtn.addEventListener("click", openPrefsModal);
+
+      document.getElementById("coffee-submit").addEventListener("click", async () => {
+        const fd = new FormData(coffeeForm);
+        const body = { userId: userId() };
+        for (const [k, v] of fd.entries()) {
+          if (v === "" || v == null) continue;
+          if (k === "weightG") body[k] = Number(v);
+          else body[k] = v;
+        }
+        // Denormalize roaster name so coffee cards can display it without a join.
+        if (body.roasterId) {
+          const roaster = _roasterCache.find((r) => r.roasterId === body.roasterId);
+          if (roaster) body.roaster = roaster.name;
+        }
+        try {
+          await api("/coffees", { method: "POST", body: JSON.stringify(body) });
+          coffeeForm.reset();
+          closeModal(coffeeModal);
+          toast("Coffee added");
+          loadCoffees();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("brew-submit").addEventListener("click", async () => {
+        const fd = new FormData(brewForm);
+        const body = { userId: userId() };
+        const numericKeys = new Set(["doseG", "yieldG", "tempC"]);
+        const intKeys = new Set(["rating", "timeS"]);
+        for (const [k, v] of fd.entries()) {
+          if (v === "" || v == null) continue;
+          if (numericKeys.has(k)) body[k] = Number(v);
+          else if (intKeys.has(k)) body[k] = parseInt(v, 10);
+          else body[k] = v;
+        }
+        try {
+          await api("/brews", { method: "POST", body: JSON.stringify(body) });
+          brewForm.reset();
+          closeModal(brewModal);
+          toast("Brew logged");
+          loadBrews();
+          loadCoffees(); // stock decrement
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("equip-submit").addEventListener("click", async () => {
+        const fd = new FormData(equipForm);
+        const body = { userId: userId() };
+        for (const [k, v] of fd.entries()) {
+          if (v === "" || v == null) continue;
+          body[k] = v;
+        }
+        try {
+          if (_editingEquipId) {
+            await api(`/equipment/${encodeURIComponent(_editingEquipId)}`, {
+              method: "PATCH",
+              body: JSON.stringify(body),
+            });
+            resetEquipModal();
+            closeModal(equipModal);
+            toast("Gear updated");
+            loadEquipment();
+          } else {
+            const data = await api("/equipment", { method: "POST", body: JSON.stringify(body) });
+            const newId = data?.equipment?.equipId;
+            resetEquipModal();
+            closeModal(equipModal);
+            toast("Gear added");
+            await loadEquipment();
+            if (_pendingGearSelectField && newId) {
+              const sel = brewForm.elements[_pendingGearSelectField];
+              if (sel) sel.value = newId;
+            }
+            _pendingGearSelectField = null;
+          }
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("roaster-submit").addEventListener("click", async () => {
+        const fd = new FormData(roasterForm);
+        const body = { userId: userId() };
+        for (const [k, v] of fd.entries()) {
+          if (v === "" || v == null) continue;
+          body[k] = v;
+        }
+        try {
+          if (_editingRoasterId) {
+            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, {
+              method: "PATCH", body: JSON.stringify(body),
+            });
+            resetRoasterModal();
+            closeModal(roasterModal);
+            toast("Roaster updated");
+            await loadRoasters();
+          } else {
+            const data = await api("/roasters", { method: "POST", body: JSON.stringify(body) });
+            const newId = data?.roaster?.roasterId;
+            resetRoasterModal();
+            closeModal(roasterModal);
+            toast("Roaster added");
+            await loadRoasters();
+            if (_pendingRoasterSelectField && newId) {
+              const sel = coffeeForm.elements[_pendingRoasterSelectField];
+              if (sel) sel.value = newId;
+            }
+            _pendingRoasterSelectField = null;
+          }
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("prefs-submit").addEventListener("click", async () => {
+        const fd = new FormData(prefsForm);
+        const body = { userId: userId() };
+        const homeCity = (fd.get("homeCity") || "").toString().trim();
+        const roastLevel = (fd.get("preferredRoastLevel") || "").toString().trim();
+        const notes = (fd.get("notes") || "").toString().trim();
+        if (homeCity) body.homeCity = homeCity;
+        if (roastLevel) body.preferredRoastLevel = roastLevel;
+        if (notes) body.notes = notes;
+        // Replace lists wholesale by sending the current chip set.
+        // (Server merges, but current UI represents the desired state — send what the user sees.)
+        CHIP_FIELDS.forEach((f) => { body[f] = readChipField(f); });
+        try {
+          const data = await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
+          _prefsCache = data.profile || {};
+          renderPrefsChip(_prefsCache);
+          closeModal(prefsModal);
+          toast("Preferences saved");
+        } catch (err) { toast(err.message, true); }
+      });
+
+      wireChipInputs();
+      wireBrewGearSelects();
+
+      // ---------- wiring ----------
+      refreshBtn.addEventListener("click", loadAll);
+
+      function loadAll() {
+        if (!apiInput.value.trim()) {
+          roasterListEl.innerHTML = '<div class="empty">Set the API URL above to load roasters.</div>';
+          coffeeListEl.innerHTML = '<div class="empty">Paste your API URL above to get started.</div>';
+          equipListEl.innerHTML = '<div class="empty">Set the API URL above to load gear.</div>';
+          brewsEl.innerHTML = '<div class="empty">Set the API URL above to load brews.</div>';
+          prefsChipText.textContent = "Set your taste preferences →";
+          return;
+        }
+        loadRoasters();
+        loadCoffees();
+        loadEquipment();
+        loadBrews();
+        loadPreferences();
+      }
+
+      renderChat();
+      loadAll();
+    </script>
+  </body>
+</html>
