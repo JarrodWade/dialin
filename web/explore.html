@@ -258,8 +258,8 @@
           else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
           askReply.textContent = data.reply || "(no reply)";
           askReply.className = "ask-reply visible";
-          // Refresh data in case the bot made changes
-          loadCafes(); loadRoasters(); loadVisits();
+          // Refresh data in case the bot made changes; cafes must resolve first so visit names resolve correctly
+          await loadCafes(); loadRoasters(); loadVisits();
         } catch (err) {
           askReply.textContent = "Error: " + err.message;
           askReply.className = "ask-reply visible loading";
@@ -621,14 +621,15 @@
       document.getElementById("refresh").addEventListener("click", loadAll);
 
       // ── load all ──────────────────────────────────────────────────────────
-      function loadAll() {
+      async function loadAll() {
         if (!apiInput.value.trim()) {
           cafeListEl.innerHTML    = '<div class="empty">Set the API URL above to get started.</div>';
           visitListEl.innerHTML   = '<div class="empty">Set the API URL above.</div>';
           roasterListEl.innerHTML = '<div class="empty">Set the API URL above.</div>';
           return;
         }
-        loadCafes(); loadVisits(); loadRoasters(); loadPreferences();
+        await loadCafes();
+        loadVisits(); loadRoasters(); loadPreferences();
       }
 
       loadAll();
