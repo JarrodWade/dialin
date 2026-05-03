@@ -88,6 +88,82 @@
       }
       .brew-row .actions button:hover { background: var(--bg-2); }
       .brew-row .actions button.danger { color: var(--bad); }
+
+      /* ── onboarding overlay ────────────────────────────────────────────── */
+      .onboard-overlay {
+        position: fixed; inset: 0; z-index: 300;
+        background: rgba(43,29,18,0.88);
+        display: none; align-items: center; justify-content: center;
+        padding: 20px;
+      }
+      .onboard-overlay.open { display: flex; }
+      .onboard-card {
+        background: var(--paper); border-radius: 18px;
+        padding: 32px 28px; width: 520px; max-width: 100%;
+        display: flex; flex-direction: column; gap: 18px;
+        box-shadow: 0 40px 100px rgba(0,0,0,0.35);
+        border: 1px solid var(--line);
+      }
+      .onboard-header { text-align: center; }
+      .onboard-logo {
+        font-family: ui-serif, Georgia, serif;
+        font-size: 32px; font-weight: 700; color: var(--accent);
+        letter-spacing: -0.02em; margin-bottom: 4px;
+      }
+      .onboard-sub { margin: 0; color: var(--muted); font-size: 13px; }
+      .onboard-divider {
+        height: 1px; background: var(--line); margin: 0;
+      }
+      .onboard-messages {
+        display: flex; flex-direction: column; gap: 10px;
+        max-height: 260px; overflow-y: auto;
+        min-height: 60px;
+      }
+      .onboard-messages .bubble { max-width: 88%; }
+      .onboard-messages .typing {
+        align-self: flex-start; color: var(--muted);
+        font-size: 13px; font-style: italic; padding: 4px 0;
+      }
+      .onboard-composer {
+        display: flex; gap: 8px;
+      }
+      .onboard-composer input {
+        flex: 1; background: var(--paper); color: var(--ink);
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; font-size: 14px;
+      }
+      .onboard-composer input:focus { outline: none; border-color: var(--accent); }
+      .onboard-composer button {
+        background: var(--accent); color: var(--paper); border: none;
+        border-radius: 8px; padding: 0 18px; cursor: pointer; font-size: 14px;
+        white-space: nowrap;
+      }
+      .onboard-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .onboard-footer {
+        display: flex; align-items: center; justify-content: space-between;
+        padding-top: 4px;
+      }
+      .onboard-footer .skip-btn {
+        background: none; border: none; color: var(--muted);
+        font-size: 12px; cursor: pointer; text-decoration: underline;
+        padding: 0;
+      }
+      .onboard-footer .skip-btn:hover { color: var(--ink); }
+      .onboard-footer .done-btn {
+        background: var(--accent); color: var(--paper); border: none;
+        padding: 9px 20px; border-radius: 8px; font-size: 13px;
+        font-weight: 600; cursor: pointer; opacity: 0.4;
+        transition: opacity 0.2s;
+      }
+      .onboard-footer .done-btn.ready { opacity: 1; }
+      .onboard-progress {
+        display: flex; gap: 5px; justify-content: center;
+      }
+      .onboard-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--line); transition: background 0.3s;
+      }
+      .onboard-dot.filled { background: var(--accent-2); }
     </style>
   </head>
   <body>
@@ -330,6 +406,32 @@
       </div>
     </div>
 
+    <!-- Onboarding overlay (first-time setup) -->
+    <div id="onboard-overlay" class="onboard-overlay">
+      <div class="onboard-card">
+        <div class="onboard-header">
+          <div class="onboard-logo">☕ dialin</div>
+          <p class="onboard-sub">your specialty coffee dial-in coach</p>
+        </div>
+        <hr class="onboard-divider" />
+        <div id="onboard-messages" class="onboard-messages"></div>
+        <form id="onboard-composer" class="onboard-composer">
+          <input id="onboard-msg" placeholder="Type your answer…" autocomplete="off" />
+          <button id="onboard-send" type="submit">Send</button>
+        </form>
+        <div class="onboard-progress">
+          <div class="onboard-dot" id="odot-0"></div>
+          <div class="onboard-dot" id="odot-1"></div>
+          <div class="onboard-dot" id="odot-2"></div>
+          <div class="onboard-dot" id="odot-3"></div>
+        </div>
+        <div class="onboard-footer">
+          <button class="skip-btn" id="onboard-skip">Skip setup</button>
+          <button class="done-btn" id="onboard-done">Done, let's brew! →</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
     <script src="shared.js"></script>
@@ -365,7 +467,10 @@
       let _pendingGearSelectField    = null;
       let _editingBrewId  = null;
 
-      initSharedInputs(loadAll, () => { renderChat(); loadAll(); });
+      initSharedInputs(
+        () => { _onboardBooted = false; loadAll(); },
+        () => { _onboardBooted = false; renderChat(); loadAll(); }
+      );
 
       // ── chat ──────────────────────────────────────────────────────────────
       function chatStorageKey() { return "dialin.chat." + (userInput.value.trim() || "_"); }
@@ -952,6 +1057,146 @@
       refreshBtn.addEventListener("click", loadAll);
       wireBrewGearSelects();
 
+      // ── onboarding ────────────────────────────────────────────────────────
+      const onboardOverlay  = document.getElementById("onboard-overlay");
+      const onboardMessages = document.getElementById("onboard-messages");
+      const onboardComposer = document.getElementById("onboard-composer");
+      const onboardMsg      = document.getElementById("onboard-msg");
+      const onboardSend     = document.getElementById("onboard-send");
+      const onboardSkip     = document.getElementById("onboard-skip");
+      const onboardDone     = document.getElementById("onboard-done");
+
+      // How many exchanges before "Done" lights up
+      const ONBOARD_QUESTIONS = 4;
+      // Hidden seed that triggers the bot's welcoming/question flow
+      const ONBOARD_SEED =
+        "I'm opening dialin for the very first time and need help setting up my taste " +
+        "profile. Welcome me warmly (1 sentence), then ask me one question at a time — " +
+        "keep each question to a single sentence. Cover: (1) where I'm based, " +
+        "(2) what brew methods I use at home, (3) what flavor notes I love in coffee, " +
+        "(4) any go-to roasters or cafes. After each answer call update_preferences to " +
+        "save it. After question 4 is answered, confirm what you saved in a short list, " +
+        "then say I'm all set and can update these anytime from the preferences chip.";
+
+      let _onboardHistory = [];
+      let _onboardExchanges = 0;
+      let _onboardBooted = false;
+
+      function onboardStorageKey() {
+        return "dialin.onboarded." + (userInput.value.trim() || "_");
+      }
+
+      function markOnboarded() {
+        localStorage.setItem(onboardStorageKey(), "true");
+      }
+
+      function needsOnboarding() {
+        return !localStorage.getItem(onboardStorageKey()) && apiInput.value.trim();
+      }
+
+      function addOnboardBubble(role, text) {
+        const div = document.createElement("div");
+        div.className = "bubble " + (role === "USER" ? "user" : "bot");
+        div.textContent = text;
+        onboardMessages.appendChild(div);
+        onboardMessages.scrollTop = onboardMessages.scrollHeight;
+      }
+
+      function showTyping() {
+        const t = document.createElement("div");
+        t.className = "typing"; t.id = "onboard-typing"; t.textContent = "thinking…";
+        onboardMessages.appendChild(t);
+        onboardMessages.scrollTop = onboardMessages.scrollHeight;
+        return t;
+      }
+
+      function updateDots(n) {
+        for (let i = 0; i < ONBOARD_QUESTIONS; i++) {
+          document.getElementById(`odot-${i}`)?.classList.toggle("filled", i < n);
+        }
+        if (n >= ONBOARD_QUESTIONS) onboardDone.classList.add("ready");
+      }
+
+      async function startOnboarding() {
+        onboardOverlay.classList.add("open");
+        onboardMsg.focus();
+        if (_onboardBooted) return;
+        _onboardBooted = true;
+
+        const typing = showTyping();
+        onboardSend.disabled = true;
+        try {
+          const data = await api("/chat", {
+            method: "POST",
+            body: JSON.stringify({ userId: userId(), message: ONBOARD_SEED, history: [] }),
+          });
+          typing.remove();
+          _onboardHistory = data.history || [
+            { role: "USER", text: ONBOARD_SEED },
+            { role: "BOT",  text: data.reply },
+          ];
+          addOnboardBubble("BOT", data.reply || "Welcome to dialin!");
+        } catch (err) {
+          typing.remove();
+          addOnboardBubble("BOT", "Hey! Welcome to dialin. Let's set up your profile — where are you based?");
+        } finally {
+          onboardSend.disabled = false;
+          onboardMsg.focus();
+        }
+      }
+
+      onboardComposer.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = onboardMsg.value.trim();
+        if (!text) return;
+        onboardMsg.value = "";
+        addOnboardBubble("USER", text);
+        onboardSend.disabled = true;
+        const typing = showTyping();
+        try {
+          const data = await api("/chat", {
+            method: "POST",
+            body: JSON.stringify({ userId: userId(), message: text, history: _onboardHistory }),
+          });
+          typing.remove();
+          _onboardHistory = data.history || [
+            ..._onboardHistory,
+            { role: "USER", text },
+            { role: "BOT",  text: data.reply },
+          ];
+          addOnboardBubble("BOT", data.reply || "");
+          _onboardExchanges++;
+          updateDots(_onboardExchanges);
+
+          // After final exchange, also refresh the prefs chip
+          if (_onboardExchanges >= ONBOARD_QUESTIONS) loadPreferences();
+        } catch (err) {
+          typing.remove();
+          addOnboardBubble("BOT", "[error] " + err.message);
+        } finally {
+          onboardSend.disabled = false;
+          onboardMsg.focus();
+        }
+      });
+
+      function finishOnboarding() {
+        onboardOverlay.classList.remove("open");
+        markOnboarded();
+        // Carry onboarding conversation into the main chat (minus the seed)
+        const visible = _onboardHistory.filter(m =>
+          m.role !== "USER" || m.text !== ONBOARD_SEED
+        );
+        if (visible.length) saveChat(visible);
+        renderChat();
+        loadPreferences();
+      }
+
+      onboardDone.addEventListener("click", finishOnboarding);
+      onboardSkip.addEventListener("click", () => {
+        onboardOverlay.classList.remove("open");
+        markOnboarded();
+      });
+
       // ── load all ──────────────────────────────────────────────────────────
       function loadAll() {
         if (!apiInput.value.trim()) {
@@ -961,6 +1206,10 @@
           return;
         }
         loadRoasters(); loadCoffees(); loadEquipment(); loadBrews(); loadPreferences();
+        // Trigger onboarding on first load if profile not yet set up
+        if (needsOnboarding()) {
+          setTimeout(startOnboarding, 400); // brief delay so the page paints first
+        }
       }
 
       renderChat();
