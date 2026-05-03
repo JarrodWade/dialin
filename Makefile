@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees
+.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda
 
 TF := terraform -chdir=terraform
 
@@ -24,6 +24,11 @@ UI_PORT ?= 8000
 ui:
 	@echo "Open http://localhost:$(UI_PORT)/"; \
 	cd web && python3 -m http.server $(UI_PORT)
+
+deploy-lambda:
+	@FUNC=$$($(TF) output -raw lambda_function_name); \
+	cd lambda && zip -r /tmp/dialin_lambda.zip . -x "__pycache__/*" "*.pyc" > /dev/null; \
+	aws lambda update-function-code --function-name "$$FUNC" --zip-file fileb:///tmp/dialin_lambda.zip --query 'LastModified' --output text
 
 logs:
 	@LG=$$($(TF) output -raw log_group); \

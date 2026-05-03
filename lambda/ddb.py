@@ -194,6 +194,19 @@ def create_coffee(
     return _strip_keys(item) | {"coffeeId": coffee_id}
 
 
+def delete_coffee(user_id: str, coffee_id: str) -> None:
+    """Permanently delete a coffee item. Associated brews are NOT deleted."""
+    try:
+        _table.delete_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
+            ConditionExpression="attribute_exists(PK)",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise ValueError(f"coffee {coffee_id} not found") from e
+        raise
+
+
 def get_coffee(user_id: str, coffee_id: str) -> dict[str, Any] | None:
     resp = _table.get_item(
         Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}
@@ -647,6 +660,158 @@ def update_profile(
     }
     _table.put_item(Item=item)
     return _strip_keys(item)
+
+
+# ---------------------------------------------------------------------------
+# Cafe & Visit
+# ---------------------------------------------------------------------------
+
+
+def create_cafe(
+    user_id: str,
+    name: str,
+    *,
+    city: str | None = None,
+    country: str | None = None,
+    website: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    cafe_id = _new_id("cafe")
+    created_at = _now_iso()
+    item = {
+        "PK": f"USER#{user_id}",
+        "SK": f"CAFE#{cafe_id}",
+        "itemType": "Cafe",
+        "userId": user_id,
+        "cafeId": cafe_id,
+        "name": name,
+        "city": city,
+        "country": country or "US",
+        "website": website,
+        "notes": notes,
+        "archived": False,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+    }
+    _table.put_item(
+        Item=item,
+        ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)",
+    )
+    return _strip_keys(item)
+
+
+def get_cafe(user_id: str, cafe_id: str) -> dict[str, Any] | None:
+    resp = _table.get_item(Key={"PK": f"USER#{user_id}", "SK": f"CAFE#{cafe_id}"})
+    item = resp.get("Item")
+    return _strip_keys(item) if item else None
+
+
+def list_cafes(
+    user_id: str,
+    *,
+    city: str | None = None,
+    include_archived: bool = False,
+) -> list[dict[str, Any]]:
+    resp = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with("CAFE#"),
+    )
+    items = [_strip_keys(i) for i in resp.get("Items", [])]
+    if not include_archived:
+        items = [i for i in items if not i.get("archived")]
+    if city:
+        items = [i for i in items if (i.get("city") or "").lower() == city.lower()]
+    items.sort(key=lambda i: (i.get("city") or "", i.get("name") or ""))
+    return items
+
+
+def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"name", "city", "country", "website", "notes", "archived"}
+    updates = {k: v for k, v in updates.items() if k in allowed}
+    if not updates:
+        raise ValueError("no allowed fields to update")
+
+    set_parts = ["updatedAt = :now"]
+    values: dict[str, Any] = {":now": _now_iso()}
+    names: dict[str, str] = {}
+    for i, (k, v) in enumerate(updates.items()):
+        nk, vk = f"#k{i}", f":v{i}"
+        names[nk] = k
+        values[vk] = v
+        set_parts.append(f"{nk} = {vk}")
+
+    try:
+        resp = _table.update_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"CAFE#{cafe_id}"},
+            UpdateExpression="SET " + ", ".join(set_parts),
+            ConditionExpression="attribute_exists(PK)",
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+            ReturnValues="ALL_NEW",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise ValueError(f"cafe {cafe_id} not found") from e
+        raise
+    return _strip_keys(resp.get("Attributes", {}))
+
+
+def log_visit(
+    user_id: str,
+    cafe_id: str,
+    *,
+    visit_date: str | None = None,
+    drinks: list[str] | None = None,
+    rating: int | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    if get_cafe(user_id, cafe_id) is None:
+        raise ValueError(f"cafe {cafe_id} not found")
+    visit_id = _new_id("vis")
+    iso_ts = _now_iso()
+    item = {
+        "PK": f"USER#{user_id}",
+        "SK": f"VISIT#{iso_ts}#{visit_id}",
+        "GSI1PK": f"CAFE#{cafe_id}",
+        "GSI1SK": f"VISIT#{iso_ts}#{visit_id}",
+        "itemType": "Visit",
+        "userId": user_id,
+        "visitId": visit_id,
+        "cafeId": cafe_id,
+        "visitDate": visit_date or iso_ts[:10],
+        "drinks": drinks or [],
+        "rating": rating,
+        "notes": notes,
+        "createdAt": iso_ts,
+    }
+    _table.put_item(Item=item)
+    return _strip_keys(item)
+
+
+def list_visits(
+    user_id: str,
+    *,
+    cafe_id: str | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    if cafe_id:
+        resp = _table.query(
+            IndexName="GSI1",
+            KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{cafe_id}")
+            & Key("GSI1SK").begins_with("VISIT#"),
+            ScanIndexForward=False,
+            Limit=limit,
+        )
+        items = resp.get("Items", [])
+    else:
+        resp = _table.query(
+            KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+            & Key("SK").begins_with("VISIT#"),
+            ScanIndexForward=False,
+            Limit=limit,
+        )
+        items = resp.get("Items", [])
+    return [_strip_keys(i) for i in items]
 
 
 # ---------------------------------------------------------------------------

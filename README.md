@@ -1,110 +1,146 @@
-# dialin
+# dialin ☕
 
-A specialty-coffee **brew journal & dial-in coach** chatbot. You log bags
-and brews; the bot reads your history and gives concrete next-attempt
-advice.
+A specialty-coffee brew journal and dial-in coach, built on AWS.
+Log your beans, gear, and brews. Ask the bot for extraction advice grounded in your actual data.
 
-Stack:
+---
 
-- **API Gateway (HTTP API)** -> **Lambda (Python 3.12)** -> **DynamoDB** + **Bedrock**
-- **Bedrock Converse API with tool use** &mdash; the model calls Python
-  functions (`add_coffee`, `log_brew`, `list_brews`, `get_dialin_advice`, ...) which
-  read/write DynamoDB.
-- All infra is **Terraform**-managed; budget-capped at `$10/month`.
+## What it does
+
+- **Log brews** — dose, yield, grind, time, temp, taste, rating
+- **Track coffees** — roaster FK, origin, process, roast date, bag weight
+- **Manage roasters** — canonical entity with city, country, website
+- **Manage gear** — grinder, espresso machine, brewer, kettle
+- **Track cafes & visits** — log where you've been, what you ordered, rating
+- **Dial-in advice** — surfaces your best brew for a given coffee+method, computes grind delta, ratio drift, and rating trend
+- **Taste preferences** — persistent memory (origins, processes, roasters, cafes, home city)
+- **Cafe recommendations** — city-aware, tiered confidence, no hallucination
+
+---
 
 ## Architecture
 
 ```
-browser (web/index.html)
-        |
-        v
-API Gateway (HTTP API)
-        |
-        v
-Lambda (Python: handler -> bedrock tool loop -> tools -> ddb)
-   |              \
-   |               \--- Bedrock (amazon.nova-lite-v1:0)
-   v
-DynamoDB single table  (PK / SK + GSI1)
+Browser  →  API Gateway (HTTP API)  →  Lambda (Python 3.12)  →  DynamoDB
+                                    ↘  Bedrock (Claude Haiku 4.5)
 ```
 
-### DynamoDB item shapes
+- **Infra**: Terraform — API Gateway, Lambda, DynamoDB, IAM, CloudWatch, AWS Budgets ($10/mo cap)
+- **LLM**: Amazon Bedrock Converse API (`us.anthropic.claude-haiku-4-5-20251001-v1:0`)
+- **DB**: DynamoDB single-table design with GSI1 for brews-by-coffee and visits-by-cafe
+- **UI**: Vanilla HTML + CSS + JS, served locally via `make ui`
 
-| itemType | PK             | SK                          | Notes                                     |
-| -------- | -------------- | --------------------------- | ----------------------------------------- |
-| `Coffee` | `USER#<id>`    | `COFFEE#<coffeeId>`         | one bag of beans; tracks `gramsRemaining` |
-| `Brew`   | `USER#<id>`    | `BREW#<isoTs>#<brewId>`     | time-ordered; also on GSI1 by coffee      |
+---
 
-### GSI1 &mdash; brews by coffee
+## Data model
 
-```
-GSI1PK = COFFEE#<coffeeId>
-GSI1SK = BREW#<isoTs>#<brewId>
-```
+| PK | SK | Entity |
+|----|----|--------|
+| `USER#<id>` | `PROFILE` | User preferences |
+| `USER#<id>` | `ROASTER#<id>` | Roaster |
+| `USER#<id>` | `COFFEE#<id>` | Coffee bag |
+| `USER#<id>` | `EQUIP#<id>` | Equipment |
+| `USER#<id>` | `CAFE#<id>` | Cafe |
+| `USER#<id>` | `BREW#<isoTs>#<id>` | Brew log |
+| `USER#<id>` | `VISIT#<isoTs>#<id>` | Cafe visit |
 
-Lets the bot pull "all brews for *this* coffee" without scanning.
+GSI1: `(GSI1PK, GSI1SK)` — brews keyed by `COFFEE#<id>`, visits keyed by `CAFE#<id>`
+
+---
 
 ## API routes
 
-| Method | Path                          | Description                                   |
-| ------ | ----------------------------- | --------------------------------------------- |
-| POST   | `/chat`                       | Conversational entrypoint (tool-calling LLM)  |
-| GET    | `/coffees?userId=`            | List coffees                                  |
-| POST   | `/coffees`                    | Add a coffee bag                              |
-| PATCH  | `/coffees/{coffeeId}`         | Update / archive                              |
-| GET    | `/brews?userId=&coffeeId=&method=` | List brews (filterable)                  |
-| POST   | `/brews`                      | Log a brew (atomically decrements stock)      |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/chat` | LLM conversation with tool use |
+| GET / POST | `/roasters` | List / create roasters |
+| PATCH | `/roasters/{roasterId}` | Edit / retire a roaster |
+| GET / POST | `/coffees` | List / create coffees |
+| PATCH | `/coffees/{coffeeId}` | Edit a coffee |
+| DELETE | `/coffees/{coffeeId}` | Permanently delete a coffee |
+| GET / POST | `/brews` | List / log brews |
+| PATCH | `/brews/{brewId}` | Edit a brew |
+| DELETE | `/brews/{brewId}` | Delete a brew |
+| GET / POST | `/equipment` | List / add equipment |
+| PATCH | `/equipment/{equipId}` | Edit / retire equipment |
+| GET / POST | `/cafes` | List / add cafes |
+| PATCH | `/cafes/{cafeId}` | Edit / retire a cafe |
+| GET / POST | `/visits` | List / log cafe visits |
+| GET / PATCH | `/profile` | Get / update taste preferences |
+
+---
 
 ## LLM tools
 
-Defined in `lambda/tools.py` and surfaced to Bedrock via the Converse API:
+| Tool | Description |
+|------|-------------|
+| `search_known_roasters` | Reference list of ~70 vetted US specialty roasters |
+| `add_roaster` / `list_roasters` / `update_roaster` | Roaster CRUD |
+| `add_coffee` / `list_coffees` / `update_coffee` / `archive_coffee` / `delete_coffee` | Coffee CRUD |
+| `add_equipment` / `list_equipment` | Equipment management |
+| `log_brew` / `list_brews` / `update_brew` / `delete_brew` | Brew CRUD |
+| `get_dialin_advice` | Best brew + ratio delta + grind note + trend |
+| `summarize_coffee` | Avg rating, top taste words, best/last brew |
+| `add_cafe` / `list_cafes` / `update_cafe` | Cafe management |
+| `log_visit` / `list_visits` | Cafe visit log |
+| `get_preferences` / `update_preferences` | Persistent taste profile |
 
-- `add_coffee`, `archive_coffee`, `list_coffees`
-- `log_brew`, `list_brews`
-- `get_dialin_advice` &mdash; pulls recent brews + applies extraction heuristics
+---
 
-## One-time setup
+## Quickstart
 
-Same as for the billing-bot sibling repo:
+### Prerequisites
 
-1. AWS account + IAM user with `AdministratorAccess`.
-2. `aws configure` so `aws sts get-caller-identity` works.
-3. Bedrock model access auto-enables on first invoke for Amazon Nova models.
+- AWS account with Bedrock model access for `us.anthropic.claude-haiku-4-5-20251001-v1:0`
+- Terraform ≥ 1.5
+- Python 3.12
 
-## Deploy
+### Deploy
 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# edit terraform.tfvars: budget_alert_email, etc.
+# Edit terraform.tfvars with your project_name, region, etc.
 
-make init
-make apply
+cd terraform
+terraform init
+terraform apply
 ```
 
-## Use it
+Copy the `api_url` output value.
+
+### Run the UI
 
 ```bash
-make ui                          # serves UI on http://localhost:8000
+make ui            # serves on http://localhost:8000
+# or
+make ui UI_PORT=8001
 ```
 
-Paste the `api_endpoint` from the Terraform output into the **API** field.
+Paste the API URL into the input at the top of the UI.
 
-### Things to try
+---
 
-- "Add a bag: Sey, Wote Ethiopia, washed, roasted 2026-04-14, 250g"
-- "Log a brew: V60, 15g in, 250g out, 3:10, grind 18, sour"
-- "Give me dial-in advice for that"
-- "Show my V60 brews this week"
-
-## Cost guardrails
-
-- DynamoDB on-demand
-- Lambda 512MB / 30s / `MAX_OUTPUT_TOKENS=400` / `MAX_TOOL_ITERATIONS=5`
-- CloudWatch log retention 7d
-- AWS Budget at `$10/month` with 50/80/100% alerts
-
-## Tear down
+## Development
 
 ```bash
-make destroy
+# Tail Lambda logs
+make logs
+
+# Deploy Lambda code changes only (fast, no Terraform)
+make deploy-lambda
+
+# Full Terraform apply
+make deploy
 ```
+
+---
+
+## Cost
+
+Under typical personal use (~50 brews/month, ~20 chat turns/day):
+
+- Bedrock (Claude Haiku 4.5): ~$0.20–0.80/month
+- DynamoDB (on-demand): < $0.10/month
+- Lambda + API Gateway: free tier
+
+A `$10/month` AWS Budget alert is included in the Terraform config.

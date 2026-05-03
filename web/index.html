@@ -151,6 +151,15 @@
 
       /* --- brews timeline --- */
       .brews { padding: 10px; overflow-y: auto; flex: 1; }
+      .cafe-list { overflow-y: auto; }
+      .cafe-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+      .cafe-row:last-child { border-bottom: none; }
+      .cafe-row .cname { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cafe-row .ccity { color: var(--muted); font-size: 12px; }
+      .cafe-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
+      .cafe-row .actions button { font-size: 11px; padding: 2px 6px; }
+      .brew-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
+      .brew-row .actions button { font-size: 11px; padding: 2px 6px; }
       .brew-row {
         display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
         padding: 8px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
@@ -331,6 +340,13 @@
           <div id="equip-list" class="equip-list"></div>
         </section>
 
+        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
+          <h2>my cafes <div class="grow"></div>
+            <button class="tiny" id="add-cafe-btn">+ add</button>
+          </h2>
+          <div id="cafe-list" class="cafe-list"></div>
+        </section>
+
         <section class="panel" style="flex: 1 1 0; min-height: 140px;">
           <h2>recent brews <div class="grow"></div>
             <button class="tiny" id="add-brew-btn">+ log</button>
@@ -495,6 +511,80 @@
       </div>
     </div>
 
+    <!-- Add / edit cafe modal -->
+    <div class="modal-bg" id="cafe-modal">
+      <div class="modal">
+        <h3 id="cafe-modal-title">Add a cafe</h3>
+        <form id="cafe-form" class="grid">
+          <label>Name<input name="name" required placeholder="Cartel Coffee Lab" /></label>
+          <label>City<input name="city" placeholder="Tempe" /></label>
+          <label>Country<input name="country" placeholder="US" value="US" /></label>
+          <label class="full">Website<input name="website" placeholder="https://cartelcoffee.com" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="great filters, usually have 2 Ethiopians on…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="cafe-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log visit modal -->
+    <div class="modal-bg" id="visit-modal">
+      <div class="modal">
+        <h3 id="visit-modal-title">Log a visit</h3>
+        <form id="visit-form" class="grid">
+          <input type="hidden" name="cafeId" />
+          <label>Date<input name="visitDate" type="date" /></label>
+          <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
+          <label class="full">Drinks ordered<input name="drinks" placeholder="V60 Ethiopia, cortado, croissant" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="vibe, service, anything memorable…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="visit-submit">Log visit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit brew modal -->
+    <div class="modal-bg" id="brew-edit-modal">
+      <div class="modal">
+        <h3>Edit brew</h3>
+        <form id="brew-edit-form" class="grid">
+          <input type="hidden" name="brewId" />
+          <label>Method
+            <select name="method" required>
+              <option>V60</option><option>AeroPress</option><option>Espresso</option>
+              <option>Chemex</option><option>Kalita</option><option>Origami</option>
+              <option>FrenchPress</option><option>Moka</option><option>ColdBrew</option>
+            </select>
+          </label>
+          <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
+          <label>Dose (g)<input name="doseG" type="number" step="0.1" min="0" /></label>
+          <label>Yield / water (g)<input name="yieldG" type="number" step="1" min="0" /></label>
+          <label>Time (sec)<input name="timeS" type="number" min="0" /></label>
+          <label>Temp (°C)<input name="tempC" type="number" step="0.5" min="0" /></label>
+          <label>Grind setting<input name="grind" placeholder="Ode 18" /></label>
+          <label>Grinder
+            <select name="grinderId"><option value="">—</option></select>
+          </label>
+          <label>Machine
+            <select name="machineId"><option value="">—</option></select>
+          </label>
+          <label>Brewer
+            <select name="brewerId"><option value="">—</option></select>
+          </label>
+          <label class="full">Taste<input name="taste" placeholder="balanced, sour, bitter…" /></label>
+          <label class="full">Notes<textarea name="notes"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="brew-edit-submit">Save changes</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
     <script>
@@ -528,11 +618,11 @@
 
       let _equipmentCache = [];
       let _roasterCache = [];
+      let _cafeCache = [];
       let _prefsCache = {};
-      let _pendingRoasterSelectField = null; // "roasterId" when coffee form triggers add-roaster
-      // When the user picks "+ Add new gear…" from a brew form dropdown, this
-      // remembers which select to repopulate + reselect after the new gear is saved.
+      let _pendingRoasterSelectField = null;
       let _pendingGearSelectField = null;
+      let _editingBrewId = null;
 
       apiInput.value = localStorage.getItem("dialin.apiBase") || "";
       userInput.value = localStorage.getItem("dialin.userId") || "jarrod";
@@ -634,7 +724,7 @@
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
           addBubble("BOT", data.reply || "(no reply)");
-          loadRoasters(); loadCoffees(); loadEquipment(); loadBrews(); loadPreferences();
+          loadRoasters(); loadCoffees(); loadEquipment(); loadCafes(); loadBrews(); loadPreferences();
         } catch (err) {
           addBubble("BOT", "[error] " + err.message);
         } finally {
@@ -760,8 +850,67 @@
               ${b.taste ? `<div class="taste">${escapeHtml(b.taste)}${b.notes ? " — " + escapeHtml(b.notes) : ""}</div>` : (b.notes ? `<div class="taste">${escapeHtml(b.notes)}</div>` : "")}
             </div>
             <div class="rating">${b.rating ? b.rating + "/10" : ""}</div>
+            <div class="actions">
+              <button data-action="edit-brew" data-brew='${JSON.stringify(b).replace(/'/g, "&#39;")}'>Edit</button>
+              <button data-action="del-brew" data-id="${b.brewId}" class="danger">Del</button>
+            </div>
           `;
           brewsEl.appendChild(row);
+        });
+
+        brewsEl.querySelectorAll('[data-action="edit-brew"]').forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const brew = JSON.parse(btn.dataset.brew);
+            openEditBrewModal(brew);
+          });
+        });
+
+        brewsEl.querySelectorAll('[data-action="del-brew"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Delete this brew permanently?")) return;
+            const uid = userId();
+            try {
+              await api(`/brews/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, { method: "DELETE" });
+              toast("Brew deleted.");
+              await loadBrews();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function openEditBrewModal(b) {
+        _editingBrewId = b.brewId;
+        const f = document.getElementById("brew-edit-form");
+        f.elements.brewId.value = b.brewId;
+        f.elements.method.value = b.method || "V60";
+        f.elements.rating.value = b.rating || "";
+        f.elements.doseG.value = b.doseG || "";
+        f.elements.yieldG.value = b.yieldG ?? b.waterG ?? "";
+        f.elements.timeS.value = b.timeS || "";
+        f.elements.tempC.value = b.tempC || "";
+        f.elements.grind.value = b.grind || "";
+        f.elements.taste.value = b.taste || "";
+        f.elements.notes.value = b.notes || "";
+        fillEquipSelectsInForm(f);
+        setTimeout(() => {
+          if (b.grinderId) f.elements.grinderId.value = b.grinderId;
+          if (b.machineId) f.elements.machineId.value = b.machineId;
+          if (b.brewerId)  f.elements.brewerId.value  = b.brewerId;
+        }, 50);
+        document.getElementById("brew-edit-modal").classList.add("open");
+      }
+
+      function fillEquipSelectsInForm(f) {
+        const selects = { grinderId: "GRINDER", machineId: "MACHINE", brewerId: "BREWER" };
+        Object.entries(selects).forEach(([field, type]) => {
+          const sel = f.elements[field];
+          if (!sel) return;
+          sel.innerHTML = '<option value="">—</option>';
+          _equipmentCache.filter(e => e.equipType === type).forEach(e => {
+            const opt = document.createElement("option");
+            opt.value = e.equipId; opt.textContent = e.name;
+            sel.appendChild(opt);
+          });
         });
       }
 
@@ -1104,16 +1253,20 @@
         b.addEventListener("click", () => {
           const bg = b.closest(".modal-bg");
           closeModal(bg);
-          if (bg === equipModal)   { _pendingGearSelectField = null; resetEquipModal(); }
-          if (bg === roasterModal) { _pendingRoasterSelectField = null; resetRoasterModal(); }
+          if (bg === equipModal)    { _pendingGearSelectField = null; resetEquipModal(); }
+          if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
+          if (bg === cafeModal)     resetCafeModal();
+          if (bg === brewEditModal) _editingBrewId = null;
         });
       });
       document.querySelectorAll(".modal-bg").forEach((bg) => {
         bg.addEventListener("click", (e) => {
           if (e.target !== bg) return;
           closeModal(bg);
-          if (bg === equipModal)   { _pendingGearSelectField = null; resetEquipModal(); }
-          if (bg === roasterModal) { _pendingRoasterSelectField = null; resetRoasterModal(); }
+          if (bg === equipModal)    { _pendingGearSelectField = null; resetEquipModal(); }
+          if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
+          if (bg === cafeModal)     resetCafeModal();
+          if (bg === brewEditModal) _editingBrewId = null;
         });
       });
       document.getElementById("add-roaster-btn").addEventListener("click", () => { resetRoasterModal(); openModal(roasterModal); });
@@ -1257,11 +1410,198 @@
       // ---------- wiring ----------
       refreshBtn.addEventListener("click", loadAll);
 
+      // ---------- cafes ----------
+      const cafeListEl = document.getElementById("cafe-list");
+      const cafeModal = document.getElementById("cafe-modal");
+      const visitModal = document.getElementById("visit-modal");
+      let _editingCafeId = null;
+      let _visitCafeId = null;
+
+      async function loadCafes() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/cafes?userId=${encodeURIComponent(userId())}`);
+          _cafeCache = data.cafes || [];
+          renderCafes(_cafeCache);
+        } catch (err) {
+          cafeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderCafes(items) {
+        if (!items.length) {
+          cafeListEl.innerHTML = '<div class="empty">No cafes yet. Click + add.</div>';
+          return;
+        }
+        cafeListEl.innerHTML = "";
+        items.forEach((c) => {
+          const row = document.createElement("div");
+          row.className = "cafe-row";
+          row.innerHTML = `
+            <div class="cname">${escapeHtml(c.name)}</div>
+            ${c.city ? `<div class="ccity">${escapeHtml(c.city)}</div>` : ""}
+            <div class="actions">
+              <button data-action="visit" data-id="${c.cafeId}" title="Log a visit">Visit</button>
+              <button data-action="edit-cafe" data-id="${c.cafeId}">Edit</button>
+              <button data-action="retire-cafe" data-id="${c.cafeId}" class="danger">Retire</button>
+            </div>
+          `;
+          cafeListEl.appendChild(row);
+        });
+
+        cafeListEl.querySelectorAll('[data-action="visit"]').forEach((btn) => {
+          btn.addEventListener("click", () => openVisitModal(btn.dataset.id));
+        });
+
+        cafeListEl.querySelectorAll('[data-action="edit-cafe"]').forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const c = _cafeCache.find(x => x.cafeId === btn.dataset.id);
+            if (c) openEditCafeModal(c);
+          });
+        });
+
+        cafeListEl.querySelectorAll('[data-action="retire-cafe"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Retire this cafe?")) return;
+            const uid = userId();
+            try {
+              await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ archived: true }),
+              });
+              toast("Cafe retired.");
+              await loadCafes();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function resetCafeModal() {
+        _editingCafeId = null;
+        document.getElementById("cafe-form").reset();
+        document.getElementById("cafe-form").elements.country.value = "US";
+        document.getElementById("cafe-modal-title").textContent = "Add a cafe";
+        document.getElementById("cafe-submit").textContent = "Add";
+      }
+
+      function openEditCafeModal(c) {
+        _editingCafeId = c.cafeId;
+        const f = document.getElementById("cafe-form");
+        f.elements.name.value = c.name || "";
+        f.elements.city.value = c.city || "";
+        f.elements.country.value = c.country || "US";
+        f.elements.website.value = c.website || "";
+        f.elements.notes.value = c.notes || "";
+        document.getElementById("cafe-modal-title").textContent = "Edit cafe";
+        document.getElementById("cafe-submit").textContent = "Save";
+        cafeModal.classList.add("open");
+      }
+
+      function openVisitModal(cafeId) {
+        _visitCafeId = cafeId;
+        document.getElementById("visit-form").reset();
+        document.getElementById("visit-form").elements.cafeId.value = cafeId;
+        const cafe = _cafeCache.find(c => c.cafeId === cafeId);
+        document.getElementById("visit-modal-title").textContent =
+          "Log a visit" + (cafe ? ` — ${cafe.name}` : "");
+        visitModal.classList.add("open");
+      }
+
+      document.getElementById("add-cafe-btn").addEventListener("click", () => {
+        resetCafeModal();
+        cafeModal.classList.add("open");
+      });
+
+      document.getElementById("cafe-submit").addEventListener("click", async () => {
+        const f = document.getElementById("cafe-form");
+        if (!f.reportValidity()) return;
+        const fd = new FormData(f);
+        const body = { name: fd.get("name").trim() };
+        if (fd.get("city"))    body.city    = fd.get("city").trim();
+        if (fd.get("country")) body.country = fd.get("country").trim();
+        if (fd.get("website")) body.website = fd.get("website").trim();
+        if (fd.get("notes"))   body.notes   = fd.get("notes").trim();
+        const uid = userId();
+        try {
+          if (_editingCafeId) {
+            await api(`/cafes/${encodeURIComponent(_editingCafeId)}?userId=${encodeURIComponent(uid)}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            toast("Cafe updated.");
+          } else {
+            body.userId = uid;
+            await api("/cafes", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            toast("Cafe added.");
+          }
+          cafeModal.classList.remove("open");
+          resetCafeModal();
+          await loadCafes();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("visit-submit").addEventListener("click", async () => {
+        const f = document.getElementById("visit-form");
+        const fd = new FormData(f);
+        const cafeId = fd.get("cafeId");
+        if (!cafeId) return;
+        const body = { cafeId, userId: userId() };
+        const drinksRaw = (fd.get("drinks") || "").trim();
+        if (drinksRaw) body.drinks = drinksRaw.split(",").map(s => s.trim()).filter(Boolean);
+        if (fd.get("visitDate")) body.visitDate = fd.get("visitDate");
+        if (fd.get("rating"))    body.rating    = parseInt(fd.get("rating"), 10);
+        if (fd.get("notes"))     body.notes     = fd.get("notes").trim();
+        try {
+          await api("/visits", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          toast("Visit logged!");
+          visitModal.classList.remove("open");
+          _visitCafeId = null;
+        } catch (err) { toast(err.message, true); }
+      });
+
+      // ---------- brew edit modal ----------
+      const brewEditModal = document.getElementById("brew-edit-modal");
+
+      document.getElementById("brew-edit-submit").addEventListener("click", async () => {
+        const f = document.getElementById("brew-edit-form");
+        if (!f.reportValidity()) return;
+        const fd = new FormData(f);
+        const brewId = fd.get("brewId");
+        const body = {};
+        const numFields = ["doseG", "yieldG", "timeS", "tempC", "rating"];
+        const strFields = ["method", "grind", "taste", "notes", "grinderId", "machineId", "brewerId"];
+        numFields.forEach(k => { if (fd.get(k)) body[k] = parseFloat(fd.get(k)); });
+        strFields.forEach(k => { if (fd.get(k)) body[k] = fd.get(k); });
+        const uid = userId();
+        try {
+          await api(`/brews/${encodeURIComponent(brewId)}?userId=${encodeURIComponent(uid)}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          toast("Brew updated.");
+          brewEditModal.classList.remove("open");
+          _editingBrewId = null;
+          await loadBrews();
+        } catch (err) { toast(err.message, true); }
+      });
+
       function loadAll() {
         if (!apiInput.value.trim()) {
           roasterListEl.innerHTML = '<div class="empty">Set the API URL above to load roasters.</div>';
           coffeeListEl.innerHTML = '<div class="empty">Paste your API URL above to get started.</div>';
           equipListEl.innerHTML = '<div class="empty">Set the API URL above to load gear.</div>';
+          cafeListEl.innerHTML = '<div class="empty">Set the API URL above to load cafes.</div>';
           brewsEl.innerHTML = '<div class="empty">Set the API URL above to load brews.</div>';
           prefsChipText.textContent = "Set your taste preferences →";
           return;
@@ -1269,6 +1609,7 @@
         loadRoasters();
         loadCoffees();
         loadEquipment();
+        loadCafes();
         loadBrews();
         loadPreferences();
       }

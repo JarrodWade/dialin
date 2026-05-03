@@ -383,6 +383,98 @@ def _handle_update_profile(event: dict[str, Any]) -> dict[str, Any]:
     return _response(200, {"profile": item})
 
 
+def _handle_delete_coffee(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = (_qs(event).get("userId") or _parse_body(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    coffee_id = _path_params(event).get("coffeeId")
+    if not coffee_id:
+        return _response(400, {"error": "coffeeId required"})
+    try:
+        ddb.delete_coffee(user_id, coffee_id)
+    except ValueError as e:
+        return _response(404, {"error": str(e)})
+    return _response(200, {"deleted": coffee_id})
+
+
+def _handle_list_cafes(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = (_qs(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    city = _qs(event).get("city")
+    include_archived = _qs(event).get("includeArchived", "").lower() in ("1", "true")
+    items = ddb.list_cafes(user_id, city=city, include_archived=include_archived)
+    return _response(200, {"cafes": items})
+
+
+def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
+    body = _parse_body(event)
+    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    name = (body.get("name") or "").strip()
+    if not name:
+        return _response(400, {"error": "name required"})
+    item = ddb.create_cafe(
+        user_id=user_id,
+        name=name,
+        city=body.get("city"),
+        country=body.get("country"),
+        website=body.get("website"),
+        notes=body.get("notes"),
+    )
+    return _response(201, {"cafe": item})
+
+
+def _handle_update_cafe(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = (_qs(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    cafe_id = _path_params(event).get("cafeId")
+    if not cafe_id:
+        return _response(400, {"error": "cafeId required"})
+    body = _parse_body(event)
+    try:
+        item = ddb.update_cafe(user_id, cafe_id, body)
+    except ValueError as e:
+        msg = str(e)
+        status = 404 if "not found" in msg else 400
+        return _response(status, {"error": msg})
+    return _response(200, {"cafe": item})
+
+
+def _handle_list_visits(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = (_qs(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    cafe_id = _qs(event).get("cafeId")
+    limit = int(_qs(event).get("limit", "20"))
+    items = ddb.list_visits(user_id, cafe_id=cafe_id, limit=limit)
+    return _response(200, {"visits": items})
+
+
+def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
+    body = _parse_body(event)
+    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    if not user_id:
+        return _response(400, {"error": "userId required"})
+    cafe_id = (body.get("cafeId") or "").strip()
+    if not cafe_id:
+        return _response(400, {"error": "cafeId required"})
+    try:
+        item = ddb.log_visit(
+            user_id=user_id,
+            cafe_id=cafe_id,
+            visit_date=body.get("visitDate"),
+            drinks=body.get("drinks"),
+            rating=body.get("rating"),
+            notes=body.get("notes"),
+        )
+    except ValueError as e:
+        return _response(404, {"error": str(e)})
+    return _response(201, {"visit": item})
+
+
 _ROUTES = {
     "POST /chat": _handle_chat,
     "GET /roasters": _handle_list_roasters,
@@ -391,6 +483,7 @@ _ROUTES = {
     "GET /coffees": _handle_list_coffees,
     "POST /coffees": _handle_create_coffee,
     "PATCH /coffees/{coffeeId}": _handle_update_coffee,
+    "DELETE /coffees/{coffeeId}": _handle_delete_coffee,
     "GET /brews": _handle_list_brews,
     "POST /brews": _handle_create_brew,
     "PATCH /brews/{brewId}": _handle_update_brew,
@@ -398,6 +491,11 @@ _ROUTES = {
     "GET /equipment": _handle_list_equipment,
     "POST /equipment": _handle_create_equipment,
     "PATCH /equipment/{equipId}": _handle_update_equipment,
+    "GET /cafes": _handle_list_cafes,
+    "POST /cafes": _handle_create_cafe,
+    "PATCH /cafes/{cafeId}": _handle_update_cafe,
+    "GET /visits": _handle_list_visits,
+    "POST /visits": _handle_create_visit,
     "GET /profile": _handle_get_profile,
     "PATCH /profile": _handle_update_profile,
 }
