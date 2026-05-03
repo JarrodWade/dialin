@@ -44,3 +44,10 @@ variable "budget_alert_email" {
   description = "Email address that receives AWS Budgets alerts."
   type        = string
 }
+
+variable "tavily_api_key" {
+  description = "Tavily API key for live web search in cafe recommendations. Get a free key at https://tavily.com. Set to empty string to disable web search."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

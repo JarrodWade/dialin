@@ -1070,13 +1070,17 @@
       const ONBOARD_QUESTIONS = 4;
       // Hidden seed that triggers the bot's welcoming/question flow
       const ONBOARD_SEED =
-        "I'm opening dialin for the very first time and need help setting up my taste " +
-        "profile. Welcome me warmly (1 sentence), then ask me one question at a time — " +
-        "keep each question to a single sentence. Cover: (1) where I'm based, " +
-        "(2) what brew methods I use at home, (3) what flavor notes I love in coffee, " +
-        "(4) any go-to roasters or cafes. After each answer call update_preferences to " +
-        "save it. After question 4 is answered, confirm what you saved in a short list, " +
-        "then say I'm all set and can update these anytime from the preferences chip.";
+        "I'm opening dialin for the very first time. Welcome me warmly in one sentence, " +
+        "then ask me these 4 questions one at a time (one question per message): " +
+        "(1) Where am I based? → save with update_preferences homeCity. " +
+        "(2) What brew methods do I use at home? → save with update_preferences. " +
+        "(3) What flavor notes do I love in coffee? → save preferredOrigins / preferredProcesses / notes. " +
+        "(4) Any roasters or cafes I already love? → IMPORTANT: for each roaster named, " +
+        "call add_roaster to create it as a real entity (also set hasCafe: true if it has a " +
+        "physical cafe location); for each cafe-only place named, call add_cafe. " +
+        "Also save all names to update_preferences favoriteRoasters / favoriteCafes. " +
+        "After question 4 is answered, confirm what you created/saved in a brief list, " +
+        "then say they're all set and can update anytime via the preferences chip.";
 
       let _onboardHistory = [];
       let _onboardExchanges = 0;

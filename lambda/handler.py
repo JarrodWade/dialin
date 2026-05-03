@@ -285,6 +285,7 @@ def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
             country=body.get("country"),
             website=body.get("website"),
             notes=body.get("notes"),
+            has_cafe=bool(body.get("hasCafe")),
         )
     except Exception:  # noqa: BLE001
         logger.exception("create_roaster failed")
@@ -422,6 +423,7 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
         country=body.get("country"),
         website=body.get("website"),
         notes=body.get("notes"),
+        is_roaster=bool(body.get("isRoaster")),
     )
     return _response(201, {"cafe": item})
 
@@ -458,13 +460,17 @@ def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
     user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
     if not user_id:
         return _response(400, {"error": "userId required"})
-    cafe_id = (body.get("cafeId") or "").strip()
-    if not cafe_id:
-        return _response(400, {"error": "cafeId required"})
+    cafe_id    = (body.get("cafeId")    or "").strip() or None
+    roaster_id = (body.get("roasterId") or "").strip() or None
+    place_name = (body.get("placeName") or "").strip() or None
+    if not cafe_id and not roaster_id:
+        return _response(400, {"error": "cafeId or roasterId required"})
     try:
         item = ddb.log_visit(
             user_id=user_id,
             cafe_id=cafe_id,
+            roaster_id=roaster_id,
+            place_name=place_name,
             visit_date=body.get("visitDate"),
             drinks=body.get("drinks"),
             rating=body.get("rating"),

@@ -8,9 +8,15 @@ here, run it against DynamoDB, and feed the result back as a
 
 from __future__ import annotations
 
+import json
+import os
+import urllib.error
+import urllib.request
 from typing import Any, Callable
 
 import ddb
+
+_TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +37,7 @@ def _add_roaster(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         country=args.get("country"),
         website=args.get("website"),
         notes=args.get("notes"),
+        has_cafe=bool(args.get("hasCafe")),
     )
 
 
@@ -250,6 +257,7 @@ def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         country=args.get("country"),
         website=args.get("website"),
         notes=args.get("notes"),
+        is_roaster=bool(args.get("isRoaster")),
     )
 
 
@@ -265,7 +273,9 @@ def _update_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 def _log_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return ddb.log_visit(
         user_id=user_id,
-        cafe_id=args["cafeId"],
+        cafe_id=args.get("cafeId"),
+        roaster_id=args.get("roasterId"),
+        place_name=args.get("placeName"),
         visit_date=args.get("visitDate"),
         drinks=args.get("drinks"),
         rating=args.get("rating"),
@@ -399,6 +409,60 @@ def _summarize_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return ddb.summarize_coffee(user_id, args["coffeeId"])
 
 
+# --- Web search --------------------------------------------------------------
+
+
+def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Live web search via Tavily — use for current cafe/roaster recommendations."""
+    if not _TAVILY_API_KEY:
+        return {"ok": False, "error": "web search is not configured (no TAVILY_API_KEY)"}
+
+    query = (args.get("query") or "").strip()
+    if not query:
+        return {"ok": False, "error": "query is required"}
+
+    include_domains = args.get("includeDomains") or []
+
+    payload = json.dumps({
+        "api_key": _TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "advanced",
+        "max_results": int(args.get("maxResults", 5)),
+        "include_answer": True,
+        **({"include_domains": include_domains} if include_domains else {}),
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.tavily.com/search",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        return {"ok": False, "error": f"Tavily HTTP {e.code}: {body[:200]}"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"search failed: {e}"}
+
+    results = [
+        {
+            "title": r.get("title"),
+            "url": r.get("url"),
+            "snippet": r.get("content", "")[:400],
+            "score": r.get("score"),
+        }
+        for r in data.get("results", [])
+    ]
+    return {
+        "query": query,
+        "answer": data.get("answer"),
+        "results": results,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Bedrock toolSpecs (JSON Schema for the model)
 # ---------------------------------------------------------------------------
@@ -424,6 +488,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "add_roaster",
             "description": (
                 "Add a roaster to the user's roaster list. "
+                "Set hasCafe: true if the roaster also has a physical cafe you can visit. "
                 "Only call after the user confirms. Returns a roasterId for use in add_coffee."
             ),
             "inputSchema": {
@@ -436,6 +501,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "country": {"type": "string", "default": "US"},
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
+                        "hasCafe": {
+                            "type": "boolean",
+                            "description": "true if this roaster has a physical cafe/retail location you can visit",
+                        },
                     },
                 }
             },
@@ -457,6 +526,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
                         "archived": {"type": "boolean"},
+                        "hasCafe": {"type": "boolean"},
                     },
                 }
             },
@@ -776,8 +846,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "add_cafe",
             "description": (
-                "Add a cafe to the user's visited/tracked cafe list. "
-                "Use search_known_roasters first if the cafe is also a roaster. "
+                "Add a cafe to the user's tracked place list. "
+                "Set isRoaster: true if the cafe also roasts/sources beans the user can buy. "
                 "Only add after the user confirms."
             ),
             "inputSchema": {
@@ -791,6 +861,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "country": {"type": "string", "default": "US"},
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
+                        "isRoaster": {
+                            "type": "boolean",
+                            "description": "true if this cafe also roasts / sources beans the user can purchase",
+                        },
                     },
                 }
             },
@@ -828,6 +902,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
                         "archived": {"type": "boolean"},
+                        "isRoaster": {"type": "boolean"},
                     },
                 }
             },
@@ -837,15 +912,18 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "log_visit",
             "description": (
-                "Log a cafe visit. Call list_cafes first to get the cafeId. "
-                "If the cafe isn't in the list, call add_cafe first."
+                "Log a visit to a cafe OR a roaster-cafe (hasCafe: true). "
+                "Provide either cafeId (for pure cafes) or roasterId (for roasters that also have a cafe). "
+                "Also pass placeName so the visit can be displayed without a join. "
+                "Call list_cafes or list_roasters first to get the right id."
             ),
             "inputSchema": {
                 "json": {
                     "type": "object",
-                    "required": ["cafeId"],
                     "properties": {
-                        "cafeId": {"type": "string"},
+                        "cafeId": {"type": "string", "description": "Use for pure cafe entities"},
+                        "roasterId": {"type": "string", "description": "Use when visiting a roaster that has a cafe (hasCafe: true)"},
+                        "placeName": {"type": "string", "description": "Display name of the place, stored for easy rendering"},
                         "visitDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                         "drinks": {
                             "type": "array",
@@ -894,10 +972,56 @@ TOOL_SPECS: list[dict[str, Any]] = [
             },
         }
     },
+    {
+        "toolSpec": {
+            "name": "search_web",
+            "description": (
+                "Live web search for current cafe and roaster recommendations. "
+                "Use this whenever recommending places — especially for international cities, "
+                "cities you're uncertain about, or when the user asks what's good right now. "
+                "Searches Reddit, specialty coffee forums, and review sites for fresh intel. "
+                "Good queries: 'best specialty coffee [city] [year] reddit', "
+                "'[city] third wave coffee recommendations site:reddit.com', "
+                "'[cafe name] [city] specialty coffee review'. "
+                "Do NOT use for brew advice or coffee bean questions — only for place/cafe discovery."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["query"],
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": (
+                                "Natural-language search query. Be specific: include city, "
+                                "year, and 'specialty coffee' or 'third wave'. "
+                                "E.g. 'best specialty coffee cafes Taipei 2025 reddit'"
+                            ),
+                        },
+                        "includeDomains": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Optional domain allowlist to focus results. "
+                                "E.g. ['reddit.com', 'tripadvisor.com']. Leave empty for broad search."
+                            ),
+                        },
+                        "maxResults": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 8,
+                            "description": "Number of results to return (default 5).",
+                        },
+                    },
+                }
+            },
+        }
+    },
 ]
 
 
 _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
+    "search_web": _search_web,
     "search_known_roasters": _search_known_roasters,
     "list_roasters": _list_roasters,
     "add_roaster": _add_roaster,

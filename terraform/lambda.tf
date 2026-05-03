@@ -30,6 +30,7 @@ resource "aws_lambda_function" "api" {
       BEDROCK_REGION      = var.region
       MAX_OUTPUT_TOKENS   = tostring(var.max_output_tokens)
       MAX_TOOL_ITERATIONS = tostring(var.max_tool_iterations)
+      TAVILY_API_KEY      = var.tavily_api_key
     }
   }
 

@@ -40,17 +40,84 @@
       .ask-reply.visible { display: block; }
       .ask-reply.loading { color: var(--muted); font-style: italic; }
 
-      /* main grid */
+      /* main grid — places left, visits right */
       .explore-grid {
         flex: 1; min-height: 0;
         display: grid;
-        grid-template-columns: 1.5fr 1fr;
-        grid-template-rows: 1fr 1fr;
+        grid-template-columns: 1.6fr 1fr;
         gap: 14px; padding: 14px;
       }
-      .cafes-panel  { grid-row: 1; grid-column: 1; }
-      .visits-panel { grid-row: 2; grid-column: 1; }
-      .roasters-panel { grid-row: 1 / 3; grid-column: 2; }
+      .places-panel  { grid-column: 1; }
+      .visits-panel  { grid-column: 2; }
+
+      /* filter tabs inside places panel header */
+      .place-filters {
+        display: flex; gap: 4px; align-items: center;
+      }
+      .filter-btn {
+        background: transparent; color: var(--muted);
+        border: 1px solid var(--line); border-radius: 5px;
+        padding: 2px 10px; font-size: 11px; cursor: pointer;
+        white-space: nowrap; transition: background .1s, color .1s;
+      }
+      .filter-btn:hover  { background: var(--bg-2); color: var(--ink); }
+      .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+      /* place list + rows */
+      .place-list {
+        padding: 8px 10px; overflow-y: auto; flex: 1;
+        display: flex; flex-direction: column; gap: 2px;
+      }
+      .place-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+      }
+      .place-row:last-child { border-bottom: none; }
+      .place-row .pname {
+        font-weight: 600; color: var(--ink);
+        display: flex; align-items: center; gap: 5px;
+        flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .place-row .pcity { color: var(--muted); font-size: 12px; white-space: nowrap; }
+      .place-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
+      .place-row .actions button {
+        background: transparent; color: var(--accent); border: 1px solid var(--line);
+        padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
+      }
+      .place-row .actions button:hover { background: var(--bg-2); }
+      .place-row .actions button.danger { color: var(--bad); }
+
+      /* role badges */
+      .badge {
+        display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .4px;
+        text-transform: uppercase; border-radius: 3px; padding: 1px 5px;
+        vertical-align: middle; opacity: .85; flex-shrink: 0;
+      }
+      .badge-roaster { background: #4a7c59; color: #fff; }
+      .badge-cafe    { background: var(--accent); color: #fff; }
+
+      /* role picker inside add/edit place modal */
+      .role-picker {
+        display: flex; gap: 10px; grid-column: 1 / -1;
+      }
+      .role-opt {
+        flex: 1; display: flex; align-items: flex-start; gap: 9px;
+        border: 1.5px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; cursor: pointer;
+        transition: border-color .15s, background .15s;
+        text-transform: none; letter-spacing: 0; font-size: 13px;
+      }
+      .role-opt:has(input:checked) {
+        border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+      }
+      .role-opt input[type="checkbox"] {
+        width: 15px; height: 15px; margin-top: 2px; flex-shrink: 0; cursor: pointer;
+        accent-color: var(--accent);
+      }
+      .role-opt .role-label { display: flex; flex-direction: column; gap: 2px; }
+      .role-opt .role-label strong { font-size: 13px; color: var(--ink); font-weight: 600; }
+      .role-opt .role-label small  { font-size: 11px; color: var(--muted); }
+      .role-opt input:disabled + .role-label { opacity: .6; }
     </style>
   </head>
   <body>
@@ -75,7 +142,7 @@
       <!-- Quick-ask bar -->
       <div class="ask-strip">
         <div class="ask-row">
-          <input id="ask-input" placeholder="What should I check out in Chicago? Log my visit to Shoebox today…" autocomplete="off" />
+          <input id="ask-input" placeholder="What should I check out in Chicago? Log my visit to Peixoto today…" autocomplete="off" />
           <button id="ask-send">Ask</button>
         </div>
         <div id="ask-reply" class="ask-reply"></div>
@@ -83,12 +150,19 @@
 
       <!-- Main content grid -->
       <div class="explore-grid">
-        <!-- Cafes -->
-        <section class="panel cafes-panel">
-          <h2>my cafes <div class="grow"></div>
-            <button class="tiny" id="add-cafe-btn">+ add</button>
+        <!-- Places -->
+        <section class="panel places-panel">
+          <h2>
+            my places
+            <div class="place-filters">
+              <button class="filter-btn active" data-filter="all">All</button>
+              <button class="filter-btn" data-filter="roasters">Roasters</button>
+              <button class="filter-btn" data-filter="cafes">Cafes</button>
+            </div>
+            <div class="grow"></div>
+            <button class="tiny" id="add-place-btn">+ add</button>
           </h2>
-          <div id="cafe-list" class="cafe-list"></div>
+          <div id="place-list" class="place-list"></div>
         </section>
 
         <!-- Recent visits -->
@@ -96,32 +170,40 @@
           <h2>recent visits</h2>
           <div id="visit-list" class="visit-list"></div>
         </section>
-
-        <!-- Roasters -->
-        <section class="panel roasters-panel">
-          <h2>my roasters <div class="grow"></div>
-            <button class="tiny" id="add-roaster-btn">+ add</button>
-          </h2>
-          <div id="roaster-list" class="roaster-list"></div>
-        </section>
       </div>
     </div>
 
-    <!-- Add / edit cafe modal -->
-    <div class="modal-bg" id="cafe-modal">
-      <div class="modal">
-        <h3 id="cafe-modal-title">Add a cafe</h3>
-        <form id="cafe-form" class="grid">
-          <label>Name<input name="name" required placeholder="The Coffee Movement" /></label>
-          <label>Neighborhood<input name="neighborhood" placeholder="Balboa" /></label>
-          <label>City<input name="city" placeholder="San Francisco" /></label>
+    <!-- Add / edit place modal -->
+    <div class="modal-bg" id="place-modal">
+      <div class="modal" style="max-width: 520px;">
+        <h3 id="place-modal-title">Add a place</h3>
+        <form id="place-form" class="grid">
+          <!-- Role picker — always first so context is set before fields -->
+          <div class="role-picker">
+            <label class="role-opt">
+              <input type="checkbox" name="roleRoaster" />
+              <span class="role-label">
+                <strong>Roaster</strong>
+                <small>sources / roasts beans you can buy</small>
+              </span>
+            </label>
+            <label class="role-opt">
+              <input type="checkbox" name="roleCafe" />
+              <span class="role-label">
+                <strong>Cafe</strong>
+                <small>physical spot you can visit</small>
+              </span>
+            </label>
+          </div>
+          <label>Name<input name="name" required placeholder="Peixoto, Shoebox, Moxie…" /></label>
+          <label>City<input name="city" placeholder="Chandler, AZ" /></label>
           <label>Country<input name="country" placeholder="US" value="US" /></label>
-          <label class="full">Website<input name="website" placeholder="https://thecoffeemovement.com" /></label>
-          <label class="full">Notes<textarea name="notes" placeholder="great filters, usually have 2 Ethiopians on…"></textarea></label>
+          <label>Website<input name="website" placeholder="https://…" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="anything worth remembering…"></textarea></label>
         </form>
         <div class="modal-actions">
           <button type="button" data-close>Cancel</button>
-          <button type="button" class="primary" id="cafe-submit">Add</button>
+          <button type="button" class="primary" id="place-submit">Add</button>
         </div>
       </div>
     </div>
@@ -132,6 +214,8 @@
         <h3 id="visit-modal-title">Log a visit</h3>
         <form id="visit-form" class="grid">
           <input type="hidden" name="cafeId" />
+          <input type="hidden" name="roasterId" />
+          <input type="hidden" name="placeName" />
           <label>Date<input name="visitDate" type="date" /></label>
           <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
           <label class="full">Drinks ordered<input name="drinks" placeholder="V60 Ethiopia, cortado" /></label>
@@ -140,24 +224,6 @@
         <div class="modal-actions">
           <button type="button" data-close>Cancel</button>
           <button type="button" class="primary" id="visit-submit">Log visit</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add / edit roaster modal -->
-    <div class="modal-bg" id="roaster-modal">
-      <div class="modal">
-        <h3 id="roaster-modal-title">Add a roaster</h3>
-        <form id="roaster-form" class="grid">
-          <label>Name<input name="name" required placeholder="Sey" /></label>
-          <label>City<input name="city" placeholder="Brooklyn" /></label>
-          <label>Country<input name="country" placeholder="US" value="US" /></label>
-          <label>Website<input name="website" placeholder="https://seycoffee.com" /></label>
-          <label class="full">Notes<textarea name="notes" placeholder="ships fresh, great Ethiopians…"></textarea></label>
-        </form>
-        <div class="modal-actions">
-          <button type="button" data-close>Cancel</button>
-          <button type="button" class="primary" id="roaster-submit">Add</button>
         </div>
       </div>
     </div>
@@ -217,30 +283,40 @@
     <script src="shared.js"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
-      const apiInput     = document.getElementById("api-base");
-      const cafeListEl   = document.getElementById("cafe-list");
-      const visitListEl  = document.getElementById("visit-list");
-      const roasterListEl = document.getElementById("roaster-list");
-      const cafeModal    = document.getElementById("cafe-modal");
-      const visitModal   = document.getElementById("visit-modal");
-      const roasterModal = document.getElementById("roaster-modal");
-      const prefsModal   = document.getElementById("prefs-modal");
-      const cafeForm     = document.getElementById("cafe-form");
-      const visitForm    = document.getElementById("visit-form");
-      const roasterForm  = document.getElementById("roaster-form");
-      const prefsForm    = document.getElementById("prefs-form");
-      const askInput     = document.getElementById("ask-input");
-      const askSend      = document.getElementById("ask-send");
-      const askReply     = document.getElementById("ask-reply");
+      const apiInput    = document.getElementById("api-base");
+      const placeListEl = document.getElementById("place-list");
+      const visitListEl = document.getElementById("visit-list");
+      const placeModal  = document.getElementById("place-modal");
+      const visitModal  = document.getElementById("visit-modal");
+      const prefsModal  = document.getElementById("prefs-modal");
+      const placeForm   = document.getElementById("place-form");
+      const visitForm   = document.getElementById("visit-form");
+      const prefsForm   = document.getElementById("prefs-form");
+      const askInput    = document.getElementById("ask-input");
+      const askSend     = document.getElementById("ask-send");
+      const askReply    = document.getElementById("ask-reply");
 
       // ── state ─────────────────────────────────────────────────────────────
-      let _cafeCache    = [];
-      let _roasterCache = [];
-      let _editingCafeId    = null;
-      let _editingRoasterId = null;
-      let _askHistory   = [];
+      // Unified place list; each entry has _type:"roaster"|"cafe" and _id added by JS
+      let _placesCache      = [];
+      let _cafeCache        = [];   // kept for visit name resolution
+      let _roasterCache     = [];   // kept for visit name resolution
+      let _activeFilter     = "all";
+      let _editingPlaceId   = null;
+      let _editingPlaceType = null; // "roaster" | "cafe"
+      let _askHistory       = [];
 
       initSharedInputs(loadAll, loadAll);
+
+      // ── filter tabs ───────────────────────────────────────────────────────
+      document.querySelectorAll(".filter-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          _activeFilter = btn.dataset.filter;
+          renderPlaces(_placesCache);
+        });
+      });
 
       // ── quick-ask bar ─────────────────────────────────────────────────────
       async function doAsk() {
@@ -259,8 +335,7 @@
           else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
           askReply.textContent = data.reply || "(no reply)";
           askReply.className = "ask-reply visible";
-          // Refresh data in case the bot made changes; cafes must resolve first so visit names resolve correctly
-          await loadCafes(); loadRoasters(); loadVisits();
+          await loadPlaces(); loadVisits();
         } catch (err) {
           askReply.textContent = "Error: " + err.message;
           askReply.className = "ask-reply visible loading";
@@ -268,129 +343,232 @@
           askSend.disabled = false;
         }
       }
-
       askSend.addEventListener("click", doAsk);
       askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doAsk(); } });
 
-      // ── cafes ─────────────────────────────────────────────────────────────
-      async function loadCafes() {
+      // ── places ────────────────────────────────────────────────────────────
+      async function loadPlaces() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/cafes?userId=${encodeURIComponent(userId())}`);
-          _cafeCache = data.cafes || [];
-          renderCafes(_cafeCache);
+          const uid = encodeURIComponent(userId());
+          const [rd, cd] = await Promise.all([
+            api(`/roasters?userId=${uid}`),
+            api(`/cafes?userId=${uid}`),
+          ]);
+          _roasterCache = rd.roasters || [];
+          _cafeCache    = cd.cafes    || [];
+          _placesCache  = [
+            ..._roasterCache.map(r => ({ ...r, _type: "roaster", _id: r.roasterId })),
+            ..._cafeCache.map(c => ({    ...c, _type: "cafe",    _id: c.cafeId    })),
+          ].sort((a, b) => a.name.localeCompare(b.name));
+          renderPlaces(_placesCache);
         } catch (err) {
-          cafeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          placeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
         }
       }
 
-      function renderCafes(items) {
+      function placeRoles(p) {
+        const actingAsRoaster = p._type === "roaster" || (p._type === "cafe" && p.isRoaster);
+        const actingAsCafe    = p._type === "cafe"    || (p._type === "roaster" && p.hasCafe);
+        return { actingAsRoaster, actingAsCafe };
+      }
+
+      function filterPlaces(places) {
+        switch (_activeFilter) {
+          case "roasters": return places.filter(p => placeRoles(p).actingAsRoaster);
+          case "cafes":    return places.filter(p => placeRoles(p).actingAsCafe);
+          default:         return places;
+        }
+      }
+
+      function renderPlaces(all) {
+        const items = filterPlaces(all);
         if (!items.length) {
-          cafeListEl.innerHTML = '<div class="empty">No cafes yet — add one or ask the bot.</div>';
+          placeListEl.innerHTML = '<div class="empty">Nothing here yet — click + add or ask the bot.</div>';
           return;
         }
-        cafeListEl.innerHTML = "";
-        items.forEach((c) => {
+        placeListEl.innerHTML = "";
+        items.forEach((p) => {
+          const { actingAsRoaster, actingAsCafe } = placeRoles(p);
+          const canVisit = actingAsCafe;
+
+          const roasterBadge = actingAsRoaster ? '<span class="badge badge-roaster">roaster</span>' : "";
+          const cafeBadge    = actingAsCafe    ? '<span class="badge badge-cafe">cafe</span>'       : "";
+          // Show both badges only when the place has both roles
+          const badges = (actingAsRoaster && actingAsCafe)
+            ? roasterBadge + cafeBadge
+            : actingAsRoaster ? roasterBadge : cafeBadge;
+
           const row = document.createElement("div");
-          row.className = "cafe-row";
+          row.className = "place-row";
           row.innerHTML = `
-            <div class="cname">${escapeHtml(c.name)}</div>
-            ${c.city ? `<div class="ccity">${escapeHtml(c.city)}</div>` : ""}
+            <div class="pname">${escapeHtml(p.name)}${badges}</div>
+            ${p.city ? `<div class="pcity">${escapeHtml(p.city)}</div>` : ""}
             <div class="actions">
-              <button data-action="visit" data-id="${c.cafeId}">+ Visit</button>
-              <button data-action="edit" data-id="${c.cafeId}">Edit</button>
-              <button data-action="retire" data-id="${c.cafeId}" class="danger">Retire</button>
+              ${canVisit ? `<button data-action="visit" data-id="${p._id}" data-type="${p._type}">+ Visit</button>` : ""}
+              <button data-action="edit"   data-id="${p._id}" data-type="${p._type}">Edit</button>
+              <button data-action="retire" data-id="${p._id}" data-type="${p._type}" class="danger">Retire</button>
             </div>
           `;
-          cafeListEl.appendChild(row);
+          placeListEl.appendChild(row);
         });
 
-        cafeListEl.querySelectorAll('[data-action="visit"]').forEach(btn => {
-          btn.addEventListener("click", () => openVisitModal(btn.dataset.id));
+        placeListEl.querySelectorAll('[data-action="visit"]').forEach(btn => {
+          btn.addEventListener("click", () => openVisitModal(btn.dataset.id, btn.dataset.type));
         });
-        cafeListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
+        placeListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
           btn.addEventListener("click", () => {
-            const c = _cafeCache.find(x => x.cafeId === btn.dataset.id);
-            if (c) openEditCafeModal(c);
+            const p = _placesCache.find(x => x._id === btn.dataset.id);
+            if (p) openEditPlaceModal(p);
           });
         });
-        cafeListEl.querySelectorAll('[data-action="retire"]').forEach(btn => {
+        placeListEl.querySelectorAll('[data-action="retire"]').forEach(btn => {
           btn.addEventListener("click", async () => {
-            if (!confirm("Retire this cafe?")) return;
+            const type = btn.dataset.type;
+            const confirmMsg = type === "roaster"
+              ? "Retire this roaster? It stays linked to past coffees."
+              : "Retire this cafe?";
+            if (!confirm(confirmMsg)) return;
             try {
-              await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(userId())}`, {
-                method: "PATCH", body: JSON.stringify({ archived: true }),
-              });
-              toast("Cafe retired."); await loadCafes();
+              const uid = userId();
+              if (type === "roaster") {
+                await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
+                  method: "PATCH", body: JSON.stringify({ userId: uid, archived: true }),
+                });
+              } else {
+                await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, {
+                  method: "PATCH", body: JSON.stringify({ archived: true }),
+                });
+              }
+              toast("Retired."); await loadPlaces();
             } catch (err) { toast(err.message, true); }
           });
         });
       }
 
-      function resetCafeModal() {
-        _editingCafeId = null;
-        cafeForm.reset();
-        cafeForm.elements.country.value = "US";
-        document.getElementById("cafe-modal-title").textContent = "Add a cafe";
-        document.getElementById("cafe-submit").textContent = "Add";
+      // ── place modal ───────────────────────────────────────────────────────
+      function resetPlaceModal() {
+        _editingPlaceId   = null;
+        _editingPlaceType = null;
+        placeForm.reset();
+        placeForm.elements.country.value = "US";
+        placeForm.elements.roleRoaster.disabled = false;
+        placeForm.elements.roleCafe.disabled    = false;
+        document.getElementById("place-modal-title").textContent = "Add a place";
+        document.getElementById("place-submit").textContent = "Add";
       }
 
-      function openEditCafeModal(c) {
-        _editingCafeId = c.cafeId;
-        cafeForm.elements.name.value    = c.name    || "";
-        cafeForm.elements.city.value    = c.city    || "";
-        cafeForm.elements.country.value = c.country || "US";
-        cafeForm.elements.website.value = c.website || "";
-        cafeForm.elements.notes.value   = c.notes   || "";
-        document.getElementById("cafe-modal-title").textContent = "Edit cafe";
-        document.getElementById("cafe-submit").textContent = "Save";
-        openModal(cafeModal);
+      function openEditPlaceModal(p) {
+        resetPlaceModal();
+        _editingPlaceId   = p._id;
+        _editingPlaceType = p._type;
+        placeForm.elements.name.value    = p.name    || "";
+        placeForm.elements.city.value    = p.city    || "";
+        placeForm.elements.country.value = p.country || "US";
+        placeForm.elements.website.value = p.website || "";
+        placeForm.elements.notes.value   = p.notes   || "";
+
+        if (p._type === "roaster") {
+          // Primary role is roaster — locked. Secondary cafe role is freely toggleable (hasCafe).
+          placeForm.elements.roleRoaster.checked  = true;
+          placeForm.elements.roleRoaster.disabled = true;
+          placeForm.elements.roleCafe.checked     = !!p.hasCafe;
+          placeForm.elements.roleCafe.disabled    = false;
+        } else {
+          // Primary role is cafe — locked. Secondary roaster role is freely toggleable (isRoaster).
+          placeForm.elements.roleCafe.checked     = true;
+          placeForm.elements.roleCafe.disabled    = true;
+          placeForm.elements.roleRoaster.checked  = !!p.isRoaster;
+          placeForm.elements.roleRoaster.disabled = false;
+        }
+
+        document.getElementById("place-modal-title").textContent = "Edit place";
+        document.getElementById("place-submit").textContent = "Save";
+        openModal(placeModal);
       }
 
-      function openVisitModal(cafeId) {
-        visitForm.reset();
-        visitForm.elements.cafeId.value = cafeId;
-        // Pre-fill today's date
-        visitForm.elements.visitDate.value = new Date().toISOString().slice(0,10);
-        const cafe = _cafeCache.find(c => c.cafeId === cafeId);
-        document.getElementById("visit-modal-title").textContent =
-          "Log a visit" + (cafe ? ` — ${cafe.name}` : "");
-        openModal(visitModal);
-      }
-
-      document.getElementById("add-cafe-btn").addEventListener("click", () => {
-        resetCafeModal(); openModal(cafeModal);
+      document.getElementById("add-place-btn").addEventListener("click", () => {
+        resetPlaceModal(); openModal(placeModal);
       });
 
-      document.getElementById("cafe-submit").addEventListener("click", async () => {
-        if (!cafeForm.reportValidity()) return;
-        const fd = new FormData(cafeForm);
-        const body = { name: fd.get("name").trim() };
-        if (fd.get("city"))    body.city    = fd.get("city").trim();
-        if (fd.get("country")) body.country = fd.get("country").trim();
-        if (fd.get("website")) body.website = fd.get("website").trim();
-        if (fd.get("notes"))   body.notes   = fd.get("notes").trim();
+      document.getElementById("place-submit").addEventListener("click", async () => {
+        if (!placeForm.reportValidity()) return;
+        const isRoaster = placeForm.elements.roleRoaster.checked;
+        const isCafe    = placeForm.elements.roleCafe.checked;
+        if (!isRoaster && !isCafe) {
+          toast("Select at least one role (Roaster or Cafe).", true); return;
+        }
+        const fd  = new FormData(placeForm);
         const uid = userId();
+        const base = {
+          name:    (fd.get("name") || "").trim(),
+          city:    (fd.get("city") || "").trim()    || undefined,
+          country: (fd.get("country") || "").trim() || "US",
+          website: (fd.get("website") || "").trim() || undefined,
+          notes:   (fd.get("notes") || "").trim()   || undefined,
+        };
         try {
-          if (_editingCafeId) {
-            await api(`/cafes/${encodeURIComponent(_editingCafeId)}?userId=${encodeURIComponent(uid)}`, {
-              method: "PATCH", body: JSON.stringify(body),
-            });
-            toast("Cafe updated.");
+          if (_editingPlaceId) {
+            // Editing existing entity — update the secondary role flag
+            if (_editingPlaceType === "roaster") {
+              await api(`/roasters/${encodeURIComponent(_editingPlaceId)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ ...base, userId: uid, hasCafe: isCafe }),
+              });
+            } else {
+              await api(`/cafes/${encodeURIComponent(_editingPlaceId)}?userId=${encodeURIComponent(uid)}`, {
+                method: "PATCH", body: JSON.stringify({ ...base, isRoaster: isRoaster }),
+              });
+            }
+            toast("Saved.");
           } else {
-            body.userId = uid;
-            await api("/cafes", { method: "POST", body: JSON.stringify(body) });
-            toast("Cafe added.");
+            // Adding new
+            if (isRoaster) {
+              await api("/roasters", {
+                method: "POST",
+                body: JSON.stringify({ ...base, userId: uid, hasCafe: isCafe }),
+              });
+            } else {
+              await api("/cafes", {
+                method: "POST",
+                body: JSON.stringify({ ...base, userId: uid }),
+              });
+            }
+            toast(isRoaster && isCafe ? "Added as roaster + cafe." : isRoaster ? "Roaster added." : "Cafe added.");
           }
-          closeModal(cafeModal); resetCafeModal(); await loadCafes();
+          closeModal(placeModal); resetPlaceModal(); await loadPlaces();
         } catch (err) { toast(err.message, true); }
       });
 
+      // ── visit modal ───────────────────────────────────────────────────────
+      function openVisitModal(placeId, placeType) {
+        visitForm.reset();
+        visitForm.elements.visitDate.value = new Date().toISOString().slice(0, 10);
+        const place = _placesCache.find(p => p._id === placeId);
+        const placeName = place ? place.name : "";
+        if (placeType === "roaster") {
+          visitForm.elements.roasterId.value = placeId;
+          visitForm.elements.cafeId.value    = "";
+        } else {
+          visitForm.elements.cafeId.value    = placeId;
+          visitForm.elements.roasterId.value = "";
+        }
+        visitForm.elements.placeName.value = placeName;
+        document.getElementById("visit-modal-title").textContent =
+          "Log a visit" + (placeName ? ` — ${placeName}` : "");
+        openModal(visitModal);
+      }
+
       document.getElementById("visit-submit").addEventListener("click", async () => {
-        const fd = new FormData(visitForm);
-        const cafeId = fd.get("cafeId");
-        if (!cafeId) return;
-        const body = { cafeId, userId: userId() };
+        const fd        = new FormData(visitForm);
+        const cafeId    = (fd.get("cafeId")    || "").trim();
+        const roasterId = (fd.get("roasterId") || "").trim();
+        if (!cafeId && !roasterId) return;
+        const body = { userId: userId() };
+        if (cafeId)    body.cafeId    = cafeId;
+        if (roasterId) body.roasterId = roasterId;
+        const pn = (fd.get("placeName") || "").trim();
+        if (pn) body.placeName = pn;
         const drinksRaw = (fd.get("drinks") || "").trim();
         if (drinksRaw) body.drinks = drinksRaw.split(",").map(s => s.trim()).filter(Boolean);
         if (fd.get("visitDate")) body.visitDate = fd.get("visitDate");
@@ -420,14 +598,22 @@
         }
         visitListEl.innerHTML = "";
         items.forEach((v) => {
-          const cafe = _cafeCache.find(c => c.cafeId === v.cafeId);
-          const cafeName = cafe ? cafe.name : (v.cafeId || "Unknown cafe");
+          let placeName = v.placeName;
+          if (!placeName && v.cafeId) {
+            const c = _cafeCache.find(c => c.cafeId === v.cafeId);
+            placeName = c ? c.name : null;
+          }
+          if (!placeName && v.roasterId) {
+            const r = _roasterCache.find(r => r.roasterId === v.roasterId);
+            placeName = r ? r.name : null;
+          }
+          placeName = placeName || v.cafeId || v.roasterId || "Unknown place";
           const row = document.createElement("div");
           row.className = "visit-row";
           row.innerHTML = `
             <div class="v-date">${fmtDate(v.visitDate || v.createdAt)}</div>
             <div class="v-body">
-              <div class="v-cafe">${escapeHtml(cafeName)}</div>
+              <div class="v-cafe">${escapeHtml(placeName)}</div>
               ${v.drinks?.length ? `<div class="v-drinks">${v.drinks.map(d => escapeHtml(d)).join(", ")}</div>` : ""}
               ${v.notes ? `<div class="v-notes">${escapeHtml(v.notes)}</div>` : ""}
             </div>
@@ -437,98 +623,7 @@
         });
       }
 
-      // ── roasters ──────────────────────────────────────────────────────────
-      async function loadRoasters() {
-        if (!apiInput.value.trim()) return;
-        try {
-          const data = await api(`/roasters?userId=${encodeURIComponent(userId())}`);
-          _roasterCache = data.roasters || [];
-          renderRoasters(_roasterCache);
-        } catch (err) {
-          roasterListEl.innerHTML = `<div class="empty">${err.message}</div>`;
-        }
-      }
-
-      function renderRoasters(items) {
-        if (!items.length) {
-          roasterListEl.innerHTML = '<div class="empty">No roasters yet. Click + add.</div>';
-          return;
-        }
-        roasterListEl.innerHTML = "";
-        items.forEach((r) => {
-          const row = document.createElement("div");
-          row.className = "roaster-row";
-          row.innerHTML = `
-            <div class="rname">${escapeHtml(r.name)}</div>
-            ${r.city ? `<div class="rcity">${escapeHtml(r.city)}${r.country && r.country !== "US" ? ", " + escapeHtml(r.country) : ""}</div>` : ""}
-            <div class="actions">
-              <button data-action="edit" data-id="${r.roasterId}">Edit</button>
-              <button data-action="retire" data-id="${r.roasterId}" class="danger">Retire</button>
-            </div>
-          `;
-          roasterListEl.appendChild(row);
-        });
-
-        roasterListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
-          btn.addEventListener("click", () => {
-            const r = _roasterCache.find(x => x.roasterId === btn.dataset.id);
-            if (r) openEditRoasterModal(r);
-          });
-        });
-        roasterListEl.querySelectorAll('[data-action="retire"]').forEach(btn => {
-          btn.addEventListener("click", async () => {
-            if (!confirm("Retire this roaster? It stays linked to past coffees.")) return;
-            try {
-              await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
-                method: "PATCH", body: JSON.stringify({ userId: userId(), archived: true }),
-              });
-              toast("Roaster retired"); loadRoasters();
-            } catch (err) { toast(err.message, true); }
-          });
-        });
-      }
-
-      function resetRoasterModal() {
-        _editingRoasterId = null;
-        roasterForm.reset();
-        roasterForm.elements.country.value = "US";
-        document.getElementById("roaster-modal-title").textContent = "Add a roaster";
-        document.getElementById("roaster-submit").textContent = "Add";
-      }
-
-      function openEditRoasterModal(item) {
-        _editingRoasterId = item.roasterId;
-        roasterForm.elements.name.value    = item.name    || "";
-        roasterForm.elements.city.value    = item.city    || "";
-        roasterForm.elements.country.value = item.country || "US";
-        roasterForm.elements.website.value = item.website || "";
-        roasterForm.elements.notes.value   = item.notes   || "";
-        document.getElementById("roaster-modal-title").textContent = "Edit roaster";
-        document.getElementById("roaster-submit").textContent = "Save";
-        openModal(roasterModal);
-      }
-
-      document.getElementById("add-roaster-btn").addEventListener("click", () => {
-        resetRoasterModal(); openModal(roasterModal);
-      });
-
-      document.getElementById("roaster-submit").addEventListener("click", async () => {
-        const fd = new FormData(roasterForm);
-        const body = { userId: userId() };
-        for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
-        try {
-          if (_editingRoasterId) {
-            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, { method: "PATCH", body: JSON.stringify(body) });
-            toast("Roaster updated");
-          } else {
-            await api("/roasters", { method: "POST", body: JSON.stringify(body) });
-            toast("Roaster added");
-          }
-          closeModal(roasterModal); resetRoasterModal(); await loadRoasters();
-        } catch (err) { toast(err.message, true); }
-      });
-
-      // ── preferences chip ──────────────────────────────────────────────────
+      // ── preferences ───────────────────────────────────────────────────────
       const CHIP_FIELDS = ["preferredOrigins","preferredProcesses","favoriteRoasters","favoriteCafes","dislikedNotes"];
 
       async function loadPreferences() {
@@ -588,7 +683,7 @@
             }
             input.value = "";
           } else if (ev.key === "Backspace" && !input.value) {
-            group.querySelectorAll(".chip").forEach((c, i, a) => { if (i === a.length-1) c.remove(); });
+            group.querySelectorAll(".chip").forEach((c, i, a) => { if (i === a.length - 1) c.remove(); });
           }
         });
         input.addEventListener("blur", () => {
@@ -615,8 +710,7 @@
 
       // ── modal wiring ──────────────────────────────────────────────────────
       initModalClose((bg) => {
-        if (bg === cafeModal)    resetCafeModal();
-        if (bg === roasterModal) resetRoasterModal();
+        if (bg === placeModal) resetPlaceModal();
       });
 
       document.getElementById("refresh").addEventListener("click", loadAll);
@@ -624,13 +718,12 @@
       // ── load all ──────────────────────────────────────────────────────────
       async function loadAll() {
         if (!apiInput.value.trim()) {
-          cafeListEl.innerHTML    = '<div class="empty">Set the API URL above to get started.</div>';
-          visitListEl.innerHTML   = '<div class="empty">Set the API URL above.</div>';
-          roasterListEl.innerHTML = '<div class="empty">Set the API URL above.</div>';
+          placeListEl.innerHTML = '<div class="empty">Set the API URL above to get started.</div>';
+          visitListEl.innerHTML = '<div class="empty">Set the API URL above.</div>';
           return;
         }
-        await loadCafes();
-        loadVisits(); loadRoasters(); loadPreferences();
+        await loadPlaces();
+        loadVisits(); loadPreferences();
       }
 
       loadAll();

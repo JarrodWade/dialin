@@ -74,6 +74,7 @@ def create_roaster(
     country: str | None = None,
     website: str | None = None,
     notes: str | None = None,
+    has_cafe: bool = False,
 ) -> dict[str, Any]:
     roaster_id = _new_id("rst")
     created_at = _now_iso()
@@ -88,6 +89,7 @@ def create_roaster(
         "country": country or "US",
         "website": website,
         "notes": notes,
+        "hasCafe": has_cafe,
         "archived": False,
         "createdAt": created_at,
         "updatedAt": created_at,
@@ -118,7 +120,7 @@ def list_roasters(user_id: str, *, include_archived: bool = False) -> list[dict[
 
 
 def update_roaster(user_id: str, roaster_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"name", "city", "country", "website", "notes", "archived"}
+    allowed = {"name", "city", "country", "website", "notes", "archived", "hasCafe"}
     updates = {k: v for k, v in updates.items() if k in allowed}
     if not updates:
         raise ValueError("no allowed fields to update")
@@ -676,6 +678,7 @@ def create_cafe(
     country: str | None = None,
     website: str | None = None,
     notes: str | None = None,
+    is_roaster: bool = False,
 ) -> dict[str, Any]:
     cafe_id = _new_id("cafe")
     created_at = _now_iso()
@@ -691,6 +694,7 @@ def create_cafe(
         "country": country or "US",
         "website": website,
         "notes": notes,
+        "isRoaster": is_roaster,
         "archived": False,
         "createdAt": created_at,
         "updatedAt": created_at,
@@ -728,7 +732,7 @@ def list_cafes(
 
 
 def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"name", "city", "country", "website", "notes", "archived"}
+    allowed = {"name", "neighborhood", "city", "country", "website", "notes", "archived", "isRoaster"}
     updates = {k: v for k, v in updates.items() if k in allowed}
     if not updates:
         raise ValueError("no allowed fields to update")
@@ -760,26 +764,39 @@ def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str
 
 def log_visit(
     user_id: str,
-    cafe_id: str,
+    cafe_id: str | None = None,
     *,
+    roaster_id: str | None = None,
+    place_name: str | None = None,
     visit_date: str | None = None,
     drinks: list[str] | None = None,
     rating: int | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
-    if get_cafe(user_id, cafe_id) is None:
+    """Log a visit. Accepts either a cafeId or a roasterId (for roaster-cafes).
+    place_name is stored denormalized for easy display without a join."""
+    place_id = cafe_id or roaster_id
+    if not place_id:
+        raise ValueError("cafeId or roasterId required")
+    # Validate the place exists
+    if cafe_id and get_cafe(user_id, cafe_id) is None:
         raise ValueError(f"cafe {cafe_id} not found")
+    if roaster_id and get_roaster(user_id, roaster_id) is None:
+        raise ValueError(f"roaster {roaster_id} not found")
     visit_id = _new_id("vis")
     iso_ts = _now_iso()
     item = {
         "PK": f"USER#{user_id}",
         "SK": f"VISIT#{iso_ts}#{visit_id}",
-        "GSI1PK": f"CAFE#{cafe_id}",
+        "GSI1PK": f"CAFE#{place_id}",
         "GSI1SK": f"VISIT#{iso_ts}#{visit_id}",
         "itemType": "Visit",
         "userId": user_id,
         "visitId": visit_id,
         "cafeId": cafe_id,
+        "roasterId": roaster_id,
+        "placeId": place_id,
+        "placeName": place_name,
         "visitDate": visit_date or iso_ts[:10],
         "drinks": drinks or [],
         "rating": rating,

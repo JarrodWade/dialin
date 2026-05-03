@@ -108,39 +108,8 @@ header button.ghost {
   text-align: center; font-style: italic;
 }
 
-/* ── roasters ─────────────────────────────────────────────────────────── */
-.roaster-list { padding: 8px 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.roaster-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
-}
-.roaster-row:last-child { border-bottom: none; }
-.roaster-row .rname { font-weight: 600; color: var(--ink); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.roaster-row .rcity { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.roaster-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
-.roaster-row .actions button {
-  background: transparent; color: var(--accent); border: 1px solid var(--line);
-  padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
-}
-.roaster-row .actions button:hover { background: var(--bg-2); }
-.roaster-row .actions button.danger { color: var(--bad); }
-
-/* ── cafes ────────────────────────────────────────────────────────────── */
-.cafe-list { padding: 8px 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.cafe-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
-}
-.cafe-row:last-child { border-bottom: none; }
-.cafe-row .cname { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cafe-row .ccity { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.cafe-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
-.cafe-row .actions button {
-  background: transparent; color: var(--accent); border: 1px solid var(--line);
-  padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
-}
-.cafe-row .actions button:hover { background: var(--bg-2); }
-.cafe-row .actions button.danger { color: var(--bad); }
+/* ── places list (explore page) — place-row styles live in explore.html ── */
+.place-list { padding: 8px 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
 /* ── visits ───────────────────────────────────────────────────────────── */
 .visit-list { padding: 8px 10px; overflow-y: auto; flex: 1; }
@@ -215,6 +184,7 @@ header button.ghost {
   display: flex; flex-direction: column; font-size: 11px; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.04em; gap: 3px;
 }
+
 .modal input, .modal select, .modal textarea {
   background: var(--paper); color: var(--ink); border: 1px solid var(--line);
   border-radius: 6px; padding: 7px 9px; font-size: 13px; font-family: inherit;
