@@ -3,110 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>dialin · brew journal</title>
+    <title>dialin · journal</title>
+    <link rel="stylesheet" href="shared.css" />
     <style>
-      :root {
-        --bg: #f4ede2;
-        --bg-2: #ebe1cf;
-        --paper: #fbf6ec;
-        --ink: #2b1d12;
-        --ink-2: #5b4633;
-        --muted: #8a7762;
-        --line: #d8c8b0;
-        --accent: #6b3f1d;       /* espresso */
-        --accent-2: #b1582b;      /* terracotta */
-        --good: #4a7c3b;
-        --warn: #b1582b;
-        --bad: #a83a3a;
-        --user-bubble: #efe4d2;
-        --bot-bubble: #fffaf0;
-      }
-      * { box-sizing: border-box; }
-      html, body {
-        margin: 0; padding: 0; height: 100%;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        background: var(--bg); color: var(--ink);
-      }
-      header {
-        padding: 14px 20px; border-bottom: 1px solid var(--line);
-        background: var(--bg-2); display: flex; gap: 12px; align-items: center;
-        flex-wrap: wrap;
-      }
-      header h1 {
-        margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em;
-        font-family: ui-serif, Georgia, "Times New Roman", serif;
-        color: var(--accent);
-      }
-      header h1 span { color: var(--ink-2); font-weight: 400; font-style: italic; font-size: 14px; margin-left: 6px; }
-      header .grow { flex: 1; }
-      header label { font-size: 12px; color: var(--muted); margin-right: 6px; }
-      header input {
-        background: var(--paper); color: var(--ink);
-        border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px;
-        font-size: 13px; min-width: 240px;
-      }
-      header input.user { min-width: 130px; }
-      header button {
-        background: var(--accent); color: var(--paper); border: none;
-        padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
-      }
-      header button.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
-
-      /* preferences chip */
-      .prefs-chip {
-        display: inline-flex; align-items: center; gap: 6px;
-        background: var(--paper); border: 1px solid var(--line);
-        padding: 5px 10px 5px 12px; border-radius: 999px;
-        font-size: 12px; color: var(--ink-2); cursor: pointer;
-        max-width: 360px;
-      }
-      .prefs-chip:hover { background: var(--bg-2); }
-      .prefs-chip .dot {
-        width: 7px; height: 7px; border-radius: 50%;
-        background: var(--accent-2); display: inline-block;
-      }
-      .prefs-chip .text {
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        max-width: 280px;
-      }
-      .prefs-chip .edit { color: var(--accent); font-weight: 600; font-size: 11px; }
-
+      /* ── journal-specific layout ───────────────────────────────────────── */
       main {
         display: grid;
         grid-template-columns: 1.2fr 1fr;
         gap: 14px; padding: 14px;
-        height: calc(100vh - 64px);
+        height: calc(100vh - 52px);
       }
       .col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
-      .panel {
-        background: var(--paper); border: 1px solid var(--line);
-        border-radius: 10px; display: flex; flex-direction: column; min-height: 0;
-        box-shadow: 0 1px 0 rgba(0,0,0,0.03);
-      }
-      .panel h2 {
-        margin: 0; padding: 12px 14px; font-size: 12px; font-weight: 700;
-        color: var(--ink-2); border-bottom: 1px solid var(--line);
-        text-transform: uppercase; letter-spacing: 0.08em;
-        display: flex; align-items: center; gap: 8px;
-      }
-      .panel h2 button.tiny {
-        background: var(--accent); color: var(--paper); border: none;
-        padding: 3px 10px; border-radius: 999px; font-size: 11px;
-        font-weight: 600; cursor: pointer; letter-spacing: 0.04em;
-      }
-      .panel h2 .grow { flex: 1; }
 
-      /* --- chat --- */
+      /* chat */
       .messages {
-        flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+        flex: 1; overflow-y: auto; padding: 14px;
+        display: flex; flex-direction: column; gap: 10px;
       }
       .bubble {
         max-width: 85%; padding: 10px 12px; border-radius: 12px;
         font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
         border: 1px solid var(--line);
       }
-      .bubble.user { background: var(--user-bubble); align-self: flex-end; border-bottom-right-radius: 4px; }
-      .bubble.bot  { background: var(--bot-bubble); align-self: flex-start; border-bottom-left-radius: 4px; }
+      .bubble.user { background: #efe4d2; align-self: flex-end; border-bottom-right-radius: 4px; }
+      .bubble.bot  { background: #fffaf0; align-self: flex-start; border-bottom-left-radius: 4px; }
       .bubble small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
       .composer {
         display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
@@ -118,11 +38,11 @@
       }
       .composer button {
         background: var(--accent); color: var(--paper); border: none;
-        border-radius: 8px; padding: 0 16px; cursor: pointer; font-size: 14px;
+        border-radius: 8px; padding: 0 18px; cursor: pointer; font-size: 14px;
       }
       .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-      /* --- coffee cards --- */
+      /* coffee cards */
       .coffee-list { padding: 10px; overflow-y: auto; flex: 1; }
       .coffee-card {
         background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px;
@@ -130,45 +50,29 @@
       }
       .coffee-card .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
       .coffee-card .name {
-        font-family: ui-serif, Georgia, serif; font-size: 15px; font-weight: 600; color: var(--ink);
+        font-family: ui-serif, Georgia, serif; font-size: 15px; font-weight: 600;
       }
       .coffee-card .roaster { color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-      .coffee-card .meta {
-        color: var(--muted); font-size: 12px; margin-top: 4px;
-        display: flex; gap: 10px; flex-wrap: wrap;
-      }
+      .coffee-card .meta { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
       .coffee-card .actions { display: flex; gap: 6px; margin-top: 8px; }
       .coffee-card button {
         background: transparent; color: var(--accent); border: 1px solid var(--line);
         padding: 3px 9px; border-radius: 6px; font-size: 11px; cursor: pointer;
       }
       .coffee-card button:hover { background: var(--bg); }
-      .coffee-card .stock {
-        font-variant-numeric: tabular-nums; font-weight: 600;
-        color: var(--ink-2); font-size: 12px;
-      }
+      .coffee-card .stock { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); font-size: 12px; }
       .coffee-card.low .stock { color: var(--warn); }
 
-      /* --- brews timeline --- */
+      /* brews */
       .brews { padding: 10px; overflow-y: auto; flex: 1; }
-      .cafe-list { overflow-y: auto; }
-      .cafe-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
-      .cafe-row:last-child { border-bottom: none; }
-      .cafe-row .cname { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .cafe-row .ccity { color: var(--muted); font-size: 12px; }
-      .cafe-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
-      .cafe-row .actions button { font-size: 11px; padding: 2px 6px; }
-      .brew-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
-      .brew-row .actions button { font-size: 11px; padding: 2px 6px; }
       .brew-row {
-        display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
-        padding: 8px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+        display: grid; grid-template-columns: auto 1fr auto auto;
+        gap: 10px; padding: 8px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
+        align-items: start;
       }
       .brew-row:last-child { border-bottom: none; }
-      .brew-row .when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-      .brew-row .what {
-        display: flex; flex-direction: column; gap: 2px;
-      }
+      .brew-row .when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; padding-top: 2px; }
+      .brew-row .what { display: flex; flex-direction: column; gap: 2px; }
       .brew-row .what .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
       .brew-row .method {
         background: var(--accent); color: var(--paper); padding: 1px 8px;
@@ -176,128 +80,25 @@
       }
       .brew-row .params { color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
       .brew-row .taste { color: var(--muted); font-size: 12px; font-style: italic; margin-top: 2px; }
-      .brew-row .rating {
-        color: var(--accent-2); font-weight: 700; font-variant-numeric: tabular-nums;
-      }
-
-      /* --- roasters --- */
-      .roaster-list { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-      .roaster-row {
-        display: flex; align-items: baseline; gap: 10px;
-        padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
-      }
-      .roaster-row:last-child { border-bottom: none; }
-      .roaster-row .rname { font-weight: 600; color: var(--ink); flex: 1; }
-      .roaster-row .rcity { color: var(--muted); font-size: 12px; }
-      .roaster-row .actions { display: flex; gap: 4px; }
-      .roaster-row .actions button {
+      .brew-row .rating { color: var(--accent-2); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .brew-row .actions { display: flex; gap: 4px; flex-shrink: 0; }
+      .brew-row .actions button {
         background: transparent; color: var(--accent); border: 1px solid var(--line);
-        padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
+        padding: 2px 6px; border-radius: 5px; font-size: 10px; cursor: pointer;
       }
-      .roaster-row .actions button:hover { background: var(--bg-2); }
-      .roaster-row .actions button.danger { color: var(--bad); }
-
-      /* --- equipment --- */
-      .equip-list { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-      .equip-row {
-        display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: baseline;
-        padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
-      }
-      .equip-row:last-child { border-bottom: none; }
-      .equip-row .type {
-        background: var(--bg-2); color: var(--ink-2); padding: 1px 8px;
-        border-radius: 4px; font-size: 10px; font-weight: 700;
-        letter-spacing: 0.06em; text-align: center;
-      }
-      .equip-row .name { font-weight: 600; color: var(--ink); }
-      .equip-row .meta { color: var(--muted); font-size: 12px; }
-      .equip-row .actions { display: flex; gap: 4px; margin-top: 4px; }
-      .equip-row .actions button {
-        background: transparent; color: var(--accent); border: 1px solid var(--line);
-        padding: 2px 7px; border-radius: 5px; font-size: 10px; cursor: pointer;
-      }
-      .equip-row .actions button:hover { background: var(--bg-2); }
-      .equip-row .actions button.danger { color: var(--bad); }
-
-      .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; font-style: italic; }
-
-      /* lists in prefs modal */
-      .chip-input-group { display: flex; flex-wrap: wrap; gap: 4px; }
-      .chip {
-        background: var(--bg-2); border: 1px solid var(--line);
-        border-radius: 999px; padding: 2px 8px; font-size: 11px;
-        display: inline-flex; align-items: center; gap: 4px;
-      }
-      .chip button {
-        background: none; border: none; color: var(--muted);
-        cursor: pointer; padding: 0; font-size: 14px; line-height: 1;
-      }
-      .chip-input { flex: 1; min-width: 100px; border: none; background: transparent;
-        font-size: 12px; padding: 2px 4px; outline: none; }
-
-      /* --- modal --- */
-      .modal-bg {
-        position: fixed; inset: 0; background: rgba(43,29,18,0.4);
-        display: none; align-items: center; justify-content: center; z-index: 50;
-      }
-      .modal-bg.show { display: flex; }
-      .modal {
-        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
-        padding: 16px; min-width: 380px; max-width: 460px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-      }
-      .modal h3 {
-        margin: 0 0 12px; font-family: ui-serif, Georgia, serif;
-        font-size: 18px; color: var(--accent);
-      }
-      .modal .grid {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-      }
-      .modal label {
-        display: flex; flex-direction: column; font-size: 11px; color: var(--muted);
-        text-transform: uppercase; letter-spacing: 0.04em; gap: 3px;
-      }
-      .modal input, .modal select, .modal textarea {
-        background: var(--paper); color: var(--ink); border: 1px solid var(--line);
-        border-radius: 6px; padding: 7px 9px; font-size: 13px;
-        font-family: inherit;
-      }
-      .modal textarea { min-height: 60px; resize: vertical; }
-      .modal .full { grid-column: 1 / -1; }
-      .modal-actions {
-        display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;
-      }
-      .modal-actions button {
-        background: transparent; color: var(--ink); border: 1px solid var(--line);
-        padding: 7px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
-      }
-      .modal-actions button.primary {
-        background: var(--accent); color: var(--paper); border-color: var(--accent);
-      }
-
-      .toast {
-        position: fixed; bottom: 20px; right: 20px;
-        background: var(--paper); border: 1px solid var(--line);
-        padding: 10px 14px; border-radius: 8px; font-size: 13px;
-        opacity: 0; transition: opacity 0.2s; z-index: 100;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-      }
-      .toast.show { opacity: 1; }
-      .toast.error { border-color: var(--bad); color: var(--bad); }
-      code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+      .brew-row .actions button:hover { background: var(--bg-2); }
+      .brew-row .actions button.danger { color: var(--bad); }
     </style>
   </head>
   <body>
     <header>
       <h1>dialin <span>brew journal</span></h1>
-      <div>
-        <label>API</label>
-        <input id="api-base" placeholder="https://xxx.execute-api.us-east-1.amazonaws.com" />
-      </div>
-      <div>
-        <label>User</label>
-        <input id="user-id" class="user" value="jarrod" />
-      </div>
+      <nav class="page-nav">
+        <a href="index.html" class="active">journal</a>
+        <a href="explore.html">explore</a>
+      </nav>
+      <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
+      <label>User <input id="user-id" class="user" value="jarrod" /></label>
       <div class="grow"></div>
       <button id="prefs-chip" class="prefs-chip" type="button" title="Edit preferences">
         <span class="dot"></span>
@@ -319,13 +120,6 @@
       </section>
 
       <div class="col">
-        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
-          <h2>my roasters <div class="grow"></div>
-            <button class="tiny" id="add-roaster-btn">+ add</button>
-          </h2>
-          <div id="roaster-list" class="roaster-list"></div>
-        </section>
-
         <section class="panel" style="flex: 1 1 0; min-height: 120px;">
           <h2>my coffees <div class="grow"></div>
             <button class="tiny" id="add-coffee-btn">+ add</button>
@@ -333,18 +127,11 @@
           <div id="coffee-list" class="coffee-list"></div>
         </section>
 
-        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
+        <section class="panel" style="flex: 0 1 auto; max-height: 26%;">
           <h2>my gear <div class="grow"></div>
             <button class="tiny" id="add-equip-btn">+ add</button>
           </h2>
           <div id="equip-list" class="equip-list"></div>
-        </section>
-
-        <section class="panel" style="flex: 0 1 auto; max-height: 22%;">
-          <h2>my cafes <div class="grow"></div>
-            <button class="tiny" id="add-cafe-btn">+ add</button>
-          </h2>
-          <div id="cafe-list" class="cafe-list"></div>
         </section>
 
         <section class="panel" style="flex: 1 1 0; min-height: 140px;">
@@ -378,7 +165,7 @@
       </div>
     </div>
 
-    <!-- Add / edit roaster modal -->
+    <!-- Add / edit roaster modal (inline add from coffee form) -->
     <div class="modal-bg" id="roaster-modal">
       <div class="modal">
         <h3 id="roaster-modal-title">Add a roaster</h3>
@@ -436,7 +223,7 @@
       </div>
     </div>
 
-    <!-- Add equipment modal -->
+    <!-- Add / edit equipment modal -->
     <div class="modal-bg" id="equip-modal">
       <div class="modal">
         <h3>Add gear</h3>
@@ -461,92 +248,6 @@
       </div>
     </div>
 
-    <!-- Preferences modal -->
-    <div class="modal-bg" id="prefs-modal">
-      <div class="modal" style="min-width: 460px; max-width: 560px;">
-        <h3>Taste preferences</h3>
-        <form id="prefs-form" class="grid">
-          <label>Home city<input name="homeCity" placeholder="Brooklyn, NY" /></label>
-          <label>Roast level
-            <select name="preferredRoastLevel">
-              <option value="">—</option>
-              <option value="light">light</option>
-              <option value="medium-light">medium-light</option>
-              <option value="medium">medium</option>
-              <option value="medium-dark">medium-dark</option>
-              <option value="dark">dark</option>
-            </select>
-          </label>
-          <label class="full">Preferred origins
-            <div class="chip-input-group" data-field="preferredOrigins">
-              <input class="chip-input" placeholder="Type and press Enter (Ethiopia, Kenya…)" />
-            </div>
-          </label>
-          <label class="full">Preferred processes
-            <div class="chip-input-group" data-field="preferredProcesses">
-              <input class="chip-input" placeholder="washed, natural, anaerobic…" />
-            </div>
-          </label>
-          <label class="full">Favorite roasters
-            <div class="chip-input-group" data-field="favoriteRoasters">
-              <input class="chip-input" placeholder="Sey, Onyx, Hydrangea…" />
-            </div>
-          </label>
-          <label class="full">Favorite cafes
-            <div class="chip-input-group" data-field="favoriteCafes">
-              <input class="chip-input" placeholder="Devoción, Heart, Sey…" />
-            </div>
-          </label>
-          <label class="full">Disliked notes
-            <div class="chip-input-group" data-field="dislikedNotes">
-              <input class="chip-input" placeholder="smoky, ashy, dark chocolate…" />
-            </div>
-          </label>
-          <label class="full">Notes<textarea name="notes" placeholder="anything else the bot should remember"></textarea></label>
-        </form>
-        <div class="modal-actions">
-          <button type="button" data-close>Cancel</button>
-          <button type="button" class="primary" id="prefs-submit">Save</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add / edit cafe modal -->
-    <div class="modal-bg" id="cafe-modal">
-      <div class="modal">
-        <h3 id="cafe-modal-title">Add a cafe</h3>
-        <form id="cafe-form" class="grid">
-          <label>Name<input name="name" required placeholder="Cartel Coffee Lab" /></label>
-          <label>City<input name="city" placeholder="Tempe" /></label>
-          <label>Country<input name="country" placeholder="US" value="US" /></label>
-          <label class="full">Website<input name="website" placeholder="https://cartelcoffee.com" /></label>
-          <label class="full">Notes<textarea name="notes" placeholder="great filters, usually have 2 Ethiopians on…"></textarea></label>
-        </form>
-        <div class="modal-actions">
-          <button type="button" data-close>Cancel</button>
-          <button type="button" class="primary" id="cafe-submit">Add</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Log visit modal -->
-    <div class="modal-bg" id="visit-modal">
-      <div class="modal">
-        <h3 id="visit-modal-title">Log a visit</h3>
-        <form id="visit-form" class="grid">
-          <input type="hidden" name="cafeId" />
-          <label>Date<input name="visitDate" type="date" /></label>
-          <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
-          <label class="full">Drinks ordered<input name="drinks" placeholder="V60 Ethiopia, cortado, croissant" /></label>
-          <label class="full">Notes<textarea name="notes" placeholder="vibe, service, anything memorable…"></textarea></label>
-        </form>
-        <div class="modal-actions">
-          <button type="button" data-close>Cancel</button>
-          <button type="button" class="primary" id="visit-submit">Log visit</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Edit brew modal -->
     <div class="modal-bg" id="brew-edit-modal">
       <div class="modal">
@@ -566,15 +267,9 @@
           <label>Time (sec)<input name="timeS" type="number" min="0" /></label>
           <label>Temp (°C)<input name="tempC" type="number" step="0.5" min="0" /></label>
           <label>Grind setting<input name="grind" placeholder="Ode 18" /></label>
-          <label>Grinder
-            <select name="grinderId"><option value="">—</option></select>
-          </label>
-          <label>Machine
-            <select name="machineId"><option value="">—</option></select>
-          </label>
-          <label>Brewer
-            <select name="brewerId"><option value="">—</option></select>
-          </label>
+          <label>Grinder<select name="grinderId"><option value="">—</option></select></label>
+          <label>Machine<select name="machineId"><option value="">—</option></select></label>
+          <label>Brewer<select name="brewerId"><option value="">—</option></select></label>
           <label class="full">Taste<input name="taste" placeholder="balanced, sour, bitter…" /></label>
           <label class="full">Notes<textarea name="notes"></textarea></label>
         </form>
@@ -585,108 +280,101 @@
       </div>
     </div>
 
+    <!-- Preferences modal -->
+    <div class="modal-bg" id="prefs-modal">
+      <div class="modal" style="min-width: 440px; max-width: 540px;">
+        <h3>Taste preferences</h3>
+        <form id="prefs-form" class="grid">
+          <label>Home city<input name="homeCity" placeholder="Phoenix, AZ" /></label>
+          <label>Roast level
+            <select name="preferredRoastLevel">
+              <option value="">—</option>
+              <option value="light">light</option>
+              <option value="medium-light">medium-light</option>
+              <option value="medium">medium</option>
+              <option value="medium-dark">medium-dark</option>
+              <option value="dark">dark</option>
+            </select>
+          </label>
+          <label class="full">Preferred origins
+            <div class="chip-input-group" data-field="preferredOrigins">
+              <input class="chip-input" placeholder="Ethiopia, Kenya…" />
+            </div>
+          </label>
+          <label class="full">Preferred processes
+            <div class="chip-input-group" data-field="preferredProcesses">
+              <input class="chip-input" placeholder="washed, natural, anaerobic…" />
+            </div>
+          </label>
+          <label class="full">Favorite roasters
+            <div class="chip-input-group" data-field="favoriteRoasters">
+              <input class="chip-input" placeholder="Peixoto, Cartel…" />
+            </div>
+          </label>
+          <label class="full">Favorite cafes
+            <div class="chip-input-group" data-field="favoriteCafes">
+              <input class="chip-input" placeholder="Devoción, Heart…" />
+            </div>
+          </label>
+          <label class="full">Disliked notes
+            <div class="chip-input-group" data-field="dislikedNotes">
+              <input class="chip-input" placeholder="smoky, ashy…" />
+            </div>
+          </label>
+          <label class="full">Notes<textarea name="notes" placeholder="anything else the bot should remember"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="prefs-submit">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
+    <script src="shared.js"></script>
     <script>
-      // ---------- state ----------
-      const apiInput = document.getElementById("api-base");
-      const userInput = document.getElementById("user-id");
-      const messagesEl = document.getElementById("messages");
-      const composer = document.getElementById("composer");
-      const msgInput = document.getElementById("msg");
-      const sendBtn = document.getElementById("send");
-      const roasterListEl = document.getElementById("roaster-list");
+      // ── DOM refs ──────────────────────────────────────────────────────────
+      const apiInput    = document.getElementById("api-base");
+      const userInput   = document.getElementById("user-id");
+      const messagesEl  = document.getElementById("messages");
+      const composer    = document.getElementById("composer");
+      const msgInput    = document.getElementById("msg");
+      const sendBtn     = document.getElementById("send");
       const coffeeListEl = document.getElementById("coffee-list");
-      const equipListEl = document.getElementById("equip-list");
-      const brewsEl = document.getElementById("brews");
-      const refreshBtn = document.getElementById("refresh");
-      const resetBtn = document.getElementById("reset");
-      const toastEl = document.getElementById("toast");
-      const prefsChipBtn = document.getElementById("prefs-chip");
-      const prefsChipText = document.getElementById("prefs-chip-text");
-
-      const coffeeModal = document.getElementById("coffee-modal");
-      const brewModal = document.getElementById("brew-modal");
-      const equipModal = document.getElementById("equip-modal");
+      const equipListEl  = document.getElementById("equip-list");
+      const brewsEl      = document.getElementById("brews");
+      const coffeeForm   = document.getElementById("coffee-form");
+      const brewForm     = document.getElementById("brew-form");
+      const equipForm    = document.getElementById("equip-form");
+      const roasterForm  = document.getElementById("roaster-form");
+      const prefsForm    = document.getElementById("prefs-form");
+      const coffeeModal  = document.getElementById("coffee-modal");
       const roasterModal = document.getElementById("roaster-modal");
-      const prefsModal = document.getElementById("prefs-modal");
-      const coffeeForm = document.getElementById("coffee-form");
-      const brewForm = document.getElementById("brew-form");
-      const equipForm = document.getElementById("equip-form");
-      const roasterForm = document.getElementById("roaster-form");
-      const prefsForm = document.getElementById("prefs-form");
+      const brewModal    = document.getElementById("brew-modal");
+      const equipModal   = document.getElementById("equip-modal");
+      const brewEditModal = document.getElementById("brew-edit-modal");
+      const prefsModal   = document.getElementById("prefs-modal");
+      const toastEl      = document.getElementById("toast");
+      const refreshBtn   = document.getElementById("refresh");
 
+      // ── state ─────────────────────────────────────────────────────────────
       let _equipmentCache = [];
-      let _roasterCache = [];
-      let _cafeCache = [];
-      let _prefsCache = {};
+      let _roasterCache   = [];
       let _pendingRoasterSelectField = null;
-      let _pendingGearSelectField = null;
-      let _editingBrewId = null;
+      let _pendingGearSelectField    = null;
+      let _editingBrewId  = null;
 
-      apiInput.value = localStorage.getItem("dialin.apiBase") || "";
-      userInput.value = localStorage.getItem("dialin.userId") || "jarrod";
+      initSharedInputs(loadAll, () => { renderChat(); loadAll(); });
 
-      apiInput.addEventListener("input", () => localStorage.setItem("dialin.apiBase", apiInput.value.trim()));
-      apiInput.addEventListener("change", loadAll);
-      userInput.addEventListener("input", () => localStorage.setItem("dialin.userId", userInput.value.trim()));
-      userInput.addEventListener("change", () => { renderChat(); loadAll(); });
-
+      // ── chat ──────────────────────────────────────────────────────────────
       function chatStorageKey() { return "dialin.chat." + (userInput.value.trim() || "_"); }
       function loadChat() {
         try { return JSON.parse(localStorage.getItem(chatStorageKey()) || "[]"); }
         catch { return []; }
       }
-      function saveChat(history) {
-        localStorage.setItem(chatStorageKey(), JSON.stringify(history.slice(-40)));
-      }
+      function saveChat(history) { localStorage.setItem(chatStorageKey(), JSON.stringify(history.slice(-40))); }
 
-      // ---------- helpers ----------
-      function toast(msg, isError = false) {
-        toastEl.textContent = msg;
-        toastEl.classList.toggle("error", isError);
-        toastEl.classList.add("show");
-        setTimeout(() => toastEl.classList.remove("show"), 2800);
-      }
-
-      function apiBase() {
-        const v = apiInput.value.trim().replace(/\/$/, "");
-        if (!v) { toast("Set the API URL first", true); throw new Error("no api base"); }
-        return v;
-      }
-      function userId() {
-        const v = userInput.value.trim();
-        if (!v) { toast("Set a user id first", true); throw new Error("no user id"); }
-        return v;
-      }
-
-      async function api(path, opts = {}) {
-        const url = apiBase() + path;
-        const res = await fetch(url, {
-          ...opts,
-          headers: { "content-type": "application/json", ...(opts.headers || {}) },
-        });
-        const text = await res.text();
-        let data;
-        try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-        if (!res.ok) throw new Error(data?.error || res.statusText);
-        return data;
-      }
-
-      function fmtTime(iso) {
-        if (!iso) return "";
-        try {
-          const d = new Date(iso);
-          return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        } catch { return iso; }
-      }
-      function daysSince(dateStr) {
-        if (!dateStr) return null;
-        const ms = Date.now() - new Date(dateStr).getTime();
-        return Math.floor(ms / 86400000);
-      }
-
-      // ---------- chat ----------
       function addBubble(role, text) {
         const div = document.createElement("div");
         div.className = "bubble " + (role === "USER" ? "user" : "bot");
@@ -700,8 +388,7 @@
         const hist = loadChat();
         if (!hist.length) {
           messagesEl.innerHTML =
-            '<div class="empty">Tell me about a brew, ask for dial-in advice,<br>'+
-            'or have me catalog a new bag.</div>';
+            '<div class="empty">Tell me about a brew, ask for dial-in advice,<br>or have me catalog a new bag.</div>';
           return;
         }
         hist.forEach((m) => addBubble(m.role, m.text));
@@ -711,7 +398,6 @@
         e.preventDefault();
         const text = msgInput.value.trim();
         if (!text) return;
-        // optimistic add
         const history = loadChat();
         addBubble("USER", text);
         msgInput.value = "";
@@ -724,7 +410,7 @@
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
           addBubble("BOT", data.reply || "(no reply)");
-          loadRoasters(); loadCoffees(); loadEquipment(); loadCafes(); loadBrews(); loadPreferences();
+          loadCoffees(); loadEquipment(); loadRoasters(); loadBrews();
         } catch (err) {
           addBubble("BOT", "[error] " + err.message);
         } finally {
@@ -733,12 +419,12 @@
         }
       });
 
-      resetBtn.addEventListener("click", () => {
+      document.getElementById("reset").addEventListener("click", () => {
         localStorage.removeItem(chatStorageKey());
         renderChat();
       });
 
-      // ---------- coffees ----------
+      // ── coffees ───────────────────────────────────────────────────────────
       async function loadCoffees() {
         if (!apiInput.value.trim()) return;
         try {
@@ -757,39 +443,44 @@
         }
         coffeeListEl.innerHTML = "";
         items.forEach((c) => {
-          const days = daysSince(c.roastDate);
-          const remaining = Number(c.gramsRemaining ?? 0);
-          const total = Number(c.weightG ?? 0);
-          const lowStock = total > 0 && remaining / total < 0.2;
-          const div = document.createElement("div");
-          div.className = "coffee-card" + (lowStock ? " low" : "");
-          div.innerHTML = `
+          const ds = daysSince(c.roastDate);
+          const card = document.createElement("div");
+          const lowStock = c.gramsRemaining != null && c.gramsRemaining < 50;
+          card.className = "coffee-card" + (lowStock ? " low" : "");
+          card.innerHTML = `
             <div class="row">
-              <div>
-                <div class="roaster">${escapeHtml(c.roaster || "")}</div>
-                <div class="name">${escapeHtml(c.name || "")}</div>
-              </div>
-              <div class="stock">${remaining ? remaining.toFixed(0) : "?"}${total ? " / " + total.toFixed(0) : ""} g</div>
+              <span class="name">${escapeHtml(c.name)}</span>
+              ${c.gramsRemaining != null ? `<span class="stock">${c.gramsRemaining}g left</span>` : ""}
             </div>
+            ${c.roaster ? `<div class="roaster">${escapeHtml(c.roaster)}</div>` : ""}
             <div class="meta">
               ${c.origin ? `<span>${escapeHtml(c.origin)}</span>` : ""}
               ${c.process ? `<span>${escapeHtml(c.process)}</span>` : ""}
-              ${days !== null ? `<span>${days}d off roast</span>` : ""}
+              ${ds != null ? `<span>${ds}d since roast</span>` : ""}
             </div>
             <div class="actions">
-              <button data-action="archive" data-id="${c.coffeeId}">Archive</button>
+              <button data-action="brew" data-id="${c.coffeeId}">Log brew</button>
+              <button data-action="archive" data-id="${c.coffeeId}" class="danger">Archive</button>
             </div>
           `;
-          coffeeListEl.appendChild(div);
+          coffeeListEl.appendChild(card);
         });
-        coffeeListEl.querySelectorAll('button[data-action="archive"]').forEach((b) => {
-          b.addEventListener("click", async () => {
+
+        coffeeListEl.querySelectorAll('[data-action="brew"]').forEach((btn) => {
+          btn.addEventListener("click", () => {
+            brewForm.elements.coffeeId.value = btn.dataset.id;
+            openModal(brewModal);
+          });
+        });
+        coffeeListEl.querySelectorAll('[data-action="archive"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Archive this coffee?")) return;
             try {
-              await api(`/coffees/${encodeURIComponent(b.dataset.id)}`, {
+              await api(`/coffees/${encodeURIComponent(btn.dataset.id)}`, {
                 method: "PATCH",
                 body: JSON.stringify({ userId: userId(), archived: true }),
               });
-              toast("Archived");
+              toast("Coffee archived");
               loadCoffees();
             } catch (err) { toast(err.message, true); }
           });
@@ -798,18 +489,19 @@
 
       function fillCoffeeSelect(items) {
         const sel = brewForm.elements.coffeeId;
+        if (!sel) return;
         const prev = sel.value;
-        sel.innerHTML = "";
+        sel.innerHTML = '<option value="">—</option>';
         items.forEach((c) => {
           const opt = document.createElement("option");
           opt.value = c.coffeeId;
-          opt.textContent = `${c.roaster} — ${c.name}`;
+          opt.textContent = c.roaster ? `${c.name} — ${c.roaster}` : c.name;
           sel.appendChild(opt);
         });
         if (prev) sel.value = prev;
       }
 
-      // ---------- brews ----------
+      // ── brews ─────────────────────────────────────────────────────────────
       async function loadBrews() {
         if (!apiInput.value.trim()) return;
         try {
@@ -832,9 +524,8 @@
           const time = b.timeS ? `${Math.floor(b.timeS/60)}:${String(b.timeS%60).padStart(2,"0")}` : "";
           const params = [
             dose ? `${dose}g` : "",
-            yld ? `→ ${yld}g` : "",
-            ratio,
-            time,
+            yld  ? `→ ${yld}g` : "",
+            ratio, time,
             b.grind ? `grind ${b.grind}` : "",
           ].filter(Boolean).join("  ·  ");
 
@@ -859,18 +550,13 @@
         });
 
         brewsEl.querySelectorAll('[data-action="edit-brew"]').forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const brew = JSON.parse(btn.dataset.brew);
-            openEditBrewModal(brew);
-          });
+          btn.addEventListener("click", () => openEditBrewModal(JSON.parse(btn.dataset.brew)));
         });
-
         brewsEl.querySelectorAll('[data-action="del-brew"]').forEach((btn) => {
           btn.addEventListener("click", async () => {
             if (!confirm("Delete this brew permanently?")) return;
-            const uid = userId();
             try {
-              await api(`/brews/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, { method: "DELETE" });
+              await api(`/brews/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(userId())}`, { method: "DELETE" });
               toast("Brew deleted.");
               await loadBrews();
             } catch (err) { toast(err.message, true); }
@@ -881,28 +567,27 @@
       function openEditBrewModal(b) {
         _editingBrewId = b.brewId;
         const f = document.getElementById("brew-edit-form");
-        f.elements.brewId.value = b.brewId;
-        f.elements.method.value = b.method || "V60";
-        f.elements.rating.value = b.rating || "";
-        f.elements.doseG.value = b.doseG || "";
-        f.elements.yieldG.value = b.yieldG ?? b.waterG ?? "";
-        f.elements.timeS.value = b.timeS || "";
-        f.elements.tempC.value = b.tempC || "";
-        f.elements.grind.value = b.grind || "";
-        f.elements.taste.value = b.taste || "";
-        f.elements.notes.value = b.notes || "";
+        f.elements.brewId.value  = b.brewId;
+        f.elements.method.value  = b.method || "V60";
+        f.elements.rating.value  = b.rating || "";
+        f.elements.doseG.value   = b.doseG  || "";
+        f.elements.yieldG.value  = b.yieldG ?? b.waterG ?? "";
+        f.elements.timeS.value   = b.timeS  || "";
+        f.elements.tempC.value   = b.tempC  || "";
+        f.elements.grind.value   = b.grind  || "";
+        f.elements.taste.value   = b.taste  || "";
+        f.elements.notes.value   = b.notes  || "";
         fillEquipSelectsInForm(f);
         setTimeout(() => {
           if (b.grinderId) f.elements.grinderId.value = b.grinderId;
           if (b.machineId) f.elements.machineId.value = b.machineId;
           if (b.brewerId)  f.elements.brewerId.value  = b.brewerId;
-        }, 50);
-        document.getElementById("brew-edit-modal").classList.add("open");
+        }, 30);
+        openModal(brewEditModal);
       }
 
       function fillEquipSelectsInForm(f) {
-        const selects = { grinderId: "GRINDER", machineId: "MACHINE", brewerId: "BREWER" };
-        Object.entries(selects).forEach(([field, type]) => {
+        [["grinderId","GRINDER"], ["machineId","MACHINE"], ["brewerId","BREWER"]].forEach(([field, type]) => {
           const sel = f.elements[field];
           if (!sel) return;
           sel.innerHTML = '<option value="">—</option>';
@@ -914,59 +599,14 @@
         });
       }
 
-      // ---------- roasters ----------
+      // ── roasters (silent — only for coffee form dropdown) ─────────────────
       async function loadRoasters() {
         if (!apiInput.value.trim()) return;
         try {
           const data = await api(`/roasters?userId=${encodeURIComponent(userId())}`);
           _roasterCache = data.roasters || [];
-          renderRoasters(_roasterCache);
           fillRoasterSelect(_roasterCache);
-        } catch (err) {
-          roasterListEl.innerHTML = `<div class="empty">${err.message}</div>`;
-        }
-      }
-
-      function renderRoasters(items) {
-        if (!items.length) {
-          roasterListEl.innerHTML = '<div class="empty">No roasters yet. Click + add.</div>';
-          return;
-        }
-        roasterListEl.innerHTML = "";
-        items.forEach((r) => {
-          const row = document.createElement("div");
-          row.className = "roaster-row";
-          row.innerHTML = `
-            <div class="rname">${escapeHtml(r.name)}</div>
-            ${r.city ? `<div class="rcity">${escapeHtml(r.city)}${r.country && r.country !== "US" ? ", " + escapeHtml(r.country) : ""}</div>` : ""}
-            <div class="actions">
-              <button data-action="edit" data-id="${r.roasterId}">Edit</button>
-              <button data-action="archive" data-id="${r.roasterId}" class="danger">Retire</button>
-            </div>
-          `;
-          roasterListEl.appendChild(row);
-        });
-
-        roasterListEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const item = _roasterCache.find((r) => r.roasterId === btn.dataset.id);
-            if (item) openEditRoasterModal(item);
-          });
-        });
-
-        roasterListEl.querySelectorAll('[data-action="archive"]').forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            if (!confirm("Retire this roaster? It stays linked to past coffees but won't appear in new ones.")) return;
-            try {
-              await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
-                method: "PATCH",
-                body: JSON.stringify({ userId: userId(), archived: true }),
-              });
-              toast("Roaster retired");
-              loadRoasters();
-            } catch (err) { toast(err.message, true); }
-          });
-        });
+        } catch { /* silent */ }
       }
 
       function fillRoasterSelect(items) {
@@ -996,7 +636,6 @@
       }
 
       let _editingRoasterId = null;
-
       function resetRoasterModal() {
         _editingRoasterId = null;
         roasterForm.reset();
@@ -1005,25 +644,11 @@
         document.getElementById("roaster-submit").textContent = "Add";
       }
 
-      function openEditRoasterModal(item) {
-        _editingRoasterId = item.roasterId;
-        roasterForm.elements.name.value = item.name || "";
-        roasterForm.elements.city.value = item.city || "";
-        roasterForm.elements.country.value = item.country || "US";
-        roasterForm.elements.website.value = item.website || "";
-        roasterForm.elements.notes.value = item.notes || "";
-        document.getElementById("roaster-modal-title").textContent = "Edit roaster";
-        document.getElementById("roaster-submit").textContent = "Save";
-        openModal(roasterModal);
-      }
-
-      // ---------- equipment ----------
-      const EQUIP_TYPE_LABELS = {
-        GRINDER: "Grinder",
-        MACHINE: "Machine",
-        BREWER: "Brewer",
-        KETTLE: "Kettle",
-      };
+      // ── equipment ─────────────────────────────────────────────────────────
+      const EQUIP_TYPE_LABELS = { GRINDER: "Grinder", MACHINE: "Machine", BREWER: "Brewer", KETTLE: "Kettle" };
+      const GEAR_FIELD_TO_TYPE = { grinderId: "GRINDER", machineId: "MACHINE", brewerId: "BREWER" };
+      const ADD_NEW_VALUE = "__add_new__";
+      let _editingEquipId = null;
 
       async function loadEquipment() {
         if (!apiInput.value.trim()) return;
@@ -1060,21 +685,18 @@
           `;
           equipListEl.appendChild(row);
         });
-
         equipListEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
           btn.addEventListener("click", () => {
-            const item = _equipmentCache.find((e) => e.equipId === btn.dataset.id);
+            const item = _equipmentCache.find(e => e.equipId === btn.dataset.id);
             if (item) openEditEquipModal(item);
           });
         });
-
         equipListEl.querySelectorAll('[data-action="archive"]').forEach((btn) => {
           btn.addEventListener("click", async () => {
-            if (!confirm(`Retire this gear? It'll stay linked to past brews but won't appear in new ones.`)) return;
+            if (!confirm("Retire this gear?")) return;
             try {
               await api(`/equipment/${encodeURIComponent(btn.dataset.id)}`, {
-                method: "PATCH",
-                body: JSON.stringify({ userId: userId(), archived: true }),
+                method: "PATCH", body: JSON.stringify({ userId: userId(), archived: true }),
               });
               toast("Gear retired");
               loadEquipment();
@@ -1083,28 +705,19 @@
         });
       }
 
-      const GEAR_FIELD_TO_TYPE = {
-        grinderId: "GRINDER",
-        machineId: "MACHINE",
-        brewerId: "BREWER",
-      };
-      const ADD_NEW_VALUE = "__add_new__";
-
       function fillEquipSelects(items) {
         for (const [field, type] of Object.entries(GEAR_FIELD_TO_TYPE)) {
           const sel = brewForm.elements[field];
           if (!sel) continue;
           const prev = sel.value;
           sel.innerHTML = '<option value="">—</option>';
-          items.filter((e) => e.equipType === type).forEach((e) => {
+          items.filter(e => e.equipType === type).forEach(e => {
             const opt = document.createElement("option");
-            opt.value = e.equipId;
-            opt.textContent = e.name;
+            opt.value = e.equipId; opt.textContent = e.name;
             sel.appendChild(opt);
           });
           const addNew = document.createElement("option");
-          addNew.value = ADD_NEW_VALUE;
-          addNew.textContent = "+ Add new gear…";
+          addNew.value = ADD_NEW_VALUE; addNew.textContent = "+ Add new gear…";
           sel.appendChild(addNew);
           if (prev && prev !== ADD_NEW_VALUE) sel.value = prev;
         }
@@ -1116,7 +729,7 @@
           if (!sel) continue;
           sel.addEventListener("change", () => {
             if (sel.value !== ADD_NEW_VALUE) return;
-            sel.value = ""; // reset so the dropdown doesn't show "+ Add new gear…"
+            sel.value = "";
             _pendingGearSelectField = field;
             equipForm.elements.equipType.value = GEAR_FIELD_TO_TYPE[field];
             openModal(equipModal);
@@ -1124,13 +737,10 @@
         }
       }
 
-      // ---------- edit equipment ----------
-      let _editingEquipId = null;
-
       function openEditEquipModal(item) {
         _editingEquipId = item.equipId;
         equipForm.elements.equipType.value = item.equipType || "GRINDER";
-        equipForm.elements.name.value = item.name || "";
+        equipForm.elements.name.value  = item.name  || "";
         equipForm.elements.brand.value = item.brand || "";
         equipForm.elements.model.value = item.model || "";
         equipForm.elements.notes.value = item.notes || "";
@@ -1146,201 +756,124 @@
         document.getElementById("equip-submit").textContent = "Add";
       }
 
-      // ---------- preferences ----------
-      const CHIP_FIELDS = [
-        "preferredOrigins",
-        "preferredProcesses",
-        "favoriteRoasters",
-        "favoriteCafes",
-        "dislikedNotes",
-      ];
+      // ── preferences chip ──────────────────────────────────────────────────
+      const CHIP_FIELDS = ["preferredOrigins","preferredProcesses","favoriteRoasters","favoriteCafes","dislikedNotes"];
+
+      function renderPrefsChip(p) {
+        const parts = [];
+        if (p.homeCity)               parts.push(p.homeCity);
+        if (p.preferredRoastLevel)    parts.push(p.preferredRoastLevel + " roasts");
+        if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.slice(0,3).join(", "));
+        if (p.preferredProcesses?.length) parts.push(p.preferredProcesses.slice(0,2).join("/"));
+        document.getElementById("prefs-chip-text").textContent =
+          parts.length ? parts.join(" · ") : "Set your taste preferences →";
+      }
 
       async function loadPreferences() {
         if (!apiInput.value.trim()) return;
         try {
           const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
-          _prefsCache = data.profile || {};
-          renderPrefsChip(_prefsCache);
-        } catch (err) {
-          prefsChipText.textContent = "Set your taste preferences →";
-        }
-      }
-
-      function renderPrefsChip(p) {
-        const parts = [];
-        if (p.homeCity) parts.push(p.homeCity);
-        if (p.preferredRoastLevel) parts.push(p.preferredRoastLevel + " roasts");
-        if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.slice(0, 3).join(", "));
-        if (p.preferredProcesses?.length) parts.push(p.preferredProcesses.slice(0, 2).join("/"));
-        prefsChipText.textContent = parts.length ? parts.join(" · ") : "Set your taste preferences →";
-      }
-
-      function openPrefsModal() {
-        const p = _prefsCache || {};
-        prefsForm.elements.homeCity.value = p.homeCity || "";
-        prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
-        prefsForm.elements.notes.value = p.notes || "";
-        CHIP_FIELDS.forEach((f) => renderChipField(f, p[f] || []));
-        openModal(prefsModal);
+          renderPrefsChip(data.profile || {});
+        } catch { /* silent */ }
       }
 
       function renderChipField(field, values) {
         const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
         if (!group) return;
+        group.querySelectorAll(".chip").forEach(c => c.remove());
         const input = group.querySelector(".chip-input");
-        group.querySelectorAll(".chip").forEach((c) => c.remove());
         values.forEach((v) => {
           const chip = document.createElement("span");
-          chip.className = "chip";
-          chip.dataset.value = v;
+          chip.className = "chip"; chip.dataset.value = v;
           chip.innerHTML = `${escapeHtml(v)}<button type="button" aria-label="remove">×</button>`;
-          chip.querySelector("button").addEventListener("click", () => {
-            chip.remove();
-          });
+          chip.querySelector("button").addEventListener("click", () => chip.remove());
           group.insertBefore(chip, input);
         });
       }
-
       function readChipField(field) {
         const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
-        if (!group) return [];
-        return Array.from(group.querySelectorAll(".chip")).map((c) => c.dataset.value);
+        return group ? [...group.querySelectorAll(".chip")].map(c => c.dataset.value) : [];
       }
 
-      // chip-input behavior: Enter or comma adds a chip
-      function wireChipInputs() {
-        prefsForm.querySelectorAll(".chip-input-group").forEach((group) => {
-          const input = group.querySelector(".chip-input");
-          const field = group.dataset.field;
-          input.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === ",") {
-              ev.preventDefault();
-              const val = input.value.trim().replace(/,$/, "");
-              if (!val) return;
-              const existing = readChipField(field).map((v) => v.toLowerCase());
-              if (!existing.includes(val.toLowerCase())) {
-                renderChipField(field, [...readChipField(field), val]);
-              }
-              input.value = "";
-            } else if (ev.key === "Backspace" && !input.value) {
-              const chips = group.querySelectorAll(".chip");
-              if (chips.length) chips[chips.length - 1].remove();
+      document.getElementById("prefs-chip").addEventListener("click", async () => {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const p = data.profile || {};
+          prefsForm.elements.homeCity.value = p.homeCity || "";
+          prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
+          prefsForm.elements.notes.value = p.notes || "";
+          CHIP_FIELDS.forEach(f => renderChipField(f, p[f] || []));
+          openModal(prefsModal);
+        } catch (err) { toast(err.message, true); }
+      });
+
+      prefsForm.querySelectorAll(".chip-input-group").forEach((group) => {
+        const input = group.querySelector(".chip-input");
+        const field = group.dataset.field;
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === ",") {
+            ev.preventDefault();
+            const val = input.value.trim().replace(/,$/, "");
+            if (val && !readChipField(field).map(v => v.toLowerCase()).includes(val.toLowerCase())) {
+              renderChipField(field, [...readChipField(field), val]);
             }
-          });
-          input.addEventListener("blur", () => {
-            const val = input.value.trim();
-            if (val) {
-              const existing = readChipField(field).map((v) => v.toLowerCase());
-              if (!existing.includes(val.toLowerCase())) {
-                renderChipField(field, [...readChipField(field), val]);
-              }
-              input.value = "";
-            }
-          });
+            input.value = "";
+          } else if (ev.key === "Backspace" && !input.value) {
+            group.querySelectorAll(".chip").forEach((c, i, a) => { if (i === a.length - 1) c.remove(); });
+          }
         });
-      }
-
-      function escapeHtml(s) {
-        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-          "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-        }[c]));
-      }
-
-      // ---------- modals ----------
-      function openModal(m) { m.classList.add("show"); }
-      function closeModal(m) { m.classList.remove("show"); }
-      document.querySelectorAll("[data-close]").forEach((b) => {
-        b.addEventListener("click", () => {
-          const bg = b.closest(".modal-bg");
-          closeModal(bg);
-          if (bg === equipModal)    { _pendingGearSelectField = null; resetEquipModal(); }
-          if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
-          if (bg === cafeModal)     resetCafeModal();
-          if (bg === brewEditModal) _editingBrewId = null;
+        input.addEventListener("blur", () => {
+          const val = input.value.trim();
+          if (val) { renderChipField(field, [...readChipField(field), val]); input.value = ""; }
         });
       });
-      document.querySelectorAll(".modal-bg").forEach((bg) => {
-        bg.addEventListener("click", (e) => {
-          if (e.target !== bg) return;
-          closeModal(bg);
-          if (bg === equipModal)    { _pendingGearSelectField = null; resetEquipModal(); }
-          if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
-          if (bg === cafeModal)     resetCafeModal();
-          if (bg === brewEditModal) _editingBrewId = null;
-        });
-      });
-      document.getElementById("add-roaster-btn").addEventListener("click", () => { resetRoasterModal(); openModal(roasterModal); });
-      document.getElementById("add-coffee-btn").addEventListener("click", () => openModal(coffeeModal));
-      document.getElementById("add-brew-btn").addEventListener("click", () => openModal(brewModal));
-      document.getElementById("add-equip-btn").addEventListener("click", () => openModal(equipModal));
-      prefsChipBtn.addEventListener("click", openPrefsModal);
 
+      // ── form submit handlers ──────────────────────────────────────────────
       document.getElementById("coffee-submit").addEventListener("click", async () => {
         const fd = new FormData(coffeeForm);
         const body = { userId: userId() };
         for (const [k, v] of fd.entries()) {
-          if (v === "" || v == null) continue;
-          if (k === "weightG") body[k] = Number(v);
-          else body[k] = v;
+          if (!v) continue;
+          body[k] = k === "weightG" ? Number(v) : v;
         }
-        // Denormalize roaster name so coffee cards can display it without a join.
         if (body.roasterId) {
-          const roaster = _roasterCache.find((r) => r.roasterId === body.roasterId);
-          if (roaster) body.roaster = roaster.name;
+          const r = _roasterCache.find(r => r.roasterId === body.roasterId);
+          if (r) body.roaster = r.name;
         }
         try {
           await api("/coffees", { method: "POST", body: JSON.stringify(body) });
-          coffeeForm.reset();
-          closeModal(coffeeModal);
-          toast("Coffee added");
-          loadCoffees();
+          coffeeForm.reset(); closeModal(coffeeModal); toast("Coffee added"); loadCoffees();
         } catch (err) { toast(err.message, true); }
       });
 
       document.getElementById("brew-submit").addEventListener("click", async () => {
         const fd = new FormData(brewForm);
         const body = { userId: userId() };
-        const numericKeys = new Set(["doseG", "yieldG", "tempC"]);
-        const intKeys = new Set(["rating", "timeS"]);
+        const nums = new Set(["doseG","yieldG","tempC"]);
+        const ints = new Set(["rating","timeS"]);
         for (const [k, v] of fd.entries()) {
-          if (v === "" || v == null) continue;
-          if (numericKeys.has(k)) body[k] = Number(v);
-          else if (intKeys.has(k)) body[k] = parseInt(v, 10);
-          else body[k] = v;
+          if (!v) continue;
+          body[k] = nums.has(k) ? Number(v) : ints.has(k) ? parseInt(v,10) : v;
         }
         try {
           await api("/brews", { method: "POST", body: JSON.stringify(body) });
-          brewForm.reset();
-          closeModal(brewModal);
-          toast("Brew logged");
-          loadBrews();
-          loadCoffees(); // stock decrement
+          brewForm.reset(); closeModal(brewModal); toast("Brew logged"); loadBrews(); loadCoffees();
         } catch (err) { toast(err.message, true); }
       });
 
       document.getElementById("equip-submit").addEventListener("click", async () => {
         const fd = new FormData(equipForm);
         const body = { userId: userId() };
-        for (const [k, v] of fd.entries()) {
-          if (v === "" || v == null) continue;
-          body[k] = v;
-        }
+        for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
         try {
           if (_editingEquipId) {
-            await api(`/equipment/${encodeURIComponent(_editingEquipId)}`, {
-              method: "PATCH",
-              body: JSON.stringify(body),
-            });
-            resetEquipModal();
-            closeModal(equipModal);
-            toast("Gear updated");
-            loadEquipment();
+            await api(`/equipment/${encodeURIComponent(_editingEquipId)}`, { method: "PATCH", body: JSON.stringify(body) });
+            resetEquipModal(); closeModal(equipModal); toast("Gear updated"); loadEquipment();
           } else {
             const data = await api("/equipment", { method: "POST", body: JSON.stringify(body) });
             const newId = data?.equipment?.equipId;
-            resetEquipModal();
-            closeModal(equipModal);
-            toast("Gear added");
+            resetEquipModal(); closeModal(equipModal); toast("Gear added");
             await loadEquipment();
             if (_pendingGearSelectField && newId) {
               const sel = brewForm.elements[_pendingGearSelectField];
@@ -1354,25 +887,15 @@
       document.getElementById("roaster-submit").addEventListener("click", async () => {
         const fd = new FormData(roasterForm);
         const body = { userId: userId() };
-        for (const [k, v] of fd.entries()) {
-          if (v === "" || v == null) continue;
-          body[k] = v;
-        }
+        for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
         try {
           if (_editingRoasterId) {
-            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, {
-              method: "PATCH", body: JSON.stringify(body),
-            });
-            resetRoasterModal();
-            closeModal(roasterModal);
-            toast("Roaster updated");
-            await loadRoasters();
+            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, { method: "PATCH", body: JSON.stringify(body) });
+            resetRoasterModal(); closeModal(roasterModal); toast("Roaster updated"); await loadRoasters();
           } else {
             const data = await api("/roasters", { method: "POST", body: JSON.stringify(body) });
             const newId = data?.roaster?.roasterId;
-            resetRoasterModal();
-            closeModal(roasterModal);
-            toast("Roaster added");
+            resetRoasterModal(); closeModal(roasterModal); toast("Roaster added");
             await loadRoasters();
             if (_pendingRoasterSelectField && newId) {
               const sel = coffeeForm.elements[_pendingRoasterSelectField];
@@ -1386,191 +909,19 @@
       document.getElementById("prefs-submit").addEventListener("click", async () => {
         const fd = new FormData(prefsForm);
         const body = { userId: userId() };
-        const homeCity = (fd.get("homeCity") || "").toString().trim();
-        const roastLevel = (fd.get("preferredRoastLevel") || "").toString().trim();
-        const notes = (fd.get("notes") || "").toString().trim();
-        if (homeCity) body.homeCity = homeCity;
-        if (roastLevel) body.preferredRoastLevel = roastLevel;
-        if (notes) body.notes = notes;
-        // Replace lists wholesale by sending the current chip set.
-        // (Server merges, but current UI represents the desired state — send what the user sees.)
-        CHIP_FIELDS.forEach((f) => { body[f] = readChipField(f); });
+        const homeCity = (fd.get("homeCity") || "").trim();
+        const roastLevel = (fd.get("preferredRoastLevel") || "").trim();
+        const notes = (fd.get("notes") || "").trim();
+        if (homeCity)    body.homeCity = homeCity;
+        if (roastLevel)  body.preferredRoastLevel = roastLevel;
+        if (notes)       body.notes = notes;
+        CHIP_FIELDS.forEach(f => { body[f] = readChipField(f); });
         try {
           const data = await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
-          _prefsCache = data.profile || {};
-          renderPrefsChip(_prefsCache);
-          closeModal(prefsModal);
-          toast("Preferences saved");
+          renderPrefsChip(data.profile || {});
+          closeModal(prefsModal); toast("Preferences saved");
         } catch (err) { toast(err.message, true); }
       });
-
-      wireChipInputs();
-      wireBrewGearSelects();
-
-      // ---------- wiring ----------
-      refreshBtn.addEventListener("click", loadAll);
-
-      // ---------- cafes ----------
-      const cafeListEl = document.getElementById("cafe-list");
-      const cafeModal = document.getElementById("cafe-modal");
-      const visitModal = document.getElementById("visit-modal");
-      let _editingCafeId = null;
-      let _visitCafeId = null;
-
-      async function loadCafes() {
-        if (!apiInput.value.trim()) return;
-        try {
-          const data = await api(`/cafes?userId=${encodeURIComponent(userId())}`);
-          _cafeCache = data.cafes || [];
-          renderCafes(_cafeCache);
-        } catch (err) {
-          cafeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
-        }
-      }
-
-      function renderCafes(items) {
-        if (!items.length) {
-          cafeListEl.innerHTML = '<div class="empty">No cafes yet. Click + add.</div>';
-          return;
-        }
-        cafeListEl.innerHTML = "";
-        items.forEach((c) => {
-          const row = document.createElement("div");
-          row.className = "cafe-row";
-          row.innerHTML = `
-            <div class="cname">${escapeHtml(c.name)}</div>
-            ${c.city ? `<div class="ccity">${escapeHtml(c.city)}</div>` : ""}
-            <div class="actions">
-              <button data-action="visit" data-id="${c.cafeId}" title="Log a visit">Visit</button>
-              <button data-action="edit-cafe" data-id="${c.cafeId}">Edit</button>
-              <button data-action="retire-cafe" data-id="${c.cafeId}" class="danger">Retire</button>
-            </div>
-          `;
-          cafeListEl.appendChild(row);
-        });
-
-        cafeListEl.querySelectorAll('[data-action="visit"]').forEach((btn) => {
-          btn.addEventListener("click", () => openVisitModal(btn.dataset.id));
-        });
-
-        cafeListEl.querySelectorAll('[data-action="edit-cafe"]').forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const c = _cafeCache.find(x => x.cafeId === btn.dataset.id);
-            if (c) openEditCafeModal(c);
-          });
-        });
-
-        cafeListEl.querySelectorAll('[data-action="retire-cafe"]').forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            if (!confirm("Retire this cafe?")) return;
-            const uid = userId();
-            try {
-              await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, {
-                method: "PATCH",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ archived: true }),
-              });
-              toast("Cafe retired.");
-              await loadCafes();
-            } catch (err) { toast(err.message, true); }
-          });
-        });
-      }
-
-      function resetCafeModal() {
-        _editingCafeId = null;
-        document.getElementById("cafe-form").reset();
-        document.getElementById("cafe-form").elements.country.value = "US";
-        document.getElementById("cafe-modal-title").textContent = "Add a cafe";
-        document.getElementById("cafe-submit").textContent = "Add";
-      }
-
-      function openEditCafeModal(c) {
-        _editingCafeId = c.cafeId;
-        const f = document.getElementById("cafe-form");
-        f.elements.name.value = c.name || "";
-        f.elements.city.value = c.city || "";
-        f.elements.country.value = c.country || "US";
-        f.elements.website.value = c.website || "";
-        f.elements.notes.value = c.notes || "";
-        document.getElementById("cafe-modal-title").textContent = "Edit cafe";
-        document.getElementById("cafe-submit").textContent = "Save";
-        cafeModal.classList.add("open");
-      }
-
-      function openVisitModal(cafeId) {
-        _visitCafeId = cafeId;
-        document.getElementById("visit-form").reset();
-        document.getElementById("visit-form").elements.cafeId.value = cafeId;
-        const cafe = _cafeCache.find(c => c.cafeId === cafeId);
-        document.getElementById("visit-modal-title").textContent =
-          "Log a visit" + (cafe ? ` — ${cafe.name}` : "");
-        visitModal.classList.add("open");
-      }
-
-      document.getElementById("add-cafe-btn").addEventListener("click", () => {
-        resetCafeModal();
-        cafeModal.classList.add("open");
-      });
-
-      document.getElementById("cafe-submit").addEventListener("click", async () => {
-        const f = document.getElementById("cafe-form");
-        if (!f.reportValidity()) return;
-        const fd = new FormData(f);
-        const body = { name: fd.get("name").trim() };
-        if (fd.get("city"))    body.city    = fd.get("city").trim();
-        if (fd.get("country")) body.country = fd.get("country").trim();
-        if (fd.get("website")) body.website = fd.get("website").trim();
-        if (fd.get("notes"))   body.notes   = fd.get("notes").trim();
-        const uid = userId();
-        try {
-          if (_editingCafeId) {
-            await api(`/cafes/${encodeURIComponent(_editingCafeId)}?userId=${encodeURIComponent(uid)}`, {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            });
-            toast("Cafe updated.");
-          } else {
-            body.userId = uid;
-            await api("/cafes", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            });
-            toast("Cafe added.");
-          }
-          cafeModal.classList.remove("open");
-          resetCafeModal();
-          await loadCafes();
-        } catch (err) { toast(err.message, true); }
-      });
-
-      document.getElementById("visit-submit").addEventListener("click", async () => {
-        const f = document.getElementById("visit-form");
-        const fd = new FormData(f);
-        const cafeId = fd.get("cafeId");
-        if (!cafeId) return;
-        const body = { cafeId, userId: userId() };
-        const drinksRaw = (fd.get("drinks") || "").trim();
-        if (drinksRaw) body.drinks = drinksRaw.split(",").map(s => s.trim()).filter(Boolean);
-        if (fd.get("visitDate")) body.visitDate = fd.get("visitDate");
-        if (fd.get("rating"))    body.rating    = parseInt(fd.get("rating"), 10);
-        if (fd.get("notes"))     body.notes     = fd.get("notes").trim();
-        try {
-          await api("/visits", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          toast("Visit logged!");
-          visitModal.classList.remove("open");
-          _visitCafeId = null;
-        } catch (err) { toast(err.message, true); }
-      });
-
-      // ---------- brew edit modal ----------
-      const brewEditModal = document.getElementById("brew-edit-modal");
 
       document.getElementById("brew-edit-submit").addEventListener("click", async () => {
         const f = document.getElementById("brew-edit-form");
@@ -1578,40 +929,38 @@
         const fd = new FormData(f);
         const brewId = fd.get("brewId");
         const body = {};
-        const numFields = ["doseG", "yieldG", "timeS", "tempC", "rating"];
-        const strFields = ["method", "grind", "taste", "notes", "grinderId", "machineId", "brewerId"];
-        numFields.forEach(k => { if (fd.get(k)) body[k] = parseFloat(fd.get(k)); });
-        strFields.forEach(k => { if (fd.get(k)) body[k] = fd.get(k); });
-        const uid = userId();
+        ["doseG","yieldG","timeS","tempC","rating"].forEach(k => { if (fd.get(k)) body[k] = parseFloat(fd.get(k)); });
+        ["method","grind","taste","notes","grinderId","machineId","brewerId"].forEach(k => { if (fd.get(k)) body[k] = fd.get(k); });
         try {
-          await api(`/brews/${encodeURIComponent(brewId)}?userId=${encodeURIComponent(uid)}`, {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
+          await api(`/brews/${encodeURIComponent(brewId)}?userId=${encodeURIComponent(userId())}`, {
+            method: "PATCH", body: JSON.stringify(body),
           });
-          toast("Brew updated.");
-          brewEditModal.classList.remove("open");
-          _editingBrewId = null;
-          await loadBrews();
+          toast("Brew updated."); closeModal(brewEditModal); _editingBrewId = null; await loadBrews();
         } catch (err) { toast(err.message, true); }
       });
 
+      // ── modal wiring ──────────────────────────────────────────────────────
+      initModalClose((bg) => {
+        if (bg === equipModal)    { _pendingGearSelectField = null; resetEquipModal(); }
+        if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
+        if (bg === brewEditModal) _editingBrewId = null;
+      });
+
+      document.getElementById("add-coffee-btn").addEventListener("click", () => openModal(coffeeModal));
+      document.getElementById("add-brew-btn").addEventListener("click",   () => openModal(brewModal));
+      document.getElementById("add-equip-btn").addEventListener("click",  () => openModal(equipModal));
+      refreshBtn.addEventListener("click", loadAll);
+      wireBrewGearSelects();
+
+      // ── load all ──────────────────────────────────────────────────────────
       function loadAll() {
         if (!apiInput.value.trim()) {
-          roasterListEl.innerHTML = '<div class="empty">Set the API URL above to load roasters.</div>';
           coffeeListEl.innerHTML = '<div class="empty">Paste your API URL above to get started.</div>';
-          equipListEl.innerHTML = '<div class="empty">Set the API URL above to load gear.</div>';
-          cafeListEl.innerHTML = '<div class="empty">Set the API URL above to load cafes.</div>';
-          brewsEl.innerHTML = '<div class="empty">Set the API URL above to load brews.</div>';
-          prefsChipText.textContent = "Set your taste preferences →";
+          equipListEl.innerHTML  = '<div class="empty">Set the API URL above to load gear.</div>';
+          brewsEl.innerHTML      = '<div class="empty">Set the API URL above to load brews.</div>';
           return;
         }
-        loadRoasters();
-        loadCoffees();
-        loadEquipment();
-        loadCafes();
-        loadBrews();
-        loadPreferences();
+        loadRoasters(); loadCoffees(); loadEquipment(); loadBrews(); loadPreferences();
       }
 
       renderChat();

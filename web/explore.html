@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dialin · explore</title>
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      /* ── explore layout ────────────────────────────────────────────────── */
+      .explore-body {
+        display: flex; flex-direction: column;
+        height: calc(100vh - 52px); overflow: hidden;
+      }
+
+      /* quick-ask strip */
+      .ask-strip {
+        border-bottom: 1px solid var(--line); background: var(--bg-2);
+        padding: 10px 16px; display: flex; flex-direction: column; gap: 8px;
+        flex-shrink: 0;
+      }
+      .ask-strip .ask-row { display: flex; gap: 8px; }
+      .ask-strip input {
+        flex: 1; background: var(--paper); color: var(--ink);
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 9px 12px; font-size: 14px;
+      }
+      .ask-strip button {
+        background: var(--accent); color: var(--paper); border: none;
+        border-radius: 8px; padding: 0 18px; cursor: pointer; font-size: 14px;
+        white-space: nowrap;
+      }
+      .ask-strip button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .ask-reply {
+        font-size: 13px; line-height: 1.55; color: var(--ink);
+        background: #fffaf0; border: 1px solid var(--line);
+        border-radius: 8px; padding: 10px 12px;
+        display: none; max-height: 120px; overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .ask-reply.visible { display: block; }
+      .ask-reply.loading { color: var(--muted); font-style: italic; }
+
+      /* main grid */
+      .explore-grid {
+        flex: 1; min-height: 0;
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 14px; padding: 14px;
+      }
+      .cafes-panel  { grid-row: 1; grid-column: 1; }
+      .visits-panel { grid-row: 2; grid-column: 1; }
+      .roasters-panel { grid-row: 1 / 3; grid-column: 2; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>dialin <span>explore</span></h1>
+      <nav class="page-nav">
+        <a href="index.html">journal</a>
+        <a href="explore.html" class="active">explore</a>
+      </nav>
+      <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
+      <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      <div class="grow"></div>
+      <button id="prefs-chip" class="prefs-chip" type="button" title="Edit preferences">
+        <span class="dot"></span>
+        <span class="text" id="prefs-chip-text">Set your taste preferences →</span>
+        <span class="edit">edit</span>
+      </button>
+      <button id="refresh">Refresh</button>
+    </header>
+
+    <div class="explore-body">
+      <!-- Quick-ask bar -->
+      <div class="ask-strip">
+        <div class="ask-row">
+          <input id="ask-input" placeholder="What should I check out in Denver? Log my visit to Cartel today…" autocomplete="off" />
+          <button id="ask-send">Ask</button>
+        </div>
+        <div id="ask-reply" class="ask-reply"></div>
+      </div>
+
+      <!-- Main content grid -->
+      <div class="explore-grid">
+        <!-- Cafes -->
+        <section class="panel cafes-panel">
+          <h2>my cafes <div class="grow"></div>
+            <button class="tiny" id="add-cafe-btn">+ add</button>
+          </h2>
+          <div id="cafe-list" class="cafe-list"></div>
+        </section>
+
+        <!-- Recent visits -->
+        <section class="panel visits-panel">
+          <h2>recent visits</h2>
+          <div id="visit-list" class="visit-list"></div>
+        </section>
+
+        <!-- Roasters -->
+        <section class="panel roasters-panel">
+          <h2>my roasters <div class="grow"></div>
+            <button class="tiny" id="add-roaster-btn">+ add</button>
+          </h2>
+          <div id="roaster-list" class="roaster-list"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Add / edit cafe modal -->
+    <div class="modal-bg" id="cafe-modal">
+      <div class="modal">
+        <h3 id="cafe-modal-title">Add a cafe</h3>
+        <form id="cafe-form" class="grid">
+          <label>Name<input name="name" required placeholder="Cartel Coffee Lab" /></label>
+          <label>City<input name="city" placeholder="Tempe" /></label>
+          <label>Country<input name="country" placeholder="US" value="US" /></label>
+          <label class="full">Website<input name="website" placeholder="https://cartelcoffee.com" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="great filters, usually have 2 Ethiopians on…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="cafe-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log visit modal -->
+    <div class="modal-bg" id="visit-modal">
+      <div class="modal">
+        <h3 id="visit-modal-title">Log a visit</h3>
+        <form id="visit-form" class="grid">
+          <input type="hidden" name="cafeId" />
+          <label>Date<input name="visitDate" type="date" /></label>
+          <label>Rating (1-10)<input name="rating" type="number" min="1" max="10" /></label>
+          <label class="full">Drinks ordered<input name="drinks" placeholder="V60 Ethiopia, cortado" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="vibe, service, anything memorable…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="visit-submit">Log visit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add / edit roaster modal -->
+    <div class="modal-bg" id="roaster-modal">
+      <div class="modal">
+        <h3 id="roaster-modal-title">Add a roaster</h3>
+        <form id="roaster-form" class="grid">
+          <label>Name<input name="name" required placeholder="Sey" /></label>
+          <label>City<input name="city" placeholder="Brooklyn" /></label>
+          <label>Country<input name="country" placeholder="US" value="US" /></label>
+          <label>Website<input name="website" placeholder="https://seycoffee.com" /></label>
+          <label class="full">Notes<textarea name="notes" placeholder="ships fresh, great Ethiopians…"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="roaster-submit">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preferences modal -->
+    <div class="modal-bg" id="prefs-modal">
+      <div class="modal" style="min-width: 440px; max-width: 540px;">
+        <h3>Taste preferences</h3>
+        <form id="prefs-form" class="grid">
+          <label>Home city<input name="homeCity" placeholder="Phoenix, AZ" /></label>
+          <label>Roast level
+            <select name="preferredRoastLevel">
+              <option value="">—</option>
+              <option value="light">light</option>
+              <option value="medium-light">medium-light</option>
+              <option value="medium">medium</option>
+              <option value="medium-dark">medium-dark</option>
+              <option value="dark">dark</option>
+            </select>
+          </label>
+          <label class="full">Preferred origins
+            <div class="chip-input-group" data-field="preferredOrigins">
+              <input class="chip-input" placeholder="Ethiopia, Kenya…" />
+            </div>
+          </label>
+          <label class="full">Preferred processes
+            <div class="chip-input-group" data-field="preferredProcesses">
+              <input class="chip-input" placeholder="washed, natural, anaerobic…" />
+            </div>
+          </label>
+          <label class="full">Favorite roasters
+            <div class="chip-input-group" data-field="favoriteRoasters">
+              <input class="chip-input" placeholder="Peixoto, Cartel…" />
+            </div>
+          </label>
+          <label class="full">Favorite cafes
+            <div class="chip-input-group" data-field="favoriteCafes">
+              <input class="chip-input" placeholder="Devoción, Heart…" />
+            </div>
+          </label>
+          <label class="full">Disliked notes
+            <div class="chip-input-group" data-field="dislikedNotes">
+              <input class="chip-input" placeholder="smoky, ashy…" />
+            </div>
+          </label>
+          <label class="full">Notes<textarea name="notes" placeholder="anything else the bot should remember"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button type="button" data-close>Cancel</button>
+          <button type="button" class="primary" id="prefs-submit">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="shared.js"></script>
+    <script>
+      // ── DOM refs ──────────────────────────────────────────────────────────
+      const apiInput     = document.getElementById("api-base");
+      const cafeListEl   = document.getElementById("cafe-list");
+      const visitListEl  = document.getElementById("visit-list");
+      const roasterListEl = document.getElementById("roaster-list");
+      const cafeModal    = document.getElementById("cafe-modal");
+      const visitModal   = document.getElementById("visit-modal");
+      const roasterModal = document.getElementById("roaster-modal");
+      const prefsModal   = document.getElementById("prefs-modal");
+      const cafeForm     = document.getElementById("cafe-form");
+      const visitForm    = document.getElementById("visit-form");
+      const roasterForm  = document.getElementById("roaster-form");
+      const prefsForm    = document.getElementById("prefs-form");
+      const askInput     = document.getElementById("ask-input");
+      const askSend      = document.getElementById("ask-send");
+      const askReply     = document.getElementById("ask-reply");
+
+      // ── state ─────────────────────────────────────────────────────────────
+      let _cafeCache    = [];
+      let _roasterCache = [];
+      let _editingCafeId    = null;
+      let _editingRoasterId = null;
+      let _askHistory   = [];
+
+      initSharedInputs(loadAll, loadAll);
+
+      // ── quick-ask bar ─────────────────────────────────────────────────────
+      async function doAsk() {
+        const text = askInput.value.trim();
+        if (!text || !apiInput.value.trim()) return;
+        askInput.value = "";
+        askSend.disabled = true;
+        askReply.textContent = "thinking…";
+        askReply.className = "ask-reply visible loading";
+        try {
+          const data = await api("/chat", {
+            method: "POST",
+            body: JSON.stringify({ userId: userId(), message: text, history: _askHistory.slice(-6) }),
+          });
+          if (data.history) _askHistory = data.history.slice(-12);
+          else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
+          askReply.textContent = data.reply || "(no reply)";
+          askReply.className = "ask-reply visible";
+          // Refresh data in case the bot made changes
+          loadCafes(); loadRoasters(); loadVisits();
+        } catch (err) {
+          askReply.textContent = "Error: " + err.message;
+          askReply.className = "ask-reply visible loading";
+        } finally {
+          askSend.disabled = false;
+        }
+      }
+
+      askSend.addEventListener("click", doAsk);
+      askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doAsk(); } });
+
+      // ── cafes ─────────────────────────────────────────────────────────────
+      async function loadCafes() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/cafes?userId=${encodeURIComponent(userId())}`);
+          _cafeCache = data.cafes || [];
+          renderCafes(_cafeCache);
+        } catch (err) {
+          cafeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderCafes(items) {
+        if (!items.length) {
+          cafeListEl.innerHTML = '<div class="empty">No cafes yet — add one or ask the bot.</div>';
+          return;
+        }
+        cafeListEl.innerHTML = "";
+        items.forEach((c) => {
+          const row = document.createElement("div");
+          row.className = "cafe-row";
+          row.innerHTML = `
+            <div class="cname">${escapeHtml(c.name)}</div>
+            ${c.city ? `<div class="ccity">${escapeHtml(c.city)}</div>` : ""}
+            <div class="actions">
+              <button data-action="visit" data-id="${c.cafeId}">+ Visit</button>
+              <button data-action="edit" data-id="${c.cafeId}">Edit</button>
+              <button data-action="retire" data-id="${c.cafeId}" class="danger">Retire</button>
+            </div>
+          `;
+          cafeListEl.appendChild(row);
+        });
+
+        cafeListEl.querySelectorAll('[data-action="visit"]').forEach(btn => {
+          btn.addEventListener("click", () => openVisitModal(btn.dataset.id));
+        });
+        cafeListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
+          btn.addEventListener("click", () => {
+            const c = _cafeCache.find(x => x.cafeId === btn.dataset.id);
+            if (c) openEditCafeModal(c);
+          });
+        });
+        cafeListEl.querySelectorAll('[data-action="retire"]').forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Retire this cafe?")) return;
+            try {
+              await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(userId())}`, {
+                method: "PATCH", body: JSON.stringify({ archived: true }),
+              });
+              toast("Cafe retired."); await loadCafes();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function resetCafeModal() {
+        _editingCafeId = null;
+        cafeForm.reset();
+        cafeForm.elements.country.value = "US";
+        document.getElementById("cafe-modal-title").textContent = "Add a cafe";
+        document.getElementById("cafe-submit").textContent = "Add";
+      }
+
+      function openEditCafeModal(c) {
+        _editingCafeId = c.cafeId;
+        cafeForm.elements.name.value    = c.name    || "";
+        cafeForm.elements.city.value    = c.city    || "";
+        cafeForm.elements.country.value = c.country || "US";
+        cafeForm.elements.website.value = c.website || "";
+        cafeForm.elements.notes.value   = c.notes   || "";
+        document.getElementById("cafe-modal-title").textContent = "Edit cafe";
+        document.getElementById("cafe-submit").textContent = "Save";
+        openModal(cafeModal);
+      }
+
+      function openVisitModal(cafeId) {
+        visitForm.reset();
+        visitForm.elements.cafeId.value = cafeId;
+        // Pre-fill today's date
+        visitForm.elements.visitDate.value = new Date().toISOString().slice(0,10);
+        const cafe = _cafeCache.find(c => c.cafeId === cafeId);
+        document.getElementById("visit-modal-title").textContent =
+          "Log a visit" + (cafe ? ` — ${cafe.name}` : "");
+        openModal(visitModal);
+      }
+
+      document.getElementById("add-cafe-btn").addEventListener("click", () => {
+        resetCafeModal(); openModal(cafeModal);
+      });
+
+      document.getElementById("cafe-submit").addEventListener("click", async () => {
+        if (!cafeForm.reportValidity()) return;
+        const fd = new FormData(cafeForm);
+        const body = { name: fd.get("name").trim() };
+        if (fd.get("city"))    body.city    = fd.get("city").trim();
+        if (fd.get("country")) body.country = fd.get("country").trim();
+        if (fd.get("website")) body.website = fd.get("website").trim();
+        if (fd.get("notes"))   body.notes   = fd.get("notes").trim();
+        const uid = userId();
+        try {
+          if (_editingCafeId) {
+            await api(`/cafes/${encodeURIComponent(_editingCafeId)}?userId=${encodeURIComponent(uid)}`, {
+              method: "PATCH", body: JSON.stringify(body),
+            });
+            toast("Cafe updated.");
+          } else {
+            body.userId = uid;
+            await api("/cafes", { method: "POST", body: JSON.stringify(body) });
+            toast("Cafe added.");
+          }
+          closeModal(cafeModal); resetCafeModal(); await loadCafes();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      document.getElementById("visit-submit").addEventListener("click", async () => {
+        const fd = new FormData(visitForm);
+        const cafeId = fd.get("cafeId");
+        if (!cafeId) return;
+        const body = { cafeId, userId: userId() };
+        const drinksRaw = (fd.get("drinks") || "").trim();
+        if (drinksRaw) body.drinks = drinksRaw.split(",").map(s => s.trim()).filter(Boolean);
+        if (fd.get("visitDate")) body.visitDate = fd.get("visitDate");
+        if (fd.get("rating"))    body.rating    = parseInt(fd.get("rating"), 10);
+        if (fd.get("notes"))     body.notes     = fd.get("notes").trim();
+        try {
+          await api("/visits", { method: "POST", body: JSON.stringify(body) });
+          toast("Visit logged!"); closeModal(visitModal); await loadVisits();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      // ── visits ────────────────────────────────────────────────────────────
+      async function loadVisits() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/visits?userId=${encodeURIComponent(userId())}&limit=15`);
+          renderVisits(data.visits || []);
+        } catch (err) {
+          visitListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderVisits(items) {
+        if (!items.length) {
+          visitListEl.innerHTML = '<div class="empty">No visits logged yet.</div>';
+          return;
+        }
+        visitListEl.innerHTML = "";
+        items.forEach((v) => {
+          const cafe = _cafeCache.find(c => c.cafeId === v.cafeId);
+          const cafeName = cafe ? cafe.name : (v.cafeId || "Unknown cafe");
+          const row = document.createElement("div");
+          row.className = "visit-row";
+          row.innerHTML = `
+            <div class="v-date">${fmtDate(v.visitDate || v.createdAt)}</div>
+            <div class="v-body">
+              <div class="v-cafe">${escapeHtml(cafeName)}</div>
+              ${v.drinks?.length ? `<div class="v-drinks">${v.drinks.map(d => escapeHtml(d)).join(", ")}</div>` : ""}
+              ${v.notes ? `<div class="v-notes">${escapeHtml(v.notes)}</div>` : ""}
+            </div>
+            <div class="v-rating">${v.rating ? v.rating + "/10" : ""}</div>
+          `;
+          visitListEl.appendChild(row);
+        });
+      }
+
+      // ── roasters ──────────────────────────────────────────────────────────
+      async function loadRoasters() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/roasters?userId=${encodeURIComponent(userId())}`);
+          _roasterCache = data.roasters || [];
+          renderRoasters(_roasterCache);
+        } catch (err) {
+          roasterListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+        }
+      }
+
+      function renderRoasters(items) {
+        if (!items.length) {
+          roasterListEl.innerHTML = '<div class="empty">No roasters yet. Click + add.</div>';
+          return;
+        }
+        roasterListEl.innerHTML = "";
+        items.forEach((r) => {
+          const row = document.createElement("div");
+          row.className = "roaster-row";
+          row.innerHTML = `
+            <div class="rname">${escapeHtml(r.name)}</div>
+            ${r.city ? `<div class="rcity">${escapeHtml(r.city)}${r.country && r.country !== "US" ? ", " + escapeHtml(r.country) : ""}</div>` : ""}
+            <div class="actions">
+              <button data-action="edit" data-id="${r.roasterId}">Edit</button>
+              <button data-action="retire" data-id="${r.roasterId}" class="danger">Retire</button>
+            </div>
+          `;
+          roasterListEl.appendChild(row);
+        });
+
+        roasterListEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
+          btn.addEventListener("click", () => {
+            const r = _roasterCache.find(x => x.roasterId === btn.dataset.id);
+            if (r) openEditRoasterModal(r);
+          });
+        });
+        roasterListEl.querySelectorAll('[data-action="retire"]').forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Retire this roaster? It stays linked to past coffees.")) return;
+            try {
+              await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
+                method: "PATCH", body: JSON.stringify({ userId: userId(), archived: true }),
+              });
+              toast("Roaster retired"); loadRoasters();
+            } catch (err) { toast(err.message, true); }
+          });
+        });
+      }
+
+      function resetRoasterModal() {
+        _editingRoasterId = null;
+        roasterForm.reset();
+        roasterForm.elements.country.value = "US";
+        document.getElementById("roaster-modal-title").textContent = "Add a roaster";
+        document.getElementById("roaster-submit").textContent = "Add";
+      }
+
+      function openEditRoasterModal(item) {
+        _editingRoasterId = item.roasterId;
+        roasterForm.elements.name.value    = item.name    || "";
+        roasterForm.elements.city.value    = item.city    || "";
+        roasterForm.elements.country.value = item.country || "US";
+        roasterForm.elements.website.value = item.website || "";
+        roasterForm.elements.notes.value   = item.notes   || "";
+        document.getElementById("roaster-modal-title").textContent = "Edit roaster";
+        document.getElementById("roaster-submit").textContent = "Save";
+        openModal(roasterModal);
+      }
+
+      document.getElementById("add-roaster-btn").addEventListener("click", () => {
+        resetRoasterModal(); openModal(roasterModal);
+      });
+
+      document.getElementById("roaster-submit").addEventListener("click", async () => {
+        const fd = new FormData(roasterForm);
+        const body = { userId: userId() };
+        for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
+        try {
+          if (_editingRoasterId) {
+            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, { method: "PATCH", body: JSON.stringify(body) });
+            toast("Roaster updated");
+          } else {
+            await api("/roasters", { method: "POST", body: JSON.stringify(body) });
+            toast("Roaster added");
+          }
+          closeModal(roasterModal); resetRoasterModal(); await loadRoasters();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      // ── preferences chip ──────────────────────────────────────────────────
+      const CHIP_FIELDS = ["preferredOrigins","preferredProcesses","favoriteRoasters","favoriteCafes","dislikedNotes"];
+
+      async function loadPreferences() {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const p = data.profile || {};
+          const parts = [];
+          if (p.homeCity)               parts.push(p.homeCity);
+          if (p.preferredRoastLevel)    parts.push(p.preferredRoastLevel + " roasts");
+          if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.slice(0,3).join(", "));
+          document.getElementById("prefs-chip-text").textContent =
+            parts.length ? parts.join(" · ") : "Set your taste preferences →";
+        } catch { /* silent */ }
+      }
+
+      function renderChipField(field, values) {
+        const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
+        if (!group) return;
+        group.querySelectorAll(".chip").forEach(c => c.remove());
+        const input = group.querySelector(".chip-input");
+        values.forEach((v) => {
+          const chip = document.createElement("span");
+          chip.className = "chip"; chip.dataset.value = v;
+          chip.innerHTML = `${escapeHtml(v)}<button type="button" aria-label="remove">×</button>`;
+          chip.querySelector("button").addEventListener("click", () => chip.remove());
+          group.insertBefore(chip, input);
+        });
+      }
+      function readChipField(field) {
+        const group = prefsForm.querySelector(`.chip-input-group[data-field="${field}"]`);
+        return group ? [...group.querySelectorAll(".chip")].map(c => c.dataset.value) : [];
+      }
+
+      document.getElementById("prefs-chip").addEventListener("click", async () => {
+        if (!apiInput.value.trim()) return;
+        try {
+          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const p = data.profile || {};
+          prefsForm.elements.homeCity.value = p.homeCity || "";
+          prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
+          prefsForm.elements.notes.value = p.notes || "";
+          CHIP_FIELDS.forEach(f => renderChipField(f, p[f] || []));
+          openModal(prefsModal);
+        } catch (err) { toast(err.message, true); }
+      });
+
+      prefsForm.querySelectorAll(".chip-input-group").forEach((group) => {
+        const input = group.querySelector(".chip-input");
+        const field = group.dataset.field;
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === ",") {
+            ev.preventDefault();
+            const val = input.value.trim().replace(/,$/, "");
+            if (val && !readChipField(field).map(v => v.toLowerCase()).includes(val.toLowerCase())) {
+              renderChipField(field, [...readChipField(field), val]);
+            }
+            input.value = "";
+          } else if (ev.key === "Backspace" && !input.value) {
+            group.querySelectorAll(".chip").forEach((c, i, a) => { if (i === a.length-1) c.remove(); });
+          }
+        });
+        input.addEventListener("blur", () => {
+          const val = input.value.trim();
+          if (val) { renderChipField(field, [...readChipField(field), val]); input.value = ""; }
+        });
+      });
+
+      document.getElementById("prefs-submit").addEventListener("click", async () => {
+        const fd = new FormData(prefsForm);
+        const body = { userId: userId() };
+        const homeCity   = (fd.get("homeCity") || "").trim();
+        const roastLevel = (fd.get("preferredRoastLevel") || "").trim();
+        const notes      = (fd.get("notes") || "").trim();
+        if (homeCity)   body.homeCity = homeCity;
+        if (roastLevel) body.preferredRoastLevel = roastLevel;
+        if (notes)      body.notes = notes;
+        CHIP_FIELDS.forEach(f => { body[f] = readChipField(f); });
+        try {
+          await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
+          closeModal(prefsModal); toast("Preferences saved"); await loadPreferences();
+        } catch (err) { toast(err.message, true); }
+      });
+
+      // ── modal wiring ──────────────────────────────────────────────────────
+      initModalClose((bg) => {
+        if (bg === cafeModal)    resetCafeModal();
+        if (bg === roasterModal) resetRoasterModal();
+      });
+
+      document.getElementById("refresh").addEventListener("click", loadAll);
+
+      // ── load all ──────────────────────────────────────────────────────────
+      function loadAll() {
+        if (!apiInput.value.trim()) {
+          cafeListEl.innerHTML    = '<div class="empty">Set the API URL above to get started.</div>';
+          visitListEl.innerHTML   = '<div class="empty">Set the API URL above.</div>';
+          roasterListEl.innerHTML = '<div class="empty">Set the API URL above.</div>';
+          return;
+        }
+        loadCafes(); loadVisits(); loadRoasters(); loadPreferences();
+      }
+
+      loadAll();
+    </script>
+  </body>
+</html>
