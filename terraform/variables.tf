@@ -51,3 +51,15 @@ variable "tavily_api_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "websearch_cache_ttl_seconds" {
+  description = "DynamoDB TTL for shared Tavily query cache entries (identical normalized queries reuse results)."
+  type        = number
+  default     = 86400
+}
+
+variable "websearch_monthly_limit_per_user" {
+  description = "Max live Tavily calls per userId per UTC month (cache hits do not count). Set 0 for unlimited."
+  type        = number
+  default     = 300
+}

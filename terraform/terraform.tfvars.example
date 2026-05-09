@@ -6,3 +6,6 @@ max_tool_iterations = 5
 log_retention_days  = 7
 monthly_budget_usd  = 10
 budget_alert_email  = "you@example.com"
+
+# Optional — live cafe discovery via Tavily (see variables.tf). Keep real keys in terraform.tfvars (gitignored).
+# tavily_api_key = "tvly-..."

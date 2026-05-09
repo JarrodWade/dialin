@@ -8,6 +8,8 @@ Single-table design.
   USER#<id> / EQUIP#<equipId>              Equipment   typed: MACHINE/GRINDER/BREWER/KETTLE
   USER#<id> / COFFEE#<coffeeId>            Coffee      one per bag; roasterId FK + denorm name
   USER#<id> / BREW#<isoTs>#<brewId>        Brew        time-ordered timeline
+  CACHE#WEBSEARCH / <sha256>               WebSearchCache   shared Tavily cache (TTL via expiresAt)
+  USER#<id> / USAGE#WEBSEARCH#YYYY-MM    UsageCounter     monthly live-search quota
 
 GSI1 (brews by coffee, time-ordered):
   GSI1PK = COFFEE#<coffeeId>
@@ -16,7 +18,10 @@ GSI1 (brews by coffee, time-ordered):
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import time
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
@@ -912,3 +917,91 @@ def list_brews(
             items = [i for i in items if i.get("method") == method][:limit]
 
     return [_strip_keys(i) for i in items]
+
+
+# ---------------------------------------------------------------------------
+# Web search cache + quota (Tavily)
+# ---------------------------------------------------------------------------
+
+
+def _websearch_cache_keys(query: str, include_domains: list[Any], max_results: int) -> tuple[str, str, str]:
+    """Return (PK, SK, normalizedFingerprint) for deduplicating Tavily queries."""
+    q = " ".join(query.strip().lower().split())
+    domains = sorted({str(d).strip().lower() for d in include_domains if str(d).strip()})
+    fingerprint = json.dumps({"q": q, "d": domains, "n": int(max_results)}, separators=(",", ":"))
+    digest = hashlib.sha256(fingerprint.encode()).hexdigest()
+    return "CACHE#WEBSEARCH", digest, fingerprint
+
+
+def websearch_cache_get(query: str, include_domains: list[Any], max_results: int) -> dict[str, Any] | None:
+    """Return cached Tavily-shaped payload or None."""
+    pk, sk, _ = _websearch_cache_keys(query, include_domains, max_results)
+    resp = _table.get_item(Key={"PK": pk, "SK": sk})
+    item = resp.get("Item")
+    if not item:
+        return None
+    raw = item.get("resultJson")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def websearch_cache_put(
+    query: str,
+    include_domains: list[Any],
+    max_results: int,
+    result: dict[str, Any],
+    ttl_seconds: int,
+) -> None:
+    """Persist a Tavily response for shared reuse across users (TTL via expiresAt)."""
+    pk, sk, fingerprint = _websearch_cache_keys(query, include_domains, max_results)
+    now = int(time.time())
+    item = {
+        "PK": pk,
+        "SK": sk,
+        "itemType": "WebSearchCache",
+        "normalizedFingerprint": fingerprint,
+        "resultJson": json.dumps(result),
+        "createdAt": _now_iso(),
+        "expiresAt": now + max(60, int(ttl_seconds)),
+    }
+    _table.put_item(Item=item)
+
+
+def consume_websearch_quota(user_id: str, monthly_limit: int) -> tuple[bool, int]:
+    """Reserve one live Tavily call for the user's current UTC month.
+
+    Returns (allowed, current_count_after_increment_or_existing_at_cap).
+    monthly_limit <= 0 means unlimited (always allowed, count -1).
+    """
+    if monthly_limit <= 0:
+        return True, -1
+
+    ym = datetime.now(timezone.utc).strftime("%Y-%m")
+    pk = f"USER#{user_id}"
+    sk = f"USAGE#WEBSEARCH#{ym}"
+
+    try:
+        resp = _table.update_item(
+            Key={"PK": pk, "SK": sk},
+            UpdateExpression="ADD callCount :one SET itemType = :it, updatedAt = :now",
+            ExpressionAttributeValues={
+                ":one": 1,
+                ":lim": monthly_limit,
+                ":it": "UsageCounter",
+                ":now": _now_iso(),
+            },
+            ConditionExpression="attribute_not_exists(callCount) OR callCount < :lim",
+            ReturnValues="UPDATED_NEW",
+        )
+        return True, int(resp["Attributes"]["callCount"])
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+
+    got = _table.get_item(Key={"PK": pk, "SK": sk})
+    cur = int((got.get("Item") or {}).get("callCount") or monthly_limit)
+    return False, cur

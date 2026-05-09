@@ -9,6 +9,7 @@ here, run it against DynamoDB, and feed the result back as a
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
@@ -17,6 +18,11 @@ from typing import Any, Callable
 import ddb
 
 _TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+_LOGGER = logging.getLogger(__name__)
+
+# Production-shaped safeguards (still reasonable for solo use): shared DynamoDB cache + monthly quota per user.
+_WEBSEARCH_CACHE_TTL_SEC = int(os.environ.get("WEBSEARCH_CACHE_TTL_SECONDS", "86400"))
+_WEBSEARCH_MONTHLY_LIMIT = int(os.environ.get("WEBSEARCH_MONTHLY_LIMIT_PER_USER", "300"))
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +419,7 @@ def _summarize_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Live web search via Tavily — use for current cafe/roaster recommendations."""
+    """Live web search via Tavily — cached globally + metered per user on cache miss."""
     if not _TAVILY_API_KEY:
         return {"ok": False, "error": "web search is not configured (no TAVILY_API_KEY)"}
 
@@ -422,12 +428,31 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "query is required"}
 
     include_domains = args.get("includeDomains") or []
+    max_results = int(args.get("maxResults", 5))
+
+    cached = ddb.websearch_cache_get(query, include_domains, max_results)
+    if cached is not None:
+        out = dict(cached)
+        out["_cache"] = {"hit": True}
+        return out
+
+    allowed, usage_count = ddb.consume_websearch_quota(user_id, _WEBSEARCH_MONTHLY_LIMIT)
+    if not allowed:
+        lim = _WEBSEARCH_MONTHLY_LIMIT
+        return {
+            "ok": False,
+            "error": (
+                f"Monthly live web search quota exhausted ({usage_count}/{lim} used). "
+                "Repeated lookups for the same city often hit cache — broaden your query slightly "
+                "or wait until next UTC month."
+            ),
+        }
 
     payload = json.dumps({
         "api_key": _TAVILY_API_KEY,
         "query": query,
         "search_depth": "advanced",
-        "max_results": int(args.get("maxResults", 5)),
+        "max_results": max_results,
         "include_answer": True,
         **({"include_domains": include_domains} if include_domains else {}),
     }).encode()
@@ -456,11 +481,28 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         }
         for r in data.get("results", [])
     ]
-    return {
+    result_body = {
         "query": query,
         "answer": data.get("answer"),
         "results": results,
     }
+    try:
+        ddb.websearch_cache_put(
+            query,
+            include_domains,
+            max_results,
+            result_body,
+            _WEBSEARCH_CACHE_TTL_SEC,
+        )
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("websearch_cache_put failed")
+
+    out = dict(result_body)
+    meta = {"hit": False, "liveSearchCallsThisMonth": usage_count}
+    if _WEBSEARCH_MONTHLY_LIMIT > 0:
+        meta["monthlyLimit"] = _WEBSEARCH_MONTHLY_LIMIT
+    out["_cache"] = meta
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -976,14 +1018,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "search_web",
             "description": (
-                "Live web search for current cafe and roaster recommendations. "
-                "Use this whenever recommending places — especially for international cities, "
-                "cities you're uncertain about, or when the user asks what's good right now. "
-                "Searches Reddit, specialty coffee forums, and review sites for fresh intel. "
+                "Live web search (Tavily) for cafe / roaster *discovery* — results are cached for reuse; "
+                "each distinct query consumes quota only on cache miss. "
+                "Call when surfacing venues outside the user's saved list_cafes: new cities, 'what's good now', "
+                "international places, verifying a named shop, or a thin Reddit-focused second query if needed. "
+                "Skip when answering purely from list_cafes + preferences + stable knowledge "
+                "(e.g. user asks only about places they've already logged). "
                 "Good queries: 'best specialty coffee [city] [year] reddit', "
                 "'[city] third wave coffee recommendations site:reddit.com', "
                 "'[cafe name] [city] specialty coffee review'. "
-                "Do NOT use for brew advice or coffee bean questions — only for place/cafe discovery."
+                "Do NOT use for brew advice or bean questions."
             ),
             "inputSchema": {
                 "json": {
