@@ -35,8 +35,10 @@
         background: #fffaf0; border: 1px solid var(--line);
         border-radius: 8px; padding: 10px 12px;
         display: none; max-height: 120px; overflow-y: auto;
-        white-space: pre-wrap;
       }
+      .ask-reply p { margin: 0 0 5px; }
+      .ask-reply p:last-child { margin-bottom: 0; }
+      .ask-reply code { background: var(--bg-2); border-radius: 3px; padding: 1px 4px; font-size: 11px; font-family: monospace; }
       .ask-reply.visible { display: block; }
       .ask-reply.loading { color: var(--muted); font-style: italic; }
 
@@ -333,7 +335,8 @@
           });
           if (data.history) _askHistory = data.history.slice(-12);
           else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
-          askReply.textContent = data.reply || "(no reply)";
+          askReply.innerHTML = "";
+          renderMarkdown(askReply, data.reply || "(no reply)");
           askReply.className = "ask-reply visible";
           await loadPlaces(); loadVisits();
         } catch (err) {

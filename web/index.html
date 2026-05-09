@@ -22,12 +22,16 @@
       }
       .bubble {
         max-width: 85%; padding: 10px 12px; border-radius: 12px;
-        font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
+        font-size: 14px; line-height: 1.5; word-wrap: break-word;
         border: 1px solid var(--line);
       }
-      .bubble.user { background: #efe4d2; align-self: flex-end; border-bottom-right-radius: 4px; }
+      .bubble.user { background: #efe4d2; align-self: flex-end; border-bottom-right-radius: 4px; white-space: pre-wrap; }
       .bubble.bot  { background: #fffaf0; align-self: flex-start; border-bottom-left-radius: 4px; }
+      .bubble.bot p { margin: 0 0 6px; }
+      .bubble.bot p:last-child { margin-bottom: 0; }
+      .bubble.bot code { background: var(--bg-2); border-radius: 3px; padding: 1px 4px; font-size: 12px; font-family: monospace; }
       .bubble small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+      .bubble.bot strong { font-weight: 600; }
       .composer {
         display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
       }
@@ -483,7 +487,8 @@
       function addBubble(role, text) {
         const div = document.createElement("div");
         div.className = "bubble " + (role === "USER" ? "user" : "bot");
-        div.textContent = text;
+        if (role === "BOT") renderMarkdown(div, text);
+        else div.textContent = text;
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
@@ -1101,7 +1106,8 @@
       function addOnboardBubble(role, text) {
         const div = document.createElement("div");
         div.className = "bubble " + (role === "USER" ? "user" : "bot");
-        div.textContent = text;
+        if (role === "BOT") renderMarkdown(div, text);
+        else div.textContent = text;
         onboardMessages.appendChild(div);
         onboardMessages.scrollTop = onboardMessages.scrollHeight;
       }

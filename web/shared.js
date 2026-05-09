@@ -46,6 +46,41 @@ function escapeHtml(str) {
   return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * Render a bot reply with lightweight markdown into `parent`.
+ * Handles: **bold**, *italic*, `code`, paragraphs (blank lines), line breaks.
+ * Builds DOM nodes — never sets innerHTML — so it is XSS-safe.
+ */
+function renderMarkdown(parent, text) {
+  const s = (text ?? "").replace(/\r\n/g, "\n");
+  const paragraphs = s.split(/\n{2,}/);
+  paragraphs.forEach((para, pi) => {
+    const p = document.createElement("p");
+    const lines = para.split("\n");
+    lines.forEach((line, li) => {
+      if (li > 0) p.appendChild(document.createElement("br"));
+      _appendInline(p, line);
+    });
+    parent.appendChild(p);
+  });
+}
+
+function _appendInline(parent, text) {
+  // Match **bold**, *italic*, `code` — in that order of precedence
+  const re = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    let el;
+    if      (m[1] != null) { el = document.createElement("strong"); el.textContent = m[1]; }
+    else if (m[2] != null) { el = document.createElement("em");     el.textContent = m[2]; }
+    else                   { el = document.createElement("code");   el.textContent = m[3]; }
+    parent.appendChild(el);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
 function fmtDate(iso) {
   if (!iso) return "";
   try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
