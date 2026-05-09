@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from collections import Counter
@@ -64,6 +65,56 @@ def _to_decimal(v: Any) -> Decimal | None:
 def _strip_keys(item: dict[str, Any]) -> dict[str, Any]:
     """Remove DynamoDB-only keys before returning items to API clients."""
     return {k: v for k, v in item.items() if k not in {"PK", "SK", "GSI1PK", "GSI1SK"}}
+
+
+def _normalize_place_name(name: str | None) -> str:
+    """Lowercase, trim, collapse whitespace for duplicate detection."""
+    if not name:
+        return ""
+    s = str(name).lower().strip()
+    s = re.sub(r"[\s\-]+", " ", s)
+    return s
+
+
+def _cities_soft_match(city_a: str | None, city_b: str | None) -> bool:
+    """If either city is missing, treat as compatible (name-only match). Otherwise substring/equality."""
+    a = _normalize_place_name(city_a)
+    b = _normalize_place_name(city_b)
+    if not a or not b:
+        return True
+    return a == b or a in b or b in a
+
+
+def find_matching_cafe_for_new_roaster(
+    user_id: str, name: str, city: str | None = None
+) -> dict[str, Any] | None:
+    """Return an active cafe item if it likely duplicates this roaster (same place)."""
+    want = _normalize_place_name(name)
+    if not want:
+        return None
+    for c in list_cafes(user_id, include_archived=False):
+        if _normalize_place_name(c.get("name")) != want:
+            continue
+        if not _cities_soft_match(city, c.get("city")):
+            continue
+        return c
+    return None
+
+
+def find_matching_roaster_for_new_cafe(
+    user_id: str, name: str, city: str | None = None
+) -> dict[str, Any] | None:
+    """Return an active roaster item if it likely duplicates this cafe (same place)."""
+    want = _normalize_place_name(name)
+    if not want:
+        return None
+    for r in list_roasters(user_id, include_archived=False):
+        if _normalize_place_name(r.get("name")) != want:
+            continue
+        if not _cities_soft_match(city, r.get("city")):
+            continue
+        return r
+    return None
 
 
 # ---------------------------------------------------------------------------

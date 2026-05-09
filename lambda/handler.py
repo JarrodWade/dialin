@@ -277,10 +277,28 @@ def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
     err = _require(body, "userId", "name")
     if err:
         return _response(400, {"error": err})
+    user_id = body["userId"].strip()
+    name = body["name"].strip()
+    if not body.get("skipDuplicateCheck"):
+        hit = ddb.find_matching_cafe_for_new_roaster(user_id, name, body.get("city"))
+        if hit:
+            return _response(
+                409,
+                {
+                    "code": "DUPLICATE_PLACE",
+                    "error": (
+                        f'You already have "{hit.get("name", name)}" as a cafe. '
+                        "Edit that cafe and enable \"Also roasts beans\", or create a duplicate anyway."
+                    ),
+                    "existingType": "cafe",
+                    "existingId": hit["cafeId"],
+                    "existingName": hit.get("name"),
+                },
+            )
     try:
         item = ddb.create_roaster(
-            user_id=body["userId"].strip(),
-            name=body["name"].strip(),
+            user_id=user_id,
+            name=name,
             city=body.get("city"),
             country=body.get("country"),
             website=body.get("website"),
@@ -416,6 +434,22 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
     name = (body.get("name") or "").strip()
     if not name:
         return _response(400, {"error": "name required"})
+    if not body.get("skipDuplicateCheck"):
+        hit = ddb.find_matching_roaster_for_new_cafe(user_id, name, body.get("city"))
+        if hit:
+            return _response(
+                409,
+                {
+                    "code": "DUPLICATE_PLACE",
+                    "error": (
+                        f'You already have "{hit.get("name", name)}" as a roaster. '
+                        "Edit that roaster and enable \"Also has a cafe\", or create a duplicate anyway."
+                    ),
+                    "existingType": "roaster",
+                    "existingId": hit["roasterId"],
+                    "existingName": hit.get("name"),
+                },
+            )
     item = ddb.create_cafe(
         user_id=user_id,
         name=name,

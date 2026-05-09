@@ -36,6 +36,19 @@ def _list_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _add_roaster(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    if not args.get("skipDuplicateCheck"):
+        hit = ddb.find_matching_cafe_for_new_roaster(user_id, args["name"], args.get("city"))
+        if hit:
+            return {
+                "duplicatePlace": True,
+                "existingType": "cafe",
+                "existingId": hit["cafeId"],
+                "existingName": hit.get("name"),
+                "hint": (
+                    "Same name already exists as a cafe — use update_cafe with isRoaster, "
+                    "or call add_roaster again with skipDuplicateCheck: true if the user insists."
+                ),
+            }
     return ddb.create_roaster(
         user_id=user_id,
         name=args["name"],
@@ -255,6 +268,19 @@ def _update_preferences(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    if not args.get("skipDuplicateCheck"):
+        hit = ddb.find_matching_roaster_for_new_cafe(user_id, args["name"], args.get("city"))
+        if hit:
+            return {
+                "duplicatePlace": True,
+                "existingType": "roaster",
+                "existingId": hit["roasterId"],
+                "existingName": hit.get("name"),
+                "hint": (
+                    "Same name already exists as a roaster — use update_roaster with hasCafe, "
+                    "or call add_cafe again with skipDuplicateCheck: true if the user insists."
+                ),
+            }
     return ddb.create_cafe(
         user_id=user_id,
         name=args["name"],
@@ -546,6 +572,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "hasCafe": {
                             "type": "boolean",
                             "description": "true if this roaster has a physical cafe/retail location you can visit",
+                        },
+                        "skipDuplicateCheck": {
+                            "type": "boolean",
+                            "description": (
+                                "Set true only if add_roaster failed with DUPLICATE_PLACE and the user "
+                                "explicitly wants a second entry anyway."
+                            ),
                         },
                     },
                 }
@@ -907,6 +940,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "boolean",
                             "description": "true if this cafe also roasts / sources beans the user can purchase",
                         },
+                        "skipDuplicateCheck": {
+                            "type": "boolean",
+                            "description": (
+                                "Set true only if add_cafe failed with DUPLICATE_PLACE and the user "
+                                "explicitly wants a second entry anyway."
+                            ),
+                        },
                     },
                 }
             },
@@ -1099,6 +1139,15 @@ def dispatch(name: str, user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"error": f"unknown tool {name}"}
     try:
         result = fn(user_id, args or {})
+        if isinstance(result, dict) and result.get("duplicatePlace"):
+            return {
+                "ok": False,
+                "code": "DUPLICATE_PLACE",
+                "error": result.get("hint", "duplicate place"),
+                "existingType": result.get("existingType"),
+                "existingId": result.get("existingId"),
+                "existingName": result.get("existingName"),
+            }
         return {"ok": True, "result": result}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
