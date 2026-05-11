@@ -130,7 +130,10 @@
         <a href="explore.html" class="active">explore</a>
       </nav>
       <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
-      <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      <span id="legacy-user-row" class="legacy-user-row">
+        <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      </span>
+      <div id="clerk-auth-root" class="clerk-auth-root" style="display: none;"></div>
       <div class="grow"></div>
       <button id="prefs-chip" class="prefs-chip" type="button" title="Edit preferences">
         <span class="dot"></span>
@@ -298,6 +301,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="dialin-config.js"></script>
     <script src="shared.js"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
@@ -350,7 +354,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: JSON.stringify({ userId: userId(), message: text, history: _askHistory.slice(-6) }),
+            body: authedJsonBody({ message: text, history: _askHistory.slice(-6) }),
           });
           if (data.history) _askHistory = data.history.slice(-12);
           else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
@@ -372,10 +376,9 @@
       async function loadPlaces() {
         if (!apiInput.value.trim()) return;
         try {
-          const uid = encodeURIComponent(userId());
           const [rd, cd] = await Promise.all([
-            api(`/roasters?userId=${uid}`),
-            api(`/cafes?userId=${uid}`),
+            api(withLegacyUserQuery("/roasters")),
+            api(withLegacyUserQuery("/cafes")),
           ]);
           _roasterCache = rd.roasters || [];
           _cafeCache    = cd.cafes    || [];
@@ -452,14 +455,13 @@
               : "Retire this cafe?";
             if (!confirm(confirmMsg)) return;
             try {
-              const uid = userId();
               if (type === "roaster") {
                 await api(`/roasters/${encodeURIComponent(btn.dataset.id)}`, {
-                  method: "PATCH", body: JSON.stringify({ userId: uid, archived: true }),
+                  method: "PATCH", body: authedJsonBody({ archived: true }),
                 });
               } else {
-                await api(`/cafes/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(uid)}`, {
-                  method: "PATCH", body: JSON.stringify({ archived: true }),
+                await api(`/cafes/${encodeURIComponent(btn.dataset.id)}`, {
+                  method: "PATCH", body: authedJsonBody({ archived: true }),
                 });
               }
               toast("Retired."); await loadPlaces();
@@ -534,18 +536,18 @@
       document.getElementById("dup-place-anyway").addEventListener("click", async () => {
         if (!_dupContext?.retry) return;
         closeModal(dupPlaceModal);
-        const { isRoaster, isCafe, base, uid } = _dupContext.retry;
+        const { isRoaster, isCafe, base } = _dupContext.retry;
         _dupContext = null;
         try {
           if (isRoaster) {
             await api("/roasters", {
               method: "POST",
-              body: JSON.stringify({ ...base, userId: uid, hasCafe: isCafe, skipDuplicateCheck: true }),
+              body: authedJsonBody({ ...base, hasCafe: isCafe, skipDuplicateCheck: true }),
             });
           } else {
             await api("/cafes", {
               method: "POST",
-              body: JSON.stringify({ ...base, userId: uid, isRoaster: isRoaster, skipDuplicateCheck: true }),
+              body: authedJsonBody({ ...base, isRoaster: isRoaster, skipDuplicateCheck: true }),
             });
           }
           toast(isRoaster && isCafe ? "Added as roaster + cafe." : isRoaster ? "Roaster added." : "Cafe added.");
@@ -561,7 +563,6 @@
           toast("Select at least one role (Roaster or Cafe).", true); return;
         }
         const fd  = new FormData(placeForm);
-        const uid = userId();
         const base = {
           name:    (fd.get("name") || "").trim(),
           city:    (fd.get("city") || "").trim()    || undefined,
@@ -575,24 +576,24 @@
             if (_editingPlaceType === "roaster") {
               await api(`/roasters/${encodeURIComponent(_editingPlaceId)}`, {
                 method: "PATCH",
-                body: JSON.stringify({ ...base, userId: uid, hasCafe: isCafe }),
+                body: authedJsonBody({ ...base, hasCafe: isCafe }),
               });
             } else {
-              await api(`/cafes/${encodeURIComponent(_editingPlaceId)}?userId=${encodeURIComponent(uid)}`, {
-                method: "PATCH", body: JSON.stringify({ ...base, isRoaster: isRoaster }),
+              await api(`/cafes/${encodeURIComponent(_editingPlaceId)}`, {
+                method: "PATCH", body: authedJsonBody({ ...base, isRoaster: isRoaster }),
               });
             }
             toast("Saved.");
           } else if (isRoaster) {
             await api("/roasters", {
               method: "POST",
-              body: JSON.stringify({ ...base, userId: uid, hasCafe: isCafe, ...dupFlag }),
+              body: authedJsonBody({ ...base, hasCafe: isCafe, ...dupFlag }),
             });
             toast(isRoaster && isCafe ? "Added as roaster + cafe." : "Roaster added.");
           } else {
             await api("/cafes", {
               method: "POST",
-              body: JSON.stringify({ ...base, userId: uid, isRoaster: isRoaster, ...dupFlag }),
+              body: authedJsonBody({ ...base, isRoaster: isRoaster, ...dupFlag }),
             });
             toast("Cafe added.");
           }
@@ -603,7 +604,7 @@
               message: err.body.error || "A place with this name already exists in the other list.",
               existingType: err.body.existingType,
               existingId: err.body.existingId,
-              retry: { isRoaster, isCafe, base, uid },
+              retry: { isRoaster, isCafe, base },
             };
             document.getElementById("dup-place-message").textContent = _dupContext.message;
             openModal(dupPlaceModal);
@@ -637,7 +638,7 @@
         const cafeId    = (fd.get("cafeId")    || "").trim();
         const roasterId = (fd.get("roasterId") || "").trim();
         if (!cafeId && !roasterId) return;
-        const body = { userId: userId() };
+        const body = {};
         if (cafeId)    body.cafeId    = cafeId;
         if (roasterId) body.roasterId = roasterId;
         const pn = (fd.get("placeName") || "").trim();
@@ -648,7 +649,7 @@
         if (fd.get("rating"))    body.rating    = parseInt(fd.get("rating"), 10);
         if (fd.get("notes"))     body.notes     = fd.get("notes").trim();
         try {
-          await api("/visits", { method: "POST", body: JSON.stringify(body) });
+          await api("/visits", { method: "POST", body: authedJsonBody(body) });
           toast("Visit logged!"); closeModal(visitModal); await loadVisits();
         } catch (err) { toast(err.message, true); }
       });
@@ -657,7 +658,7 @@
       async function loadVisits() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/visits?userId=${encodeURIComponent(userId())}&limit=15`);
+          const data = await api(withLegacyUserQuery("/visits", "limit=15"));
           renderVisits(data.visits || []);
         } catch (err) {
           visitListEl.innerHTML = `<div class="empty">${err.message}</div>`;
@@ -702,7 +703,7 @@
       async function loadPreferences() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
           const parts = [];
           if (p.homeCity)               parts.push(p.homeCity);
@@ -734,7 +735,7 @@
       document.getElementById("prefs-chip").addEventListener("click", async () => {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
           prefsForm.elements.homeCity.value = p.homeCity || "";
           prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
@@ -767,7 +768,7 @@
 
       document.getElementById("prefs-submit").addEventListener("click", async () => {
         const fd = new FormData(prefsForm);
-        const body = { userId: userId() };
+        const body = {};
         const homeCity   = (fd.get("homeCity") || "").trim();
         const roastLevel = (fd.get("preferredRoastLevel") || "").trim();
         const notes      = (fd.get("notes") || "").trim();
@@ -776,7 +777,7 @@
         if (notes)      body.notes = notes;
         CHIP_FIELDS.forEach(f => { body[f] = readChipField(f); });
         try {
-          await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
+          await api("/profile", { method: "PATCH", body: authedJsonBody(body) });
           closeModal(prefsModal); toast("Preferences saved"); await loadPreferences();
         } catch (err) { toast(err.message, true); }
       });

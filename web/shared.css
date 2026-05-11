@@ -23,6 +23,17 @@ html, body {
 }
 
 /* ── header ───────────────────────────────────────────────────────────── */
+.clerk-auth-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.legacy-user-row {
+  display: inline-flex;
+  align-items: center;
+}
+
 header {
   padding: 10px 20px; border-bottom: 1px solid var(--line);
   background: var(--bg-2); display: flex; gap: 10px; align-items: center;

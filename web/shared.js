@@ -1,5 +1,6 @@
 /* dialin — shared JS utilities
- * Expects DOM elements: #api-base, #user-id, #toast
+ * Expects DOM elements: #api-base, #toast; optional #user-id (legacy), #clerk-auth-root (Clerk).
+ * Optional window.DIALIN_CONFIG from dialin-config.js; optional localStorage dialin.clerkPk.
  */
 
 let _toastEl;
@@ -17,10 +18,45 @@ function toast(msg, isError = false) {
   setTimeout(() => _toastEl.classList.remove("show"), 2800);
 }
 
+/** True when Clerk publishable key is configured (JWT auth path). */
+function clerkConfigured() {
+  const cfg = typeof window !== "undefined" ? window.DIALIN_CONFIG : null;
+  const fromCfg = (cfg && cfg.clerkPublishableKey) || "";
+  const fromLs = (typeof localStorage !== "undefined" && localStorage.getItem("dialin.clerkPk")) || "";
+  return Boolean(String(fromCfg || fromLs).trim());
+}
+
+/** @type {any} Clerk browser SDK instance when Clerk auth is enabled */
+window.__clerk = window.__clerk || null;
+
 function userId() {
+  if (clerkConfigured()) {
+    const id = window.__clerk?.user?.id;
+    if (!id) {
+      toast("Sign in to continue", true);
+      throw new Error("not signed in");
+    }
+    return id;
+  }
   const v = (document.getElementById("user-id")?.value || "").trim();
   if (!v) { toast("Set a user id first", true); throw new Error("no user id"); }
   return v;
+}
+
+/** Append ?userId= only for legacy mode (no Clerk). */
+function withLegacyUserQuery(path, extraQuery = "") {
+  if (clerkConfigured()) {
+    return extraQuery ? `${path}?${extraQuery}` : path;
+  }
+  const uid = `userId=${encodeURIComponent(userId())}`;
+  if (!extraQuery) return path.includes("?") ? `${path}&${uid}` : `${path}?${uid}`;
+  return path.includes("?") ? `${path}&${uid}&${extraQuery}` : `${path}?${uid}&${extraQuery}`;
+}
+
+/** JSON body: legacy mode adds userId; Clerk mode relies on Authorization only. */
+function authedJsonBody(obj) {
+  if (clerkConfigured()) return JSON.stringify(obj);
+  return JSON.stringify({ ...obj, userId: userId() });
 }
 
 function apiBase() {
@@ -29,11 +65,22 @@ function apiBase() {
   return v;
 }
 
+async function _authHeaders() {
+  const h = {};
+  if (!clerkConfigured() || !window.__clerk?.session) return h;
+  try {
+    const t = await window.__clerk.session.getToken();
+    if (t) h.authorization = `Bearer ${t}`;
+  } catch (_) { /* session not ready */ }
+  return h;
+}
+
 async function api(path, opts = {}) {
   const url = apiBase() + path;
+  const auth = await _authHeaders();
   const res = await fetch(url, {
     ...opts,
-    headers: { "content-type": "application/json", ...(opts.headers || {}) },
+    headers: { "content-type": "application/json", ...auth, ...(opts.headers || {}) },
   });
   const text = await res.text();
   let data;
@@ -45,6 +92,62 @@ async function api(path, opts = {}) {
     throw err;
   }
   return data;
+}
+
+/**
+ * Load Clerk, mount sign-in / user button into #clerk-auth-root, hide #legacy-user-row when configured.
+ * Dispatches window event "dialin:auth-ready" when done (signed in or legacy path).
+ */
+async function initDialinAuth() {
+  const root = document.getElementById("clerk-auth-root");
+  const legacyRow = document.getElementById("legacy-user-row");
+  const pk = (
+    (window.DIALIN_CONFIG && window.DIALIN_CONFIG.clerkPublishableKey) ||
+    (typeof localStorage !== "undefined" && localStorage.getItem("dialin.clerkPk")) ||
+    ""
+  ).trim();
+
+  if (!pk) {
+    if (legacyRow) legacyRow.style.display = "";
+    if (root) root.style.display = "none";
+    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "legacy" } }));
+    return;
+  }
+
+  if (legacyRow) legacyRow.style.display = "none";
+  if (root) {
+    root.style.display = "flex";
+    root.innerHTML = "<div id=\"clerk-mount\" class=\"clerk-mount\"></div>";
+  }
+
+  try {
+    const mod = await import("https://esm.sh/@clerk/clerk-js@5.46.0");
+    const Clerk = mod.default || mod.Clerk;
+    const clerk = new Clerk(pk);
+    await clerk.load();
+    window.__clerk = clerk;
+
+    const mountEl = document.getElementById("clerk-mount");
+    function renderAuth() {
+      if (!mountEl) return;
+      mountEl.innerHTML = "";
+      if (clerk.user) {
+        clerk.mountUserButton(mountEl);
+      } else {
+        clerk.mountSignIn(mountEl, { routing: "hash" });
+      }
+    }
+    renderAuth();
+    clerk.addListener(renderAuth);
+
+    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "clerk" } }));
+  } catch (e) {
+    console.error(e);
+    toast("Clerk failed to load — check publishable key", true);
+    if (legacyRow) legacyRow.style.display = "";
+    if (root) root.style.display = "none";
+    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "legacy", error: String(e) } }));
+  }
 }
 
 function escapeHtml(str) {
@@ -104,19 +207,30 @@ function daysSince(dateStr) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
 
-/* Sync api-base + user-id inputs with localStorage and notify on change */
+/* Sync api-base + user-id inputs with localStorage; boot Clerk when configured. */
 function initSharedInputs(onApiChange, onUserChange) {
   const apiInput  = document.getElementById("api-base");
   const userInput = document.getElementById("user-id");
 
-  apiInput.value  = localStorage.getItem("dialin.apiBase") || "";
-  userInput.value = localStorage.getItem("dialin.userId")  || "jarrod";
+  if (typeof window.DIALIN_CONFIG === "undefined") window.DIALIN_CONFIG = {};
+  const savedPk = localStorage.getItem("dialin.clerkPk");
+  if (savedPk && !window.DIALIN_CONFIG.clerkPublishableKey) {
+    window.DIALIN_CONFIG.clerkPublishableKey = savedPk.trim();
+  }
+
+  apiInput.value = localStorage.getItem("dialin.apiBase") || "";
+  if (userInput) {
+    userInput.value = localStorage.getItem("dialin.userId") || "jarrod";
+    userInput.addEventListener("input", () => localStorage.setItem("dialin.userId", userInput.value.trim()));
+    userInput.addEventListener("change", () => { if (onUserChange) onUserChange(); });
+  }
 
   apiInput.addEventListener("input", () => localStorage.setItem("dialin.apiBase", apiInput.value.trim()));
   apiInput.addEventListener("change", () => { if (onApiChange) onApiChange(); });
 
-  userInput.addEventListener("input", () => localStorage.setItem("dialin.userId", userInput.value.trim()));
-  userInput.addEventListener("change", () => { if (onUserChange) onUserChange(); });
+  initDialinAuth().then(() => {
+    if (onApiChange) onApiChange();
+  });
 }
 
 /* Modal open/close helpers */
@@ -154,7 +268,7 @@ function initPrefsChip(onLoad) {
   async function loadPreferences() {
     if (!document.getElementById("api-base").value.trim()) return;
     try {
-      const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+      const data = await api(withLegacyUserQuery("/profile"));
       const p = data.profile || {};
       const parts = [];
       if (p.preferredRoastLevel)   parts.push(p.preferredRoastLevel);
@@ -206,14 +320,14 @@ function initPrefsChip(onLoad) {
 
   document.getElementById("prefs-submit").addEventListener("click", async () => {
     const fd = new FormData(form);
-    const body = { userId: userId() };
+    const body = {};
     const chipFields = ["preferredOrigins", "preferredProcesses", "favoriteRoasters", "favoriteCafes", "dislikedNotes"];
     chipFields.forEach(f => { body[f] = getChips(f); });
     if (fd.get("homeCity"))             body.homeCity             = fd.get("homeCity").trim();
     if (fd.get("preferredRoastLevel"))  body.preferredRoastLevel  = fd.get("preferredRoastLevel");
     if (fd.get("notes"))                body.notes                = fd.get("notes").trim();
     try {
-      await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
+      await api("/profile", { method: "PATCH", body: authedJsonBody(body) });
       toast("Preferences saved");
       closeModal(modal);
       await loadPreferences();

@@ -178,7 +178,10 @@
         <a href="explore.html">explore</a>
       </nav>
       <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
-      <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      <span id="legacy-user-row" class="legacy-user-row">
+        <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      </span>
+      <div id="clerk-auth-root" class="clerk-auth-root" style="display: none;"></div>
       <div class="grow"></div>
       <button id="prefs-chip" class="prefs-chip" type="button" title="Edit preferences">
         <span class="dot"></span>
@@ -438,6 +441,7 @@
 
     <div id="toast" class="toast"></div>
 
+    <script src="dialin-config.js"></script>
     <script src="shared.js"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
@@ -477,7 +481,12 @@
       );
 
       // ── chat ──────────────────────────────────────────────────────────────
-      function chatStorageKey() { return "dialin.chat." + (userInput.value.trim() || "_"); }
+      function chatStorageKey() {
+        if (typeof clerkConfigured === "function" && clerkConfigured()) {
+          try { return "dialin.chat." + userId(); } catch { return "dialin.chat._signed_out"; }
+        }
+        return "dialin.chat." + (userInput.value.trim() || "_");
+      }
       function loadChat() {
         try { return JSON.parse(localStorage.getItem(chatStorageKey()) || "[]"); }
         catch { return []; }
@@ -515,7 +524,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: JSON.stringify({ userId: userId(), message: text, history }),
+            body: authedJsonBody({ message: text, history }),
           });
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
@@ -538,7 +547,7 @@
       async function loadCoffees() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/coffees?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/coffees"));
           renderCoffees(data.coffees || []);
           fillCoffeeSelect(data.coffees || []);
         } catch (err) {
@@ -588,7 +597,7 @@
             try {
               await api(`/coffees/${encodeURIComponent(btn.dataset.id)}`, {
                 method: "PATCH",
-                body: JSON.stringify({ userId: userId(), archived: true }),
+                body: authedJsonBody({ archived: true }),
               });
               toast("Coffee archived");
               loadCoffees();
@@ -615,7 +624,7 @@
       async function loadBrews() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/brews?userId=${encodeURIComponent(userId())}&limit=20`);
+          const data = await api(withLegacyUserQuery("/brews", "limit=20"));
           renderBrews(data.brews || []);
         } catch (err) {
           brewsEl.innerHTML = `<div class="empty">${err.message}</div>`;
@@ -666,7 +675,7 @@
           btn.addEventListener("click", async () => {
             if (!confirm("Delete this brew permanently?")) return;
             try {
-              await api(`/brews/${encodeURIComponent(btn.dataset.id)}?userId=${encodeURIComponent(userId())}`, { method: "DELETE" });
+              await api(withLegacyUserQuery(`/brews/${encodeURIComponent(btn.dataset.id)}`), { method: "DELETE" });
               toast("Brew deleted.");
               await loadBrews();
             } catch (err) { toast(err.message, true); }
@@ -713,7 +722,7 @@
       async function loadRoasters() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/roasters?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/roasters"));
           _roasterCache = data.roasters || [];
           fillRoasterSelect(_roasterCache);
         } catch { /* silent */ }
@@ -763,7 +772,7 @@
       async function loadEquipment() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/equipment?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/equipment"));
           _equipmentCache = data.equipment || [];
           renderEquipment(_equipmentCache);
           fillEquipSelects(_equipmentCache);
@@ -806,7 +815,7 @@
             if (!confirm("Retire this gear?")) return;
             try {
               await api(`/equipment/${encodeURIComponent(btn.dataset.id)}`, {
-                method: "PATCH", body: JSON.stringify({ userId: userId(), archived: true }),
+                method: "PATCH", body: authedJsonBody({ archived: true }),
               });
               toast("Gear retired");
               loadEquipment();
@@ -882,7 +891,7 @@
       async function loadPreferences() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/profile"));
           renderPrefsChip(data.profile || {});
         } catch { /* silent */ }
       }
@@ -908,7 +917,7 @@
       document.getElementById("prefs-chip").addEventListener("click", async () => {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(`/profile?userId=${encodeURIComponent(userId())}`);
+          const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
           prefsForm.elements.homeCity.value = p.homeCity || "";
           prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
@@ -942,7 +951,7 @@
       // ── form submit handlers ──────────────────────────────────────────────
       document.getElementById("coffee-submit").addEventListener("click", async () => {
         const fd = new FormData(coffeeForm);
-        const body = { userId: userId() };
+        const body = {};
         for (const [k, v] of fd.entries()) {
           if (!v) continue;
           body[k] = k === "weightG" ? Number(v) : v;
@@ -952,14 +961,14 @@
           if (r) body.roaster = r.name;
         }
         try {
-          await api("/coffees", { method: "POST", body: JSON.stringify(body) });
+          await api("/coffees", { method: "POST", body: authedJsonBody(body) });
           coffeeForm.reset(); closeModal(coffeeModal); toast("Coffee added"); loadCoffees();
         } catch (err) { toast(err.message, true); }
       });
 
       document.getElementById("brew-submit").addEventListener("click", async () => {
         const fd = new FormData(brewForm);
-        const body = { userId: userId() };
+        const body = {};
         const nums = new Set(["doseG","yieldG","tempC"]);
         const ints = new Set(["rating","timeS"]);
         for (const [k, v] of fd.entries()) {
@@ -967,21 +976,21 @@
           body[k] = nums.has(k) ? Number(v) : ints.has(k) ? parseInt(v,10) : v;
         }
         try {
-          await api("/brews", { method: "POST", body: JSON.stringify(body) });
+          await api("/brews", { method: "POST", body: authedJsonBody(body) });
           brewForm.reset(); closeModal(brewModal); toast("Brew logged"); loadBrews(); loadCoffees();
         } catch (err) { toast(err.message, true); }
       });
 
       document.getElementById("equip-submit").addEventListener("click", async () => {
         const fd = new FormData(equipForm);
-        const body = { userId: userId() };
+        const body = {};
         for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
         try {
           if (_editingEquipId) {
-            await api(`/equipment/${encodeURIComponent(_editingEquipId)}`, { method: "PATCH", body: JSON.stringify(body) });
+            await api(`/equipment/${encodeURIComponent(_editingEquipId)}`, { method: "PATCH", body: authedJsonBody(body) });
             resetEquipModal(); closeModal(equipModal); toast("Gear updated"); loadEquipment();
           } else {
-            const data = await api("/equipment", { method: "POST", body: JSON.stringify(body) });
+            const data = await api("/equipment", { method: "POST", body: authedJsonBody(body) });
             const newId = data?.equipment?.equipId;
             resetEquipModal(); closeModal(equipModal); toast("Gear added");
             await loadEquipment();
@@ -996,14 +1005,14 @@
 
       document.getElementById("roaster-submit").addEventListener("click", async () => {
         const fd = new FormData(roasterForm);
-        const body = { userId: userId() };
+        const body = {};
         for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
         try {
           if (_editingRoasterId) {
-            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, { method: "PATCH", body: JSON.stringify(body) });
+            await api(`/roasters/${encodeURIComponent(_editingRoasterId)}`, { method: "PATCH", body: authedJsonBody(body) });
             resetRoasterModal(); closeModal(roasterModal); toast("Roaster updated"); await loadRoasters();
           } else {
-            const data = await api("/roasters", { method: "POST", body: JSON.stringify(body) });
+            const data = await api("/roasters", { method: "POST", body: authedJsonBody(body) });
             const newId = data?.roaster?.roasterId;
             resetRoasterModal(); closeModal(roasterModal); toast("Roaster added");
             await loadRoasters();
@@ -1018,7 +1027,7 @@
 
       document.getElementById("prefs-submit").addEventListener("click", async () => {
         const fd = new FormData(prefsForm);
-        const body = { userId: userId() };
+        const body = {};
         const homeCity = (fd.get("homeCity") || "").trim();
         const roastLevel = (fd.get("preferredRoastLevel") || "").trim();
         const notes = (fd.get("notes") || "").trim();
@@ -1027,7 +1036,7 @@
         if (notes)       body.notes = notes;
         CHIP_FIELDS.forEach(f => { body[f] = readChipField(f); });
         try {
-          const data = await api("/profile", { method: "PATCH", body: JSON.stringify(body) });
+          const data = await api("/profile", { method: "PATCH", body: authedJsonBody(body) });
           renderPrefsChip(data.profile || {});
           closeModal(prefsModal); toast("Preferences saved");
         } catch (err) { toast(err.message, true); }
@@ -1042,7 +1051,7 @@
         ["doseG","yieldG","timeS","tempC","rating"].forEach(k => { if (fd.get(k)) body[k] = parseFloat(fd.get(k)); });
         ["method","grind","taste","notes","grinderId","machineId","brewerId"].forEach(k => { if (fd.get(k)) body[k] = fd.get(k); });
         try {
-          await api(`/brews/${encodeURIComponent(brewId)}?userId=${encodeURIComponent(userId())}`, {
+          await api(withLegacyUserQuery(`/brews/${encodeURIComponent(brewId)}`), {
             method: "PATCH", body: JSON.stringify(body),
           });
           toast("Brew updated."); closeModal(brewEditModal); _editingBrewId = null; await loadBrews();
@@ -1138,7 +1147,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: JSON.stringify({ userId: userId(), message: ONBOARD_SEED, history: [] }),
+            body: authedJsonBody({ message: ONBOARD_SEED, history: [] }),
           });
           typing.remove();
           _onboardHistory = data.history || [
@@ -1166,7 +1175,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: JSON.stringify({ userId: userId(), message: text, history: _onboardHistory }),
+            body: authedJsonBody({ message: text, history: _onboardHistory }),
           });
           typing.remove();
           _onboardHistory = data.history || [
