@@ -1,17 +1,22 @@
 """API Gateway -> Lambda router for dialin.
 
-Routes:
+Identity: ``CLERK_JWT_ISSUER`` verifies ``Authorization: Bearer`` session JWTs via
+JWKS (Clerk Frontend API URL). Legacy mode uses ``ALLOW_CLIENT_USER_ID`` and
+optional ``userId`` in query/body. API Gateway JWT authorizer is not used so
+tokens without ``aud`` (Clerk default) still work.
+
+Routes (representative):
 
   POST /chat
-      body: {userId, message, history?: [{role: "USER"|"BOT", text}]}
+      body: {message, history?: [{role: "USER"|"BOT", text}]}  (+ legacy userId)
       -> calls Bedrock with tools, returns {reply, history}
 
-  GET  /coffees?userId=&includeArchived=
-  POST /coffees                           body: full coffee fields
-  PATCH /coffees/{coffeeId}?userId=       body: patch fields
+  GET  /coffees?includeArchived=   (legacy: ?userId=)
+  POST /coffees                    body: full coffee fields
+  PATCH /coffees/{coffeeId}        body: patch fields
 
-  GET  /brews?userId=&coffeeId=&method=&limit=
-  POST /brews                             body: full brew fields
+  GET  /brews?coffeeId=&method=&limit=   (legacy: ?userId=)
+  POST /brews                            body: full brew fields
 
 Chat is stateless from the server's POV: the client sends recent
 history each turn. That keeps DynamoDB writes cheap and keeps the
@@ -22,10 +27,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from decimal import Decimal
 from typing import Any
 
 import bedrock
+import clerk_jwt
 import ddb
 
 logger = logging.getLogger()
@@ -79,6 +86,55 @@ def _require(d: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
+def _bearer_token(event: dict[str, Any]) -> str:
+    h = event.get("headers") or {}
+    raw = ""
+    if isinstance(h, dict):
+        raw = h.get("authorization") or h.get("Authorization") or ""
+    if not isinstance(raw, str):
+        return ""
+    raw = raw.strip()
+    if raw.lower().startswith("bearer "):
+        return raw[7:].strip()
+    return ""
+
+
+def _user_id(event: dict[str, Any]) -> str:
+    """Resolve the signed-in user. Prefer API Gateway JWT (if present),
+    verify ``Authorization`` against Clerk JWKS when ``CLERK_JWT_ISSUER``
+    is set, else legacy ``userId`` when ``ALLOW_CLIENT_USER_ID`` is true."""
+    req = event.get("requestContext") or {}
+    auth = req.get("authorizer") or {}
+    jwt_blob = auth.get("jwt") or {}
+    claims = jwt_blob.get("claims") or {}
+    sub = (claims.get("sub") or "").strip()
+    if sub:
+        return sub
+
+    clerk_issuer = (os.environ.get("CLERK_JWT_ISSUER") or "").strip()
+    allow_client = os.environ.get("ALLOW_CLIENT_USER_ID", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    if clerk_issuer and not allow_client:
+        bearer = _bearer_token(event)
+        if bearer:
+            verified = clerk_jwt.verify_session_token(bearer, clerk_issuer)
+            if verified:
+                return verified
+        return ""
+
+    if allow_client:
+        body = _parse_body(event)
+        qs = _qs(event)
+        legacy = (body.get("userId") or qs.get("userId") or "").strip()
+        if legacy:
+            return legacy
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Chat
 # ---------------------------------------------------------------------------
@@ -89,13 +145,15 @@ _HISTORY_TURN_LIMIT = 12  # last N messages from the client (rolling window)
 
 def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or "").strip()
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
     message = (body.get("message") or "").strip()
     history = body.get("history") or []
     if not isinstance(history, list):
         history = []
 
-    err = _require({"userId": user_id, "message": message}, "userId", "message")
+    err = _require({"message": message}, "message")
     if err:
         return _response(400, {"error": err})
 
@@ -121,9 +179,9 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_list_coffees(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     include_archived = qs.get("includeArchived", "").lower() in {"1", "true", "yes"}
     items = ddb.list_coffees(user_id, include_archived=include_archived)
     return _response(200, {"count": len(items), "coffees": items})
@@ -131,14 +189,17 @@ def _handle_list_coffees(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_coffee(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    err = _require(body, "userId", "name")
+    err = _require(body, "name")
     if err:
         return _response(400, {"error": err})
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
     if not body.get("roaster") and not body.get("roasterId"):
         return _response(400, {"error": "missing required field: roaster or roasterId"})
     try:
         item = ddb.create_coffee(
-            user_id=body["userId"].strip(),
+            user_id=user_id,
             roaster=(body.get("roaster") or "").strip(),
             name=body["name"].strip(),
             roaster_id=body.get("roasterId"),
@@ -156,10 +217,12 @@ def _handle_create_coffee(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_update_coffee(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     coffee_id = (_path_params(event).get("coffeeId") or "").strip()
-    if not user_id or not coffee_id:
-        return _response(400, {"error": "userId and coffeeId are required"})
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not coffee_id:
+        return _response(400, {"error": "coffeeId is required"})
     try:
         updated = ddb.update_coffee(user_id, coffee_id, body)
     except ValueError as e:
@@ -177,9 +240,9 @@ def _handle_update_coffee(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_list_brews(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     try:
         limit = int(qs.get("limit", "20"))
     except ValueError:
@@ -195,12 +258,15 @@ def _handle_list_brews(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_brew(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    err = _require(body, "userId", "coffeeId", "method")
+    err = _require(body, "coffeeId", "method")
     if err:
         return _response(400, {"error": err})
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
     try:
         item = ddb.create_brew(
-            user_id=body["userId"].strip(),
+            user_id=user_id,
             coffee_id=body["coffeeId"].strip(),
             method=body["method"].strip(),
             dose_g=body.get("doseG"),
@@ -228,9 +294,9 @@ def _handle_create_brew(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_list_equipment(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     include_archived = qs.get("includeArchived", "").lower() in {"1", "true", "yes"}
     items = ddb.list_equipment(
         user_id,
@@ -242,12 +308,15 @@ def _handle_list_equipment(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_equipment(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    err = _require(body, "userId", "equipType", "name")
+    err = _require(body, "equipType", "name")
     if err:
         return _response(400, {"error": err})
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
     try:
         item = ddb.create_equipment(
-            user_id=body["userId"].strip(),
+            user_id=user_id,
             equip_type=body["equipType"].strip(),
             name=body["name"].strip(),
             brand=body.get("brand"),
@@ -264,9 +333,9 @@ def _handle_create_equipment(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_list_roasters(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     include_archived = qs.get("includeArchived", "").lower() in {"1", "true", "yes"}
     items = ddb.list_roasters(user_id, include_archived=include_archived)
     return _response(200, {"count": len(items), "roasters": items})
@@ -274,10 +343,12 @@ def _handle_list_roasters(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    err = _require(body, "userId", "name")
+    err = _require(body, "name")
     if err:
         return _response(400, {"error": err})
-    user_id = body["userId"].strip()
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
     name = body["name"].strip()
     if not body.get("skipDuplicateCheck"):
         hit = ddb.find_matching_cafe_for_new_roaster(user_id, name, body.get("city"))
@@ -313,10 +384,12 @@ def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_update_roaster(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     roaster_id = (_path_params(event).get("roasterId") or "").strip()
-    if not user_id or not roaster_id:
-        return _response(400, {"error": "userId and roasterId are required"})
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not roaster_id:
+        return _response(400, {"error": "roasterId is required"})
     try:
         updated = ddb.update_roaster(user_id, roaster_id, body)
     except ValueError as e:
@@ -331,10 +404,12 @@ def _handle_update_roaster(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_update_brew(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     brew_id = (_path_params(event).get("brewId") or "").strip()
-    if not user_id or not brew_id:
-        return _response(400, {"error": "userId and brewId are required"})
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not brew_id:
+        return _response(400, {"error": "brewId is required"})
     try:
         updated = ddb.update_brew(user_id, brew_id, body)
     except ValueError as e:
@@ -349,10 +424,12 @@ def _handle_update_brew(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_delete_brew(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     brew_id = (_path_params(event).get("brewId") or "").strip()
-    if not user_id or not brew_id:
-        return _response(400, {"error": "userId and brewId are required"})
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not brew_id:
+        return _response(400, {"error": "brewId is required"})
     try:
         ddb.delete_brew(user_id, brew_id)
     except ValueError as e:
@@ -365,10 +442,12 @@ def _handle_delete_brew(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_update_equipment(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     equip_id = (_path_params(event).get("equipId") or "").strip()
-    if not user_id or not equip_id:
-        return _response(400, {"error": "userId and equipId are required"})
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not equip_id:
+        return _response(400, {"error": "equipId is required"})
     try:
         updated = ddb.update_equipment(user_id, equip_id, body)
     except ValueError as e:
@@ -382,18 +461,17 @@ def _handle_update_equipment(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_get_profile(event: dict[str, Any]) -> dict[str, Any]:
-    qs = _qs(event)
-    user_id = (qs.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     return _response(200, {"profile": ddb.get_profile(user_id)})
 
 
 def _handle_update_profile(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId is required"})
+        return _response(401, {"error": "Unauthorized"})
     updates = {k: v for k, v in body.items() if k != "userId"}
     try:
         item = ddb.update_profile(user_id, updates, replace_lists=True)
@@ -403,9 +481,9 @@ def _handle_update_profile(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_delete_coffee(event: dict[str, Any]) -> dict[str, Any]:
-    user_id = (_qs(event).get("userId") or _parse_body(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     coffee_id = _path_params(event).get("coffeeId")
     if not coffee_id:
         return _response(400, {"error": "coffeeId required"})
@@ -417,9 +495,9 @@ def _handle_delete_coffee(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_list_cafes(event: dict[str, Any]) -> dict[str, Any]:
-    user_id = (_qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     city = _qs(event).get("city")
     include_archived = _qs(event).get("includeArchived", "").lower() in ("1", "true")
     items = ddb.list_cafes(user_id, city=city, include_archived=include_archived)
@@ -428,9 +506,9 @@ def _handle_list_cafes(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     name = (body.get("name") or "").strip()
     if not name:
         return _response(400, {"error": "name required"})
@@ -463,9 +541,9 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_update_cafe(event: dict[str, Any]) -> dict[str, Any]:
-    user_id = (_qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     cafe_id = _path_params(event).get("cafeId")
     if not cafe_id:
         return _response(400, {"error": "cafeId required"})
@@ -480,9 +558,9 @@ def _handle_update_cafe(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_list_visits(event: dict[str, Any]) -> dict[str, Any]:
-    user_id = (_qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     cafe_id = _qs(event).get("cafeId")
     limit = int(_qs(event).get("limit", "20"))
     items = ddb.list_visits(user_id, cafe_id=cafe_id, limit=limit)
@@ -491,9 +569,9 @@ def _handle_list_visits(event: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
-    user_id = (body.get("userId") or _qs(event).get("userId") or "").strip()
+    user_id = _user_id(event)
     if not user_id:
-        return _response(400, {"error": "userId required"})
+        return _response(401, {"error": "Unauthorized"})
     cafe_id    = (body.get("cafeId")    or "").strip() or None
     roaster_id = (body.get("roasterId") or "").strip() or None
     place_name = (body.get("placeName") or "").strip() or None
