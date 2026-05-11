@@ -64,6 +64,12 @@ variable "websearch_monthly_limit_per_user" {
   default     = 300
 }
 
+variable "cors_allowed_origins" {
+  description = "Origins for CORS allow_origins and Clerk azp validation. Use [\"*\"] for dev; restrict to your real domain(s) for production."
+  type        = list(string)
+  default     = ["*"]
+}
+
 variable "clerk_jwt_issuer" {
   description = "Clerk Frontend API URL (same as JWT ``iss``). When set, Lambda verifies ``Authorization`` JWTs via Clerk JWKS; client ``userId`` is rejected. Leave empty for legacy manual user id."
   type        = string

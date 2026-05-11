@@ -63,6 +63,7 @@ resource "aws_lambda_function" "api" {
       WEBSEARCH_MONTHLY_LIMIT_PER_USER = tostring(var.websearch_monthly_limit_per_user)
       ALLOW_CLIENT_USER_ID             = local.clerk_auth_enabled ? "false" : "true"
       CLERK_JWT_ISSUER                 = trimspace(var.clerk_jwt_issuer)
+      CLERK_ALLOWED_ORIGINS            = join(",", [for o in var.cors_allowed_origins : o if o != "*"])
     }
   }
 
