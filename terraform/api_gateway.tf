@@ -5,7 +5,7 @@ resource "aws_apigatewayv2_api" "http" {
   cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS", "PUT"]
-    allow_headers = ["content-type"]
+    allow_headers = ["content-type", "authorization"]
     max_age       = 300
   }
 }
@@ -50,6 +50,8 @@ resource "aws_apigatewayv2_route" "routes" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = each.value
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "default" {

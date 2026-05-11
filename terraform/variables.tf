@@ -63,3 +63,15 @@ variable "websearch_monthly_limit_per_user" {
   type        = number
   default     = 300
 }
+
+variable "clerk_jwt_issuer" {
+  description = "Clerk Frontend API URL (same as JWT ``iss``). When set, Lambda verifies ``Authorization`` JWTs via Clerk JWKS; client ``userId`` is rejected. Leave empty for legacy manual user id."
+  type        = string
+  default     = ""
+}
+
+variable "clerk_jwt_audience" {
+  description = "Unused — JWT verification runs in Lambda (no API Gateway JWT authorizer; Clerk session tokens often omit ``aud``). Ignored."
+  type        = string
+  default     = ""
+}
