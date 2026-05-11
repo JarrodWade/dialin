@@ -21,7 +21,7 @@ Log your beans, gear, and brews. Ask the bot for extraction advice grounded in y
 ## Architecture
 
 ```
-Browser  →  API Gateway (HTTP API)  →  Lambda (Python 3.12)  →  DynamoDB
+Browser  →  API Gateway (HTTP API; no JWT at edge)  →  Lambda verifies Clerk JWT →  DynamoDB
                                     ↘  Bedrock (Claude Haiku 4.5)
 ```
 
@@ -106,6 +106,8 @@ terraform init
 terraform apply
 ```
 
+Applying builds the Lambda zip with **`pip install -r ../lambda/requirements.txt`** locally; you need **Python 3** and **internet** on that machine.
+
 Copy the `api_url` output value.
 
 ### Run the UI
@@ -117,6 +119,15 @@ make ui UI_PORT=8001
 ```
 
 Paste the API URL into the input at the top of the UI.
+
+### Authentication (Clerk, optional)
+
+For multi-user–safe auth, use **Clerk** in the UI and set **`clerk_jwt_issuer`** in Terraform so API Gateway validates session JWTs before Lambda runs. Step-by-step (Dashboard URLs, issuer, audience, local redirects) is in **[CLERK.md](./CLERK.md)**. Quick pieces:
+
+- **Frontend:** `web/dialin-config.js` — set `clerkPublishableKey`, or `localStorage.dialin.clerkPk`.
+- **Backend:** `clerk_jwt_issuer` in `terraform.tfvars` — Lambda verifies the Bearer token against Clerk JWKS (see [`CLERK.md`](./CLERK.md)).
+
+Leave `clerk_jwt_issuer` empty to keep the legacy manual **User id** field and body/query `userId` (fine for solo local use).
 
 ---
 

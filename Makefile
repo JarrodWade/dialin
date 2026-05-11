@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda
+.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle
 
 TF := terraform -chdir=terraform
 
@@ -25,9 +25,14 @@ ui:
 	@echo "Open http://localhost:$(UI_PORT)/"; \
 	cd web && python3 -m http.server $(UI_PORT)
 
-deploy-lambda:
+# Match Terraform’s Lambda zip: deps from requirements.txt + *.py into lambda/build/.
+lambda-bundle:
+	@ROOT=$$(pwd)/lambda; rm -rf "$$ROOT/build" && mkdir -p "$$ROOT/build"; \
+	  python3 -m pip install -q -r "$$ROOT/requirements.txt" -t "$$ROOT/build" && cp "$$ROOT"/*.py "$$ROOT/build/"
+
+deploy-lambda: lambda-bundle
 	@FUNC=$$($(TF) output -raw lambda_function_name); \
-	cd lambda && zip -r /tmp/dialin_lambda.zip . -x "__pycache__/*" "*.pyc" > /dev/null; \
+	cd lambda/build && zip -rq /tmp/dialin_lambda.zip .; \
 	aws lambda update-function-code --function-name "$$FUNC" --zip-file fileb:///tmp/dialin_lambda.zip --query 'LastModified' --output text
 
 logs:
