@@ -7,6 +7,9 @@ log_retention_days  = 7
 monthly_budget_usd  = 10
 budget_alert_email  = "you@example.com"
 
+# Enable journal RAG in chat (retrieve_journal tool). Requires model access in Bedrock.
+bedrock_embedding_model_id = "amazon.titan-embed-text-v2:0"
+
 # Optional — live cafe discovery via Tavily (see variables.tf). Keep real keys in terraform.tfvars (gitignored).
 # tavily_api_key = "tvly-..."
 

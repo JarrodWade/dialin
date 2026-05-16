@@ -16,6 +16,15 @@ variable "bedrock_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
+variable "bedrock_embedding_model_id" {
+  description = <<-EOT
+    Bedrock embedding model for journal RAG (retrieve_journal tool), e.g. amazon.titan-embed-text-v2:0.
+    Set to empty string to disable embedding sync and semantic search. Enable model access in Bedrock console.
+  EOT
+  type    = string
+  default = "amazon.titan-embed-text-v2:0"
+}
+
 variable "max_output_tokens" {
   description = "Hard cap on tokens generated per response."
   type        = number

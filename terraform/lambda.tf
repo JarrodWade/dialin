@@ -18,7 +18,12 @@ ROOT="${path.module}/../lambda"
 ROOT="$(cd "$ROOT" && pwd)"
 rm -rf "$ROOT/build"
 mkdir -p "$ROOT/build"
-python3 -m pip install -q -r "$ROOT/requirements.txt" -t "$ROOT/build"
+python3 -m pip install -q -r "$ROOT/requirements.txt" -t "$ROOT/build" \
+  --platform manylinux2014_x86_64 \
+  --python-version 3.12 \
+  --implementation cp \
+  --only-binary=:all:
+rm -rf "$ROOT/build/youtube_transcript_api/test"
 cp "$ROOT"/*.py "$ROOT/build/"
 EOT
   }
@@ -33,6 +38,7 @@ data "archive_file" "lambda_zip" {
   excludes = [
     "__pycache__",
     "*.pyc",
+    "**/youtube_transcript_api/test/**",
   ]
 }
 
@@ -56,6 +62,7 @@ resource "aws_lambda_function" "api" {
       TABLE_NAME                       = aws_dynamodb_table.main.name
       BEDROCK_MODEL_ID                 = var.bedrock_model_id
       BEDROCK_REGION                   = var.region
+      BEDROCK_EMBEDDING_MODEL_ID       = trimspace(var.bedrock_embedding_model_id)
       MAX_OUTPUT_TOKENS                = tostring(var.max_output_tokens)
       MAX_TOOL_ITERATIONS              = tostring(var.max_tool_iterations)
       TAVILY_API_KEY                   = var.tavily_api_key

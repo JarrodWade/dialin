@@ -9,7 +9,10 @@ Single-table design.
   USER#<id> / COFFEE#<coffeeId>            Coffee      one per bag; roasterId FK + denorm name
   USER#<id> / BREW#<isoTs>#<brewId>        Brew        time-ordered timeline
   CACHE#WEBSEARCH / <sha256>               WebSearchCache   shared Tavily cache (TTL via expiresAt)
-  USER#<id> / USAGE#WEBSEARCH#YYYY-MM    UsageCounter     monthly live-search quota
+  USER#<id> / RAGCHUNK#BREW#<brewId>        JournalRAGChunk  brew+coffee prose + embedding (retrieve_journal)
+  USER#<id> / RAGCHUNK#COFFEE#<coffeeId>    JournalRAGChunk  bag notes + embedding
+  USER#<id> / RAGCHUNK#VISIT#<visitId>      JournalRAGChunk  visit prose + embedding
+  USER#<id> / USAGE#WEBSEARCH#YYYY-MM       UsageCounter     monthly live-search quota
 
 GSI1 (brews by coffee, time-ordered):
   GSI1PK = COFFEE#<coffeeId>
@@ -85,10 +88,10 @@ def _cities_soft_match(city_a: str | None, city_b: str | None) -> bool:
     return a == b or a in b or b in a
 
 
-def find_matching_cafe_for_new_roaster(
+def find_matching_existing_cafe_by_place(
     user_id: str, name: str, city: str | None = None
 ) -> dict[str, Any] | None:
-    """Return an active cafe item if it likely duplicates this roaster (same place)."""
+    """Return an active cafe row if normalized name+city Soft-matches another café."""
     want = _normalize_place_name(name)
     if not want:
         return None
@@ -99,6 +102,13 @@ def find_matching_cafe_for_new_roaster(
             continue
         return c
     return None
+
+
+def find_matching_cafe_for_new_roaster(
+    user_id: str, name: str, city: str | None = None
+) -> dict[str, Any] | None:
+    """Return an active cafe item if it likely duplicates this roaster (same place)."""
+    return find_matching_existing_cafe_by_place(user_id, name, city)
 
 
 def find_matching_roaster_for_new_cafe(
@@ -329,7 +339,7 @@ def update_coffee(
 
 VALID_METHODS = {
     "V60", "AeroPress", "Espresso", "FrenchPress", "Chemex",
-    "Kalita", "Origami", "Moka", "ColdBrew",
+    "Kalita", "Origami", "OXO Rapid Brewer", "Moka", "ColdBrew",
 }
 
 

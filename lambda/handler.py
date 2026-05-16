@@ -34,9 +34,24 @@ from typing import Any
 import bedrock
 import clerk_jwt
 import ddb
+import journal_rag
+
+
+def _configure_lambda_logging(level: int = logging.INFO) -> None:
+    """Ensure INFO logs reach CloudWatch.
+
+    The runtime attaches StreamHandlers on the root logger that often remain at WARNING;
+    setting only logger.setLevel(logging.INFO) is not enough for INFO lines from child loggers."""
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    for handler in root.handlers:
+        handler.setLevel(level)
+
+
+_configure_lambda_logging(logging.INFO)
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +227,7 @@ def _handle_create_coffee(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("create_coffee failed")
         return _response(500, {"error": "could not create coffee"})
+    journal_rag.try_sync_coffee(user_id, item)
     return _response(201, {"coffee": item})
 
 
@@ -230,6 +246,7 @@ def _handle_update_coffee(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("update_coffee failed")
         return _response(500, {"error": "could not update coffee"})
+    journal_rag.try_sync_coffee(user_id, updated)
     return _response(200, {"coffee": updated})
 
 
@@ -284,6 +301,7 @@ def _handle_create_brew(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("create_brew failed")
         return _response(500, {"error": "could not create brew"})
+    journal_rag.try_sync_brew(user_id, item)
     return _response(201, {"brew": item})
 
  
@@ -419,6 +437,7 @@ def _handle_update_brew(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("update_brew failed")
         return _response(500, {"error": "could not update brew"})
+    journal_rag.try_sync_brew(user_id, updated)
     return _response(200, {"brew": updated})
 
 
@@ -437,6 +456,7 @@ def _handle_delete_brew(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("delete_brew failed")
         return _response(500, {"error": "could not delete brew"})
+    journal_rag.delete_chunk(user_id, "BREW", str(brew_id))
     return _response(200, {"deleted": brew_id})
 
 
@@ -491,6 +511,7 @@ def _handle_delete_coffee(event: dict[str, Any]) -> dict[str, Any]:
         ddb.delete_coffee(user_id, coffee_id)
     except ValueError as e:
         return _response(404, {"error": str(e)})
+    journal_rag.delete_chunk(user_id, "COFFEE", str(coffee_id))
     return _response(200, {"deleted": coffee_id})
 
 
@@ -590,6 +611,7 @@ def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
         )
     except ValueError as e:
         return _response(404, {"error": str(e)})
+    journal_rag.try_sync_visit(user_id, item)
     return _response(201, {"visit": item})
 
 

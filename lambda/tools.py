@@ -11,11 +11,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlparse
 
 import ddb
+import journal_rag
 
 _TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 _LOGGER = logging.getLogger(__name__)
@@ -77,7 +80,7 @@ def _add_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if roaster_id and not roaster_name:
         r = ddb.get_roaster(user_id, roaster_id)
         roaster_name = r["name"] if r else ""
-    return ddb.create_coffee(
+    row = ddb.create_coffee(
         user_id=user_id,
         roaster=roaster_name,
         name=args["name"],
@@ -88,25 +91,33 @@ def _add_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         weight_g=args.get("weightG"),
         notes=args.get("notes"),
     )
+    journal_rag.try_sync_coffee(user_id, row)
+    return row
 
 
 def _archive_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     coffee_id = args["coffeeId"]
-    return ddb.update_coffee(user_id, coffee_id, {"archived": True})
+    row = ddb.update_coffee(user_id, coffee_id, {"archived": True})
+    journal_rag.try_sync_coffee(user_id, row)
+    return row
 
 
 def _update_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     coffee_id = args["coffeeId"]
-    return ddb.update_coffee(user_id, coffee_id, args)
+    row = ddb.update_coffee(user_id, coffee_id, args)
+    journal_rag.try_sync_coffee(user_id, row)
+    return row
 
 
 def _delete_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    ddb.delete_coffee(user_id, args["coffeeId"])
-    return {"deleted": args["coffeeId"]}
+    cid = args["coffeeId"]
+    ddb.delete_coffee(user_id, cid)
+    journal_rag.delete_chunk(user_id, "COFFEE", str(cid))
+    return {"deleted": cid}
 
 
 def _log_brew(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    return ddb.create_brew(
+    row = ddb.create_brew(
         user_id=user_id,
         coffee_id=args["coffeeId"],
         method=args["method"],
@@ -123,16 +134,22 @@ def _log_brew(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         taste=args.get("taste"),
         notes=args.get("notes"),
     )
+    journal_rag.try_sync_brew(user_id, row)
+    return row
 
 
 def _update_brew(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     brew_id = args["brewId"]
-    return ddb.update_brew(user_id, brew_id, args)
+    row = ddb.update_brew(user_id, brew_id, args)
+    journal_rag.try_sync_brew(user_id, row)
+    return row
 
 
 def _delete_brew(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    ddb.delete_brew(user_id, args["brewId"])
-    return {"deleted": args["brewId"]}
+    bid = args["brewId"]
+    ddb.delete_brew(user_id, bid)
+    journal_rag.delete_chunk(user_id, "BREW", str(bid))
+    return {"deleted": bid}
 
 
 def _list_brews(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -269,6 +286,22 @@ def _update_preferences(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if not args.get("skipDuplicateCheck"):
+        existing_cafe = ddb.find_matching_existing_cafe_by_place(
+            user_id, args["name"], args.get("city")
+        )
+        if existing_cafe:
+            return {
+                "duplicatePlace": True,
+                "existingType": "cafe",
+                "existingId": existing_cafe["cafeId"],
+                "existingName": existing_cafe.get("name"),
+                "hint": (
+                    "This cafe is already on the user's list — use log_visit with cafeId \""
+                    f'{existing_cafe["cafeId"]}" '
+                    '(and list_cafes if you need to confirm). '
+                    "Call add_cafe with skipDuplicateCheck: true only if the user explicitly wants a second entry."
+                ),
+            }
         hit = ddb.find_matching_roaster_for_new_cafe(user_id, args["name"], args.get("city"))
         if hit:
             return {
@@ -303,7 +336,7 @@ def _update_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _log_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    return ddb.log_visit(
+    row = ddb.log_visit(
         user_id=user_id,
         cafe_id=args.get("cafeId"),
         roaster_id=args.get("roasterId"),
@@ -313,6 +346,8 @@ def _log_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         rating=args.get("rating"),
         notes=args.get("notes"),
     )
+    journal_rag.try_sync_visit(user_id, row)
+    return row
 
 
 def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -441,6 +476,14 @@ def _summarize_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return ddb.summarize_coffee(user_id, args["coffeeId"])
 
 
+def _retrieve_journal(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    return journal_rag.search(
+        user_id,
+        (args.get("query") or "").strip(),
+        top_k=int(args.get("topK") or 8),
+    )
+
+
 # --- Web search --------------------------------------------------------------
 
 
@@ -531,9 +574,143 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Bedrock toolSpecs (JSON Schema for the model)
-# ---------------------------------------------------------------------------
+_ID11 = re.compile(r"^[a-zA-Z0-9_-]{11}$")
+
+
+def _youtube_video_id_from_input(raw: str) -> str | None:
+    """Resolve an 11-char id from paste (URL or bare id)."""
+    s = (raw or "").strip().split()[0].strip()
+    if not s:
+        return None
+    if _ID11.match(s):
+        return s
+    u = urlparse(s)
+    host = (u.netloc or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host == "youtu.be":
+        part = u.path.strip("/").split("/")[0]
+        return part if part and _ID11.match(part) else None
+    if host in ("youtube.com", "youtube-nocookie.com", "m.youtube.com"):
+        segments = [p for p in u.path.split("/") if p]
+        if len(segments) >= 2 and segments[0] in ("embed", "shorts", "live"):
+            cand = segments[1]
+            return cand if _ID11.match(cand) else None
+        qs = parse_qs(u.query)
+        for key in ("v", "vi"):
+            vals = qs.get(key)
+            if vals and vals[0] and _ID11.match(vals[0][:11]):
+                return vals[0][:11]
+    return None
+
+
+def _youtube_transcript(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Official captions transcript when available — shares Tavily quota + cache bucket."""
+
+    vid_in = (
+        args.get("video")
+        or args.get("videoUrl")
+        or args.get("videoId")
+        or args.get("url")
+        or ""
+    ).strip()
+    video_id = _youtube_video_id_from_input(vid_in)
+    if not video_id:
+        return {"ok": False, "error": "Need a youtube.com/watch, youtu.be, shorts, embed URL, or bare 11-char video id."}
+
+    raw_langs = args.get("languages")
+    langs: list[str]
+    if isinstance(raw_langs, list) and raw_langs:
+        langs = [str(x).strip() for x in raw_langs if str(x).strip()]
+    elif isinstance(raw_langs, str) and raw_langs.strip():
+        langs = [raw_langs.strip()]
+    else:
+        langs = ["en", "en-US", "en-GB"]
+
+    max_chars = int(args.get("maxChars") or 22_000)
+    max_chars = max(800, min(max_chars, 48_000))
+
+    cache_query = f"youtube_transcript::{video_id}::{max_chars}::{'|'.join(langs[:8])}"
+
+    cached = ddb.websearch_cache_get(cache_query, [], max_chars)
+    if cached is not None:
+        out = dict(cached)
+        out["_cache"] = {"hit": True}
+        return out
+
+    allowed, usage_count = ddb.consume_websearch_quota(user_id, _WEBSEARCH_MONTHLY_LIMIT)
+    if not allowed:
+        lim = _WEBSEARCH_MONTHLY_LIMIT
+        return {
+            "ok": False,
+            "error": (
+                f"Monthly external-fetch quota exhausted ({usage_count}/{lim}) — transcript fetch shares search quota. "
+                "Try later or broaden without extra video pulls."
+            ),
+        }
+
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+
+        api = YouTubeTranscriptApi()
+        ft = api.fetch(video_id, languages=langs or ["en"])
+    except ImportError:
+        return {"ok": False, "error": "youtube_transcript_api is not installed in this deployment."}
+    except Exception as e:  # noqa: BLE001
+        msg_low = str(e).lower()
+        hint = ""
+        if "blocked" in msg_low or "ip" in msg_low and "block" in msg_low:
+            hint = (
+                " YouTube often blocks cloud datacenter IPs; try from a warmer path or summarize from search_web + "
+                "reddit instead."
+            )
+        return {"ok": False, "error": f"could not fetch transcript: {e!s}.{hint}".strip()}
+
+    try:
+        parts = [snippet.text.strip() for snippet in ft if snippet.text.strip()]
+        full_text = " ".join(parts)
+        lang_iso = getattr(ft, "language_code", None)
+        lang_name = getattr(ft, "language", None)
+        is_gen = getattr(ft, "is_generated", None)
+    except Exception:
+        full_text = ""
+        lang_iso, lang_name, is_gen = None, None, None
+
+    truncated = len(full_text) > max_chars
+    text_out = full_text[:max_chars] if truncated else full_text
+
+    payload = {
+        "videoId": video_id,
+        "languageCode": lang_iso,
+        "language": lang_name,
+        "isGenerated": is_gen,
+        "charLength": len(full_text),
+        "truncated": truncated,
+        "text": text_out,
+        "note": (
+            "Summarize the user's question from this narration; cite the video conversationally "
+            "(no long verbatim dumps). Respect copyright."
+        ),
+    }
+
+    try:
+        ddb.websearch_cache_put(
+            cache_query,
+            [],
+            max_chars,
+            payload,
+            _WEBSEARCH_CACHE_TTL_SEC,
+        )
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("youtube transcript cache_put failed")
+
+    meta = {"hit": False, "liveSearchCallsThisMonth": usage_count}
+    if _WEBSEARCH_MONTHLY_LIMIT > 0:
+        meta["monthlyLimit"] = _WEBSEARCH_MONTHLY_LIMIT
+    payload["_cache"] = meta
+    return payload
+
+
 
 
 TOOL_SPECS: list[dict[str, Any]] = [
@@ -853,6 +1030,27 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "toolSpec": {
+            "name": "retrieve_journal",
+            "description": (
+                "Semantic search across the user's own journal text (brew tastes/notes, coffee bag notes, "
+                "cafe visits). Use for fuzzy memory questions ('what patterns in my tasting notes?', "
+                "'when did I mention bitterness?', thematic recall spanning many coffees). "
+                "Prefer list_brews / get_dialin_advice for exact recent numbers on one coffee + method."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["query"],
+                    "properties": {
+                        "query": {"type": "string", "description": "Natural-language question for similarity search"},
+                        "topK": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Snippets to return (default 8)"},
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
             "name": "update_brew",
             "description": (
                 "Edit a logged brew. Use when the user corrects a brew they already logged "
@@ -920,9 +1118,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "add_cafe",
-            "description": (
+                "description": (
                 "Add a cafe to the user's tracked place list. "
                 "Set isRoaster: true if the cafe also roasts/sources beans the user can buy. "
+                "Always call list_cafes before add_cafe — same name+city returns DUPLICATE_PLACE; "
+                "then log_visit with the existing cafeId instead of add_cafe again. "
                 "Only add after the user confirms."
             ),
             "inputSchema": {
@@ -1058,16 +1258,15 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "search_web",
             "description": (
-                "Live web search (Tavily) for cafe / roaster *discovery* — results are cached for reuse; "
-                "each distinct query consumes quota only on cache miss. "
-                "Call when surfacing venues outside the user's saved list_cafes: new cities, 'what's good now', "
-                "international places, verifying a named shop, or a thin Reddit-focused second query if needed. "
-                "Skip when answering purely from list_cafes + preferences + stable knowledge "
-                "(e.g. user asks only about places they've already logged). "
-                "Good queries: 'best specialty coffee [city] [year] reddit', "
-                "'[city] third wave coffee recommendations site:reddit.com', "
-                "'[cafe name] [city] specialty coffee review'. "
-                "Do NOT use for brew advice or bean questions."
+                "Live web search (Tavily). Cached globally; each distinct query+domain set costs quota "
+                "on cache miss. "
+                "Use case A — cafe/roaster discovery: new cities, open/closed verification, itinerary ideas. "
+                "Use case B — technique & gear discourse: pass includeDomains ['reddit.com'] and queries like "
+                "'James Hoffman bloom pour over reddit', 'r/espresso channeling puck prep', "
+                "'Niche Zero espresso dial 2026', 'r/PourOver v60 swirling vs spoon'. "
+                "Always ground user-specific extraction numbers in list_brews / get_dialin_advice; "
+                "Reddit summarizes community lore and trends only. Skip when retrieval would add "
+                "nothing beyond stable facts or purely local saved cafes."
             ),
             "inputSchema": {
                 "json": {
@@ -1077,17 +1276,20 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "query": {
                             "type": "string",
                             "description": (
-                                "Natural-language search query. Be specific: include city, "
-                                "year, and 'specialty coffee' or 'third wave'. "
-                                "E.g. 'best specialty coffee cafes Taipei 2025 reddit'"
+                                "Search query — be precise. Venue discovery: city + specialty coffee + reddit/year. "
+                                "Technique chatter: brew method + symptom + optional 'James Hoffman' "
+                                "or subreddit hints. Examples: "
+                                "'Phoenix AZ specialty coffee reddit', "
+                                "'r/espresso IMS basket vs stock 2026', "
+                                "'Hoffmann blooming pour over technique reddit'"
                             ),
                         },
                         "includeDomains": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": (
-                                "Optional domain allowlist to focus results. "
-                                "E.g. ['reddit.com', 'tripadvisor.com']. Leave empty for broad search."
+                                "Domain allowlist. For Reddit-heavy answers use [\"reddit.com\"] alone. "
+                                "For cafes allow tripadvisor, etc. Omit for Tavily-wide results."
                             ),
                         },
                         "maxResults": {
@@ -1101,11 +1303,49 @@ TOOL_SPECS: list[dict[str, Any]] = [
             },
         }
     },
+    {
+        "toolSpec": {
+            "name": "get_youtube_transcript",
+            "description": (
+                "Fetch YouTube captions (when enabled) — same caching + monthly quota bucket as search_web. "
+                "Use when the user drops a Hoffman / espresso / PourOver tutorial link or asks what a specific "
+                "video says about technique. Summarize; do not paste the whole transcript. "
+                "If fetch fails from IP blocking, fall back to search_web with reddit.com."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+            "required": ["video"],
+            "properties": {
+                        "video": {
+                            "type": "string",
+                            "description": (
+                                "Full youtube.com/watch?v=..., youtu.be/..., shorts, embed URL, "
+                                "or bare 11-character ID."
+                            ),
+                        },
+                        "languages": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Preferred subtitle languages (default tries en, en-US, en-GB).",
+                        },
+                        "maxChars": {
+                            "type": "integer",
+                            "minimum": 800,
+                            "maximum": 48000,
+                            "description": "Max narration characters returned (long videos are clipped). Default ~22000.",
+                        },
+                    },
+                }
+            },
+        }
+    },
 ]
 
 
 _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "search_web": _search_web,
+    "get_youtube_transcript": _youtube_transcript,
     "search_known_roasters": _search_known_roasters,
     "list_roasters": _list_roasters,
     "add_roaster": _add_roaster,
@@ -1130,6 +1370,7 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "get_preferences": _get_preferences,
     "update_preferences": _update_preferences,
     "summarize_coffee": _summarize_coffee,
+    "retrieve_journal": _retrieve_journal,
 }
 
 

@@ -1,4 +1,6 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle
+.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag
+
+ARGS ?=
 
 TF := terraform -chdir=terraform
 
@@ -28,12 +30,28 @@ ui:
 # Match Terraform’s Lambda zip: deps from requirements.txt + *.py into lambda/build/.
 lambda-bundle:
 	@ROOT=$$(pwd)/lambda; rm -rf "$$ROOT/build" && mkdir -p "$$ROOT/build"; \
-	  python3 -m pip install -q -r "$$ROOT/requirements.txt" -t "$$ROOT/build" && cp "$$ROOT"/*.py "$$ROOT/build/"
+	  python3 -m pip install -q -r "$$ROOT/requirements.txt" -t "$$ROOT/build" \
+	    --platform manylinux2014_x86_64 \
+	    --python-version 3.12 \
+	    --implementation cp \
+	    --only-binary=:all: \
+	    && rm -rf "$$ROOT/build/youtube_transcript_api/test" \
+	    && cp "$$ROOT"/*.py "$$ROOT/build/"
 
 deploy-lambda: lambda-bundle
 	@FUNC=$$($(TF) output -raw lambda_function_name); \
 	cd lambda/build && zip -rq /tmp/dialin_lambda.zip .; \
 	aws lambda update-function-code --function-name "$$FUNC" --zip-file fileb:///tmp/dialin_lambda.zip --query 'LastModified' --output text
+
+# Rebuild Dynamo RAG chunks for brews/coffees/visits (uses local AWS credentials + Bedrock).
+# Examples: make backfill-journal-rag ARGS='--dry-run'
+#           make backfill-journal-rag ARGS='--user YOUR_USER_ID'
+#           BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0 AWS_REGION=us-east-1 ...
+backfill-journal-rag:
+	@TN=$$($(TF) output -raw table_name); \
+	TABLE_NAME="$$TN" \
+	BEDROCK_EMBEDDING_MODEL_ID="$${BEDROCK_EMBEDDING_MODEL_ID:-amazon.titan-embed-text-v2:0}" \
+	python3 "$(CURDIR)/scripts/backfill_journal_rag.py" $(ARGS)
 
 logs:
 	@LG=$$($(TF) output -raw log_group); \
