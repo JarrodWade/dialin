@@ -1111,10 +1111,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "lookup_coffee_term",
             "description": (
-                "Curated short definitions for confusing drink names, menu jargon, and specialty-cafe terms "
-                "(e.g. one-and-one, Gibraltar, long black vs americano). "
-                "Call first for 'what is X' when X is likely a drink or bar term. "
-                "If found is false or the user needs regional/shop-specific nuance, use search_web (rule 3d)."
+                "Curated short definitions for drinks, regional café jargon, and specialty gear/prep slang "
+                "(e.g. one-and-one, kopitiam; WDT, RDT, puck screen, SSP burrs, channeling, naked PF, flow profiling; "
+                "Rao spin, TDS). "
+                "Call first for 'what is X' when X is likely a menu, bar, or trendy home-barista term. "
+                "If found is false or the user needs deep threads or brand wars, use search_web with reddit.com (rule 3d / 3b)."
             ),
             "inputSchema": {
                 "json": {
@@ -1123,7 +1124,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "properties": {
                         "term": {
                             "type": "string",
-                            "description": "Drink or term as the user said it (e.g. 'one and one', 'Gibraltar').",
+                            "description": "Term or phrase (e.g. 'one and one', 'WDT', 'puck screen', 'SSP burrs').",
                         },
                     },
                 }

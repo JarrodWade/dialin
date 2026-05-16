@@ -73,6 +73,30 @@
       "seeAlso": ["espresso"]
     },
     {
+      "aliases": ["9 bar", "nine bar", "classic 9 bar", "9 bar espresso", "nine bar espresso"],
+      "title": "9 bar espresso",
+      "body": "Most classic rotary- or vibe-pump cafes were tuned around roughly 9 bars of brew pressure at the puck (where and how that is measured—gauge vs puck—varies, so it is a rule of thumb). People say 'classic 9 bar' for a relatively flat, fixed-pressure style versus lever springs, ramps, or machines that advertise other peaks. The number alone does not define taste—flow, grind, temperature, and puck prep still dominate.",
+      "seeAlso": ["preinfusion", "turbo shot"]
+    },
+    {
+      "aliases": ["preinfusion", "espresso preinfusion", "pre-infusion", "pre infusion espresso", "soft infusion espresso", "soak espresso"],
+      "title": "Preinfusion (espresso)",
+      "body": "Wetting the puck at low pressure (or line pressure) before the full brew pressure ramp. Helps reduce channeling and even extraction on many machines; can be fixed-time mechanical, flow-restricted, or part of a full pressure/flow profile. Baristas rarely print it on a menu, but it is part of how repeatable shops build shots.",
+      "seeAlso": ["9 bar"]
+    },
+    {
+      "aliases": ["turbo shot", "turbo espresso", "turbo shots", "turbo shot espresso"],
+      "title": "Turbo shot",
+      "body": "Informal modern term for a deliberately faster, higher-flow espresso style—often coarser grind, quicker shot time/target ratio, and pump or profile settings that push more early flow than textbook 'slow' shots. Usage spread in online barista and profiling circles; it is not one SCAA-locked recipe and baristas disagree on where 'turbo' starts. Contrast with generic 'classic 9 bar' only in spirit—many turbos still reference ~9 bar peaks. Ask the barista or cafe what they mean locally.",
+      "seeAlso": ["9 bar", "lungo"]
+    },
+    {
+      "aliases": ["allonge", "allongé", "cafe allonge", "café allongé", "french allonge"],
+      "title": "Allongé (French-style stretched espresso)",
+      "body": "French specialty wording for a stretched single espresso pull (more water through the same puck than a tight normale, often a longer ratio in one continuous shot rather than adding hot water afterward). Cafés differ on grams-in/grams-out; neighbors Italian 'lungo' but menus and bar slang are not identical. Compare americano for post-shot dilution.",
+      "seeAlso": ["lungo", "americano"]
+    },
+    {
       "aliases": ["red eye", "shot in the dark", "eye opener"],
       "title": "Red eye",
       "body": "Drip or batch-brewed coffee with a shot of espresso added—stronger caffeine hit. 'Black eye' / 'dead eye' slang usually means two or three shots respectively (names vary).",
@@ -141,8 +165,104 @@
     {
       "aliases": ["pour over", "pour-over", "hand pour"],
       "title": "Pour-over",
-      "body": "Manually brewed filter coffee (V60, Kalita, Chemex, etc.)—barista controls bloom, pours, and time. Distinct from batch brew for service and flavor profile.",
-      "seeAlso": ["batch brew"]
+      "body": "Manually brewed filter coffee (V60, Kalita, Chemex, etc.)—barista controls bloom, pours, and time. Distinct from batch brew for service and flavor profile. In Japan, 'hand drip' (ハンドドリップ) is the usual menu wording for the same idea.",
+      "seeAlso": ["batch brew", "hand drip"]
+    },
+    {
+      "aliases": ["hand drip", "hand-drip", "handdrip"],
+      "title": "Hand drip",
+      "body": "Very common on Japanese café menus (カタカナ: ハンドドリップ) for manual pour-over: hot water poured by hand through ground coffee in a dripper, same broad category as Western 'pour-over' (V60, Kalita Wave, etc.). It signals filter coffee made to order, not batch drip or pod machines. Some shops abroad borrow the phrase for the same service style.",
+      "seeAlso": ["pour over"]
+    },
+    {
+      "aliases": ["kissaten", "kissaten coffee", "喫茶店"],
+      "title": "Kissaten",
+      "body": "Traditional Japanese 'tea-drinking shop' cafés—often retro seating, classical / jazz ambience, and methods like cloth drip, Nel, siphon, or deep-roasted pourover (kissaten logic is not always the same as Nordic light-roast specialty). Many focus on meticulous service and quiet drinking rather than takeaway espresso culture. Modern third-wave shops may still nod to the word without being old-school kissaten.",
+      "seeAlso": ["hand drip", "pour over"]
+    },
+    {
+      "aliases": ["dutch coffee", "dutch brew coffee", "kyoto drip", "japanese ice drip", "kyoto cold drip", "ダッチコーヒー"],
+      "title": "Dutch coffee (Japan)",
+      "body": "On many Japanese menus 'Dutch coffee' means tall cold-water drip: ice water drips very slowly through grounds for hours (abroad often called Kyoto-style ice drip). Yield is smooth, concentrated, and low acidity—not hot filter, not espresso. Do not assume the phrase means the same as European 'Dutch' coffee slang; read it as Japanese iced slow-drip.",
+      "seeAlso": ["cold brew", "hand drip"]
+    },
+    {
+      "aliases": ["nordic roast", "nordic coffee", "nordic style coffee", "copenhagen coffee", "copenhagen coffee scene", "scandinavian roast", "scandi roast", "nordic light roast"],
+      "title": "Nordic-style coffee (Denmark & Scandinavia)",
+      "body": "Copenhagen and the wider Nordic specialty scene became known for very light filter roasts that foreground clarity, acidity, and origin character—often shorter, precise pour-overs on batch tastings and competition-style service. 'Nordic roast' is shorthand, not one legal recipe; quality shops still vary by bean and brew. Expect filter and careful water to matter as much as espresso milk drinks.",
+      "seeAlso": ["pour over", "batch brew"]
+    },
+    {
+      "aliases": ["kopitiam coffee", "nanyang coffee", "sock coffee", "kopi o", "kopi c", "kopi kosong", "kopi peng", "kopi ga dai", "kopi siew dai", "kopi si", "kopi si kosong"],
+      "title": "Kopitiam coffee (Singapore & Malaysia)",
+      "body": "Heritage coffee in Singapore and Malaysian kopitiams: strong brew through a flannel/cloth sock, usually from a dark caramelized roast (often Robusta-forward; roasters may add sugar or fat during roast). Shorthand: kopi = with condensed milk; kopi c = with evaporated milk (+ sugar); kopi o = black with sugar; kosong = unsweetened black; peng = iced; ga dai / siew dai = extra sweet / less sweet. Flavor is intense, sweet, and malty—not interchangeable with third-wave Nordic filter unless a shop explicitly bridges both.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["vietnamese coffee", "phin coffee", "cafe phin", "cà phê phin", "ca phe phin", "cafe su da", "cà phê sữa đá", "ca phe sua da", "vietnamese iced coffee"],
+      "title": "Vietnamese phin coffee",
+      "body": "Metal phin (small perforated filter) sits on the glass; hot water steeps slowly through the bed—concentrated, often Robusta-heavy. Sweetened condensed milk is classic (hot or iced cà phê sữa đá); cà phê đen is black. Hanoi-style egg coffee (cà phê trứng) is a separate rich dessert drink. Ask for less condensed milk if you want it drier.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["oliang", "o liang", "thai iced coffee", "oliang coffee", "gafae boran"],
+      "title": "Oliang (Thai iced coffee)",
+      "body": "Thai-style iced coffee (โอเลี้ยง): very dark roast often blended with grains or beans beyond coffee (formulas vary by vendor), brewed strong, poured over ice with sugar and evaporated or condensed milk. Street stalls and classic shophouses; modern cafés may modernize the profile. Not the same as a generic 'iced latte'—expect bolder, sweeter heritage flavor.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["kopi tubruk", "tubruk", "tubruk coffee"],
+      "title": "Kopi tubruk (Indonesia)",
+      "body": "Common in Indonesian homes and warungs: ground coffee goes directly into the cup (or glass), scalded with hot water, sometimes stirred and left to settle before drinking—full-bodied with fine sediment. Sweetened or unsweetened by habit. Different from sock-brewed kopitiam kopi or Vietnamese phin; not a filtered pour-over.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["turkish coffee", "greek coffee", "arabic coffee", "ibrik coffee", "cezve", "briki coffee", "turkish ibrik", "armenian coffee", "lebanese coffee"],
+      "title": "Turkish / Greek-style cezve coffee",
+      "body": "Ultra-fine powder with water (sugar optional) heated in a small copper or steel ibrik/cezve—brought just to foam repeatedly; grounds stay in the cup. Greek, Turkish, Levantine, Balkan, and diaspora communities each have etiquette variants (cardamom, serving foam, etc.). Not pressurized espresso and not filter pour-over.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["cafe de olla", "café de olla", "cafe de olla mexican", "mexican pot coffee"],
+      "title": "Café de olla (Mexico)",
+      "body": "Traditional clay-pot coffee with cinnamon and often piloncillo (unrefined cane)—simmered coarse grind, earthy-sweet and spiced. Served at home and fonda-style meals; third-wave cafés may offer seasonal riffs. Different from default diner drip.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["cafe cubano", "café cubano", "cuban coffee", "colada", "cafecito", "cuban espresso", "miami cuban coffee"],
+      "title": "Cuban / Miami-style cafecito",
+      "body": "Sugar is beaten with the first drops of crema before the rest of the moka- or espresso-style shot is incorporated—tiny cup, caramel-sweet foam (espuma). A colada is a larger styrofoam pour meant to share into thimble cups. South Florida diaspora tradition often uses strong Robusta-forward blends. Not the same as ordinary sweetened latte.",
+      "seeAlso": ["cafe bonbon"]
+    },
+    {
+      "aliases": ["galao", "galão", "galão coffee", "portuguese galao"],
+      "title": "Galão (Portugal)",
+      "body": "Portuguese morning glass drink: one espresso lengthened with a lot of hot foamy milk—often served tall and pale, roughly in the latte family but locally ratioed (escuro/claro variants can imply stronger/weaker coffee). Not identical to Italian macchiato naming.",
+      "seeAlso": ["latte", "flat white"]
+    },
+    {
+      "aliases": ["cafezinho", "brazilian cafezinho"],
+      "title": "Cafezinho (Brazil)",
+      "body": "Tiny sweet coffee woven into Brazilian hospitality—traditionally cloth-filtered or small-batch and offered almost everywhere social life happens. Expect sugar unless you specify; specialty cafés may reinterpret but the word still signals small, sociable cups.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["south indian filter coffee", "kaapi", "filter kaapi", "madras filter coffee", "degree coffee", "tumbler davara coffee"],
+      "title": "South Indian filter kaapi",
+      "body": "Decoction drips through a stacked metal filter (similar across South India); blends often include chicory for bite. Mixed with hot milk and 'pulled' between tumbler and saucer to cool and froth—strong, fragrant, milk-forward service. Not espresso; not V60.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["yuanyang", "yuan yang", "yuenyeung", "hong kong yuanyang", "coffee milk tea"],
+      "title": "Yuanyang (Hong Kong)",
+      "body": "Half milk tea (often strong Ceylon pulled through silk socks) and half coffee—sweet, creamy, very punchy on big menus in Hong Kong cha chaan tengs. Closer to a hybrid of two drinks than kopitiam kopi alone; caffeine stacks fast.",
+      "seeAlso": ["kopitiam coffee"]
+    },
+    {
+      "aliases": ["einspanner", "einspänner", "wiener einspanner", "austrian einspanner", "viennese einspanner"],
+      "title": "Einspänner (Vienna)",
+      "body": "Viennese glass drink: hot espresso under a thick cap of whipped cream (historic coachman lid to keep heat). Stir through the cream for dessert-like texture; coffee stays strong underneath. Distinct from latte or cappuccino.",
+      "seeAlso": ["espresso macchiato"]
     },
     {
       "aliases": ["iced latte", "iced coffee"],
@@ -155,6 +275,126 @@
       "title": "Cold brew",
       "body": "Coffee steeped cold for many hours, then filtered—low acid, smooth, usually higher TDS concentrate diluted to taste. Not the same as hot-brewed coffee chilled (iced coffee).",
       "seeAlso": ["iced coffee"]
+    },
+    {
+      "aliases": ["puck prep", "espresso puck prep", "puck preparation", "espresso prep"],
+      "title": "Puck prep",
+      "body": "Everything before you lock the portafilter in: dose, grind, declumping/distribution, tamp, and optional screens or paper. r/espresso culture treats solid puck prep as the bottleneck before chasing burrs, baskets, or machines; cafés compress the same steps for speed.",
+      "seeAlso": ["wdt", "channeling"]
+    },
+    {
+      "aliases": ["wdt", "weiss distribution technique", "weiss distribution", "needle wdt", "wdt tool", "coffee wdt"],
+      "title": "WDT (Weiss Distribution Technique)",
+      "body": "Combing the dry coffee bed with fine needles or a WDT tool to break clumps and even density before tamping—default home barista advice on r/espresso. Needle count, depth, and aggressiveness are eternal threads; sloppy WDT can still leave high-density zones. Often paired with a careful tamp or leveling tool.",
+      "seeAlso": ["puck prep", "blind shaker", "channeling"]
+    },
+    {
+      "aliases": ["blind shaker", "weiss shaker", "distribution shaker", "coffee declump shaker", "grounds shaker"],
+      "title": "Blind shaker (declumping shaker)",
+      "body": "Sealed cup used to shake a whole dose after grinding—breaks clumps without needles (Weiss-style workflows and clones). Popular alternative on Reddit to WDT; watch static, retention, and dose loss. Cafés rarely build service around it; home setups love it.",
+      "seeAlso": ["wdt", "rdt"]
+    },
+    {
+      "aliases": ["rdt", "ross droplet technique", "ross droplet", "grinder spritz", "coffee bean spritz", "anti static spritz"],
+      "title": "RDT (Ross Droplet Technique)",
+      "body": "Micro-mist or a few water drops on beans immediately before grinding to tame static cling—especially noisy single-dose electric grinders and lighter roasts on r/espresso. Use tiny water; storage and hygiene worrywarts still debate edge cases. Not required on every grinder climate combo.",
+      "seeAlso": ["single dosing"]
+    },
+    {
+      "aliases": ["single dosing", "single dose grinding", "low retention grinder", "zero retention grinder", "single dose espresso"],
+      "title": "Single dosing (low-retention grinding)",
+      "body": "Weigh one portion, grind only that, purge or bellows-blow the chute so the next coffee does not mix—modern specialty default versus hopper life. Forums chase 'low retention' burr sets and mods; exchange coffee costs money in wasted grounds. Workflow differs from busy café hoppers.",
+      "seeAlso": ["rdt", "ssp burrs"]
+    },
+    {
+      "aliases": ["ssp burrs", "ssp burr", "ssp multipurpose", "ssp grinding burrs", "ssp cast burrs"],
+      "title": "SSP burrs",
+      "body": "Aftermarket flat burr sets swapped into many popular grinders—huge used market and install threads on Reddit. Different cuts (multipurpose, brew, high-uniformity…) shift clarity, body, and fines. Alignment, seasoning mythology, and price arguments follow; not a must-have if stock burrs already match your drinks.",
+      "seeAlso": ["single dosing", "dial in"]
+    },
+    {
+      "aliases": ["channeling", "channeling espresso", "espresso channeling", "puck channeling", "shot channeling"],
+      "title": "Channeling (espresso)",
+      "body": "Water rips through cracks or weak zones in the puck—blond jets, uneven bottomless extraction, thin or sour cups. Usually puck prep and grind, not mystic basket magic. r/espresso diagnosis starts with naked-portafilter video and distribution checks before hardware swaps.",
+      "seeAlso": ["puck prep", "bottomless portafilter", "wdt"]
+    },
+    {
+      "aliases": ["bottomless portafilter", "naked portafilter", "open portafilter", "naked pf", "bottomless pf"],
+      "title": "Bottomless (naked) portafilter",
+      "body": "Portafilter with no spouts—shot falls straight for visual debugging (symmetry, stripes, sprays). Specialty training standard; messy when channeling. Reddit clips love slow-mo diagnosis.",
+      "seeAlso": ["channeling"]
+    },
+    {
+      "aliases": ["puck screen", "metal puck screen", "espresso puck screen", "mesh puck screen", "puck metal disc"],
+      "title": "Puck screen",
+      "body": "Perforated disc on top of the puck before brewing—claims include softer dispersion and less screen gouging. 2020s hobby trend; blind tasting and analytics threads disagree how much it matters versus good prep. Match thickness/flow to machine.",
+      "seeAlso": ["preinfusion", "paper filter on puck"]
+    },
+    {
+      "aliases": ["paper filter on puck", "puck paper", "filter paper on puck", "aeropress paper espresso", "aero paper puck"],
+      "title": "Paper filter on espresso puck",
+      "body": "Thin paper (often cut AeroPress discs) above or below the puck to alter fines migration and drainage—experimental Reddit rabbit hole for cleaner cup or different mouthfeel. Changes headspace and can hide prep flaws until it fails loudly.",
+      "seeAlso": ["puck screen", "precision basket"]
+    },
+    {
+      "aliases": ["precision basket", "ims basket", "vst basket", "competition basket", "ridgeless basket"],
+      "title": "Precision / IMS / VST baskets",
+      "body": "Aftermarket baskets with tighter hole QA than many stock inserts—aim is even exit jets and predictable mass. Brand threads compare IMS vs VST vs others; you still have to redial grind and yield. Won’t rescue bad WDT.",
+      "seeAlso": ["channeling", "dial in"]
+    },
+    {
+      "aliases": ["dial in", "dialing in", "dialling in", "dial in espresso", "dial in coffee", "espresso dial in"],
+      "title": "Dialing in",
+      "body": "Iterating variables—grind, dose, yield, temp, maybe flow—until the beverage matches a chosen taste window. r/espresso usually means espresso ratio and time bands; filter folks chase pour recipe tabs. Moving target as beans age and water shifts.",
+      "seeAlso": ["9 bar", "turbo shot", "pour over"]
+    },
+    {
+      "aliases": ["force tamper", "calibrated tamper", "spring tamper", "constant force tamper", "click tamper"],
+      "title": "Force / calibrated tamper",
+      "body": "Tamper that signals a set tamp force (spring, clutch, load cell) so pressure is repeatable—removes one variable from puck prep. Debate threads pit depth stops vs force stops vs skilled hand tamp; still requires level bed first.",
+      "seeAlso": ["wdt", "spinning distributor"]
+    },
+    {
+      "aliases": ["spinning distributor", "coffee distributor tool", "distribution tool espresso", "rotating distributor", "palm distributor espresso"],
+      "title": "Spinning puck distributor",
+      "body": "Rotating disk that levels the dry bed before tamp—café-speed workflow; Reddit eternally argues needles versus spin for real clump breakup. Over-spin can smear fines; height adjustment matters.",
+      "seeAlso": ["wdt", "force tamper"]
+    },
+    {
+      "aliases": ["flow profiling", "flow profile espresso", "flow control espresso", "needle valve espresso"],
+      "title": "Flow profiling",
+      "body": "Shaping water flow rate through the puck across time—manual needle valves, paddles, or digital profiling machines (Decent, etc.). Lets you mimic slow pre-wet or hold flat flow independent of pump headline pressure. Preset pack culture is loud; palate still decides.",
+      "seeAlso": ["pressure profiling", "preinfusion"]
+    },
+    {
+      "aliases": ["pressure profiling", "pressure profile espresso", "declining pressure profile", "pressure profile machine"],
+      "title": "Pressure profiling",
+      "body": "Programming ramps and plateaus of brew pressure (not just on/off 9 bar)—overlaps lever curves and some flow strategies. Forum favorite on profiling machines; can chase mouthfeel impossible on dumb pumps if you learn the knobs.",
+      "seeAlso": ["9 bar", "flow profiling", "lever espresso"]
+    },
+    {
+      "aliases": ["lever espresso", "spring lever", "manual lever machine", "direct lever espresso", "lever machine espresso"],
+      "title": "Lever espresso machine",
+      "body": "Mechanical group driven by hand or spring—pressure often declines naturally through the shot versus flat rotary pumps. Cult following for tactile ritual and texture; maintenance and temperature management are Reddit sagas (La Pavoni-classics, prosumer spring levers, etc.).",
+      "seeAlso": ["pressure profiling", "9 bar"]
+    },
+    {
+      "aliases": ["rao spin", "scott rao spin", "v60 spin", "pour over spin", "swirl v60"],
+      "title": "Rao spin (pour-over)",
+      "body": "Controlled spin/swirl after pours to knock grinds off the V60 wall and even the bed—popularized through Scott Rao’s online filter guidance. r/PourOver debates spin versus spoon agitation versus zero-touch for fines migration.",
+      "seeAlso": ["pour over", "bloom"]
+    },
+    {
+      "aliases": ["bloom coffee", "coffee bloom", "pour over bloom", "espresso bloom", "blooming coffee"],
+      "title": "Bloom (de-gassing)",
+      "body": "First hot-water contact that puffs fresh coffee as CO2 exits—stand-alone pour-over step or analogous to a gentle espresso pre-wet. Fades as roast stales; amount of water and wait time are recipe-specific.",
+      "seeAlso": ["pour over", "preinfusion"]
+    },
+    {
+      "aliases": ["coffee tds", "refractometer coffee", "extraction yield", "tds coffee", "coffee extraction percent"],
+      "title": "TDS / refractometer (extraction %)",
+      "body": "Optical refractometry estimates strength (TDS) and, with dose and beverage mass, calculated extraction percentage—QC in roasteries and hobby bench science. Reddit reminder: numbers align palettes, they don’t replace tasting. Water temp and grind still move subjective sweetness.",
+      "seeAlso": ["dial in"]
     },
     {
       "aliases": ["breve"],
