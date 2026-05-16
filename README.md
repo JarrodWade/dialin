@@ -15,6 +15,7 @@ Log your beans, gear, and brews. Ask the bot for extraction advice grounded in y
 - **Dial-in advice** — surfaces your best brew for a given coffee+method, computes grind delta, ratio drift, and rating trend
 - **Taste preferences** — persistent memory (origins, processes, roasters, cafes, home city)
 - **Cafe recommendations** — city-aware, tiered confidence, no hallucination
+- **Coffee glossary** — curated drink, regional, and gear terms; **GET /glossary** and in-chat `lookup_coffee_term` share the same JSON
 
 ---
 
@@ -46,12 +47,23 @@ Browser  →  API Gateway (HTTP API; no JWT at edge)  →  Lambda verifies Clerk
 
 GSI1: `(GSI1PK, GSI1SK)` — brews keyed by `COFFEE#<id>`, visits keyed by `CAFE#<id>`
 
+### Validating the glossary
+
+Edits to `lambda/coffee_glossary.json` ship in the Lambda zip. Run:
+
+```bash
+make glossary-validate
+```
+
+This checks JSON syntax and duplicate normalized aliases (same rules as the lookup tool).
+
 ---
 
 ## API routes
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/glossary` | Public JSON of curated coffee terms (same file as LLM `lookup_coffee_term`) |
 | POST | `/chat` | LLM conversation with tool use |
 | GET / POST | `/roasters` | List / create roasters |
 | PATCH | `/roasters/{roasterId}` | Edit / retire a roaster |
@@ -84,6 +96,12 @@ GSI1: `(GSI1PK, GSI1SK)` — brews keyed by `COFFEE#<id>`, visits keyed by `CAFE
 | `add_cafe` / `list_cafes` / `update_cafe` | Cafe management |
 | `log_visit` / `list_visits` | Cafe visit log |
 | `get_preferences` / `update_preferences` | Persistent taste profile |
+| `lookup_coffee_term` | Curated glossary (drinks, regions, gear); same data as GET `/glossary` |
+| `search_web` | Live search (Tavily; e.g. Reddit for technique chatter) |
+| `retrieve_journal` | Semantic search over the user’s journal RAG chunks |
+| `get_youtube_transcript` | YouTube captions for tutorial links |
+
+*Full tool specs: [`lambda/tools.py`](lambda/tools.py).*
 
 ---
 
