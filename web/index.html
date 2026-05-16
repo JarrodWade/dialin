@@ -375,12 +375,25 @@
           <label>Roast level
             <select name="preferredRoastLevel">
               <option value="">—</option>
+              <option value="ultralight">ultralight (Nordic-style clarity)</option>
               <option value="light">light</option>
               <option value="medium-light">medium-light</option>
               <option value="medium">medium</option>
               <option value="medium-dark">medium-dark</option>
               <option value="dark">dark</option>
             </select>
+          </label>
+          <label>Experimental / co-ferment lots
+            <select name="experimentalPreference">
+              <option value="">— neutral</option>
+              <option value="open">open to them</option>
+              <option value="seek">actively seek them</option>
+            </select>
+          </label>
+          <label class="full">How you find coffee
+            <div class="chip-input-group" data-field="discoveryChannels">
+              <input class="chip-input" placeholder="subscription boxes, IG drops, Sprudge, cafés…" />
+            </div>
           </label>
           <label class="full">Preferred origins
             <div class="chip-input-group" data-field="preferredOrigins">
@@ -445,7 +458,7 @@
     <div id="toast" class="toast"></div>
 
     <script src="dialin-config.js"></script>
-    <script src="shared.js?v=5"></script>
+    <script src="shared.js?v=6"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
       const apiInput    = document.getElementById("api-base");
@@ -879,12 +892,15 @@
       }
 
       // ── preferences chip ──────────────────────────────────────────────────
-      const CHIP_FIELDS = ["preferredOrigins","preferredProcesses","favoriteRoasters","favoriteCafes","dislikedNotes"];
+      const CHIP_FIELDS = ["discoveryChannels","preferredOrigins","preferredProcesses","favoriteRoasters","favoriteCafes","dislikedNotes"];
 
       function renderPrefsChip(p) {
         const parts = [];
         if (p.homeCity)               parts.push(p.homeCity);
         if (p.preferredRoastLevel)    parts.push(p.preferredRoastLevel + " roasts");
+        if (p.experimentalPreference === "seek") parts.push("seeks experimental lots");
+        else if (p.experimentalPreference === "open") parts.push("open to experimental lots");
+        if (p.discoveryChannels?.length) parts.push(p.discoveryChannels.slice(0, 2).join(", "));
         if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.slice(0,3).join(", "));
         if (p.preferredProcesses?.length) parts.push(p.preferredProcesses.slice(0,2).join("/"));
         document.getElementById("prefs-chip-text").textContent =
@@ -924,6 +940,7 @@
           const p = data.profile || {};
           prefsForm.elements.homeCity.value = p.homeCity || "";
           prefsForm.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
+          prefsForm.elements.experimentalPreference.value = p.experimentalPreference || "";
           prefsForm.elements.notes.value = p.notes || "";
           CHIP_FIELDS.forEach(f => renderChipField(f, p[f] || []));
           openModal(prefsModal);
@@ -1037,6 +1054,7 @@
         if (homeCity)    body.homeCity = homeCity;
         if (roastLevel)  body.preferredRoastLevel = roastLevel;
         if (notes)       body.notes = notes;
+        body.experimentalPreference = (fd.get("experimentalPreference") || "").trim();
         CHIP_FIELDS.forEach(f => { body[f] = readChipField(f); });
         try {
           const data = await api("/profile", { method: "PATCH", body: authedJsonBody(body) });

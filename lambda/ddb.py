@@ -654,12 +654,14 @@ def update_equipment(
 _PROFILE_FIELDS = {
     "preferredOrigins",       # list[str]
     "preferredProcesses",     # list[str]
-    "preferredRoastLevel",    # str (light/medium/dark)
+    "preferredRoastLevel",    # str (light/medium/dark/ultralight)
     "dislikedNotes",          # list[str]
     "favoriteRoasters",       # list[str]
     "favoriteCafes",          # list[str]
     "homeCity",               # str
     "notes",                  # str (freeform memory)
+    "discoveryChannels",      # list[str] — how they find coffee (e.g. subscription boxes)
+    "experimentalPreference",  # str: "" | "open" | "seek" — taste for funky/co-ferment lots
 }
 
 

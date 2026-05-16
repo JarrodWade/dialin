@@ -342,7 +342,10 @@ function initPrefsChip(onLoad) {
       const data = await api(withLegacyUserQuery("/profile"));
       const p = data.profile || {};
       const parts = [];
-      if (p.preferredRoastLevel)   parts.push(p.preferredRoastLevel);
+      if (p.preferredRoastLevel)   parts.push(p.preferredRoastLevel + " roasts");
+      if (p.experimentalPreference === "seek") parts.push("seeks experimental lots");
+      else if (p.experimentalPreference === "open") parts.push("open to experimental lots");
+      if (p.discoveryChannels?.length) parts.push(p.discoveryChannels.slice(0, 2).join(", "));
       if (p.preferredOrigins?.length) parts.push(p.preferredOrigins.join(", "));
       if (p.homeCity)              parts.push("from " + p.homeCity);
       chipText.textContent = parts.length ? parts.join(" · ") : "Set your taste preferences →";
@@ -384,7 +387,8 @@ function initPrefsChip(onLoad) {
     const p = await loadPreferences();
     form.elements.homeCity.value = p.homeCity || "";
     form.elements.preferredRoastLevel.value = p.preferredRoastLevel || "";
-    ["preferredOrigins", "preferredProcesses", "favoriteRoasters", "favoriteCafes", "dislikedNotes"].forEach(f => populateChips(f, p[f]));
+    if (form.elements.experimentalPreference) form.elements.experimentalPreference.value = p.experimentalPreference || "";
+    ["discoveryChannels", "preferredOrigins", "preferredProcesses", "favoriteRoasters", "favoriteCafes", "dislikedNotes"].forEach(f => populateChips(f, p[f]));
     form.elements.notes.value = p.notes || "";
     openModal(modal);
   });
@@ -392,11 +396,12 @@ function initPrefsChip(onLoad) {
   document.getElementById("prefs-submit").addEventListener("click", async () => {
     const fd = new FormData(form);
     const body = {};
-    const chipFields = ["preferredOrigins", "preferredProcesses", "favoriteRoasters", "favoriteCafes", "dislikedNotes"];
+    const chipFields = ["discoveryChannels", "preferredOrigins", "preferredProcesses", "favoriteRoasters", "favoriteCafes", "dislikedNotes"];
     chipFields.forEach(f => { body[f] = getChips(f); });
     if (fd.get("homeCity"))             body.homeCity             = fd.get("homeCity").trim();
     if (fd.get("preferredRoastLevel"))  body.preferredRoastLevel  = fd.get("preferredRoastLevel");
     if (fd.get("notes"))                body.notes                = fd.get("notes").trim();
+    if (form.elements.experimentalPreference) body.experimentalPreference = (fd.get("experimentalPreference") || "").trim();
     try {
       await api("/profile", { method: "PATCH", body: authedJsonBody(body) });
       toast("Preferences saved");

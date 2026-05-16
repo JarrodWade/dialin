@@ -397,6 +397,24 @@
       "seeAlso": ["dial in"]
     },
     {
+      "aliases": ["curated coffee subscription", "coffee subscription box", "specialty coffee subscription", "coffee subscription", "coffee drops", "subscription coffee"],
+      "title": "Curated coffee subscription",
+      "body": "Rotating mail-order lots from one roaster or a marketplace—common on-ramp to Nordic-style clarity roasts, microlots, and limited drops without visiting every café. Freshness and shipping cadence still matter; rest days after delivery can calm CO2.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["co-fermentation coffee", "co ferment coffee", "co-ferment lot", "fruit co-ferment coffee", "wine yeast coffee process"],
+      "title": "Co-fermentation (processing)",
+      "body": "Cherries or mucilage fermented alongside another substrate or culture—cupping notes skew winey, tropical, or 'funky' versus classic washed cleanliness. Terminology on bags is still messy; taste before you buy if you want safe, terroir-straight profiles.",
+      "seeAlso": ["nordic-style coffee (denmark & scandinavia)"]
+    },
+    {
+      "aliases": ["ultralight roast", "ultra light roast", "ultra-light roast", "nordic light roast profile", "competition light roast"],
+      "title": "Ultralight roast",
+      "body": "Roast development lighter than typical 'light' third-wave defaults—more porcelain crack, higher acid and aromatic clarity, shorter total time in the drum. Often overlaps how people say 'Nordic' filter, but not every ultralight cup is Scandinavian and vice versa. Espresso can punish channel pockets harder than darker roasts.",
+      "seeAlso": ["nordic-style coffee (denmark & scandinavia)"]
+    },
+    {
       "aliases": ["breve"],
       "title": "Breve",
       "body": "Espresso with half-and-half instead of milk—richer and heavier. Less common outside US-style espresso bars.",

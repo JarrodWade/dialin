@@ -1038,8 +1038,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "get_preferences",
             "description": (
-                "Read the user's stored taste preferences and home city. "
-                "Call this before recommending coffees, roasters, or cafes."
+                "Read stored taste preferences, home city, discovery habits, and experimental openness. "
+                "Call before recommending coffees, roasters, or cafés. "
+                "Fields include preferredRoastLevel (may be ultralight), preferredProcesses, "
+                "discoveryChannels, experimentalPreference, and notes."
             ),
             "inputSchema": {"json": {"type": "object", "properties": {}}},
         }
@@ -1048,9 +1050,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "update_preferences",
             "description": (
-                "Persist things you learn about the user's taste so future "
-                "sessions remember them. Lists are merged (deduped); strings "
-                "replace. Use sparingly: only durable preferences, not one-off comments."
+                "Persist durable taste and discovery preferences so future sessions remember them. "
+                "Lists are merged (deduped); strings replace. "
+                "Use for roast philosophy, how they discover coffee (subscriptions, drops), openness to co-ferments, "
+                "origins/processes — not one-off brew comments."
             ),
             "inputSchema": {
                 "json": {
@@ -1058,12 +1061,31 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "properties": {
                         "preferredOrigins": {"type": "array", "items": {"type": "string"}},
                         "preferredProcesses": {"type": "array", "items": {"type": "string"}},
-                        "preferredRoastLevel": {"type": "string", "enum": ["light", "medium-light", "medium", "medium-dark", "dark"]},
+                        "preferredRoastLevel": {
+                            "type": "string",
+                            "enum": ["ultralight", "light", "medium-light", "medium", "medium-dark", "dark"],
+                        },
                         "dislikedNotes": {"type": "array", "items": {"type": "string"}},
                         "favoriteRoasters": {"type": "array", "items": {"type": "string"}},
                         "favoriteCafes": {"type": "array", "items": {"type": "string"}},
                         "homeCity": {"type": "string"},
                         "notes": {"type": "string"},
+                        "discoveryChannels": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "How they find coffee long-term: e.g. 'curated subscription boxes', "
+                                "'Instagram drops', 'local cafés only', 'direct from roasters'."
+                            ),
+                        },
+                        "experimentalPreference": {
+                            "type": "string",
+                            "enum": ["open", "seek"],
+                            "description": (
+                                "open = willing to try co-ferments / funky lots; seek = actively prefers them. "
+                                "Omit to leave neutral/classic-leaning unless user said otherwise."
+                            ),
+                        },
                     },
                 }
             },
