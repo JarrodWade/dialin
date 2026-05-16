@@ -542,6 +542,29 @@ def delete_brew(user_id: str, brew_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_equipment_name(name: str) -> str:
+    """Lowercase, strip, collapse whitespace — for deduping user-visible names."""
+    s = (name or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _find_active_equipment_same_name(
+    user_id: str,
+    equip_type: str,
+    name: str,
+) -> dict[str, Any] | None:
+    """If a non-archived item of this type already has the same normalized name, return it."""
+    want = _normalize_equipment_name(name)
+    if not want:
+        return None
+    et = equip_type.upper()
+    for item in list_equipment(user_id, equip_type=et, include_archived=False):
+        if _normalize_equipment_name(item.get("name") or "") == want:
+            return item
+    return None
+
+
 def create_equipment(
     user_id: str,
     equip_type: str,
@@ -554,6 +577,10 @@ def create_equipment(
     equip_type = equip_type.upper()
     if equip_type not in EQUIP_TYPES:
         raise ValueError(f"unknown equipType {equip_type!r}; one of {sorted(EQUIP_TYPES)}")
+
+    existing = _find_active_equipment_same_name(user_id, equip_type, name)
+    if existing:
+        return existing
 
     equip_id = _new_id("eq")
     created_at = _now_iso()

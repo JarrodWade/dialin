@@ -1015,7 +1015,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "add_equipment",
-            "description": "Add a piece of brewing gear.",
+            "description": (
+                "Add brewing gear. If the user already has active gear of the same type with the same name "
+                "(ignoring case/spacing), the existing item is reused — no duplicate row."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",

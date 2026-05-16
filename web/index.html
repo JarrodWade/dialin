@@ -1001,7 +1001,11 @@
         } catch (err) { toast(err.message, true); }
       });
 
+      const equipSubmitBtn = document.getElementById("equip-submit");
       document.getElementById("equip-submit").addEventListener("click", async () => {
+        if (equipSubmitBtn.dataset.saving === "1") return;
+        equipSubmitBtn.dataset.saving = "1";
+        equipSubmitBtn.disabled = true;
         const fd = new FormData(equipForm);
         const body = {};
         for (const [k, v] of fd.entries()) { if (v) body[k] = v; }
@@ -1021,6 +1025,10 @@
             _pendingGearSelectField = null;
           }
         } catch (err) { toast(err.message, true); }
+        finally {
+          equipSubmitBtn.dataset.saving = "0";
+          equipSubmitBtn.disabled = false;
+        }
       });
 
       document.getElementById("roaster-submit").addEventListener("click", async () => {
