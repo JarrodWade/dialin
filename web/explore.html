@@ -672,16 +672,19 @@
         }
         visitListEl.innerHTML = "";
         items.forEach((v) => {
-          let placeName = v.placeName;
-          if (!placeName && v.cafeId) {
-            const c = _cafeCache.find(c => c.cafeId === v.cafeId);
+          // Prefer current cafe/roaster names so update_cafe / update_roaster renames
+          // show immediately; fall back to stored placeName if the entity is missing
+          // from cache (e.g. deleted row) or lists haven't loaded yet.
+          let placeName = null;
+          if (v.cafeId) {
+            const c = _cafeCache.find((x) => x.cafeId === v.cafeId);
             placeName = c ? c.name : null;
           }
           if (!placeName && v.roasterId) {
-            const r = _roasterCache.find(r => r.roasterId === v.roasterId);
+            const r = _roasterCache.find((x) => x.roasterId === v.roasterId);
             placeName = r ? r.name : null;
           }
-          placeName = placeName || v.cafeId || v.roasterId || "Unknown place";
+          placeName = placeName || v.placeName || v.cafeId || v.roasterId || "Unknown place";
           const row = document.createElement("div");
           row.className = "visit-row";
           row.innerHTML = `
