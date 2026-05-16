@@ -534,6 +534,22 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
     if not name:
         return _response(400, {"error": "name required"})
     if not body.get("skipDuplicateCheck"):
+        cafe_dup = ddb.find_matching_existing_cafe_by_place(user_id, name, body.get("city"))
+        if cafe_dup:
+            return _response(
+                409,
+                {
+                    "code": "DUPLICATE_PLACE",
+                    "error": (
+                        f'You already track "{cafe_dup.get("name", name)}" as a cafe. '
+                        "Log visits on that cafe or edit it instead of adding twice "
+                        '(or skip duplicate check to create another entry anyway).'
+                    ),
+                    "existingType": "cafe",
+                    "existingId": cafe_dup["cafeId"],
+                    "existingName": cafe_dup.get("name"),
+                },
+            )
         hit = ddb.find_matching_roaster_for_new_cafe(user_id, name, body.get("city"))
         if hit:
             return _response(
