@@ -7,6 +7,9 @@ tokens without ``aud`` (Clerk default) still work.
 
 Routes (representative):
 
+  GET  /glossary
+      -> returns coffee_glossary.json (public; used by UI + same data as lookup_coffee_term)
+
   POST /chat
       body: {message, history?: [{role: "USER"|"BOT", text}]}  (+ legacy userId)
       -> calls Bedrock with tools, returns {reply, history}
@@ -148,6 +151,23 @@ def _user_id(event: dict[str, Any]) -> str:
         if legacy:
             return legacy
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Public glossary
+# ---------------------------------------------------------------------------
+
+
+def _handle_get_glossary(_event: dict[str, Any]) -> dict[str, Any]:
+    """Return curated coffee terms (``coffee_glossary.json``). Same payload the LLM uses via tools; no auth."""
+    path = os.path.join(os.path.dirname(__file__), "coffee_glossary.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        logger.exception("coffee_glossary.json read failed")
+        return _response(500, {"error": "glossary unavailable"})
+    return _response(200, data)
 
 
 # ---------------------------------------------------------------------------
@@ -632,6 +652,7 @@ def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
 
 
 _ROUTES = {
+    "GET /glossary": _handle_get_glossary,
     "POST /chat": _handle_chat,
     "GET /roasters": _handle_list_roasters,
     "POST /roasters": _handle_create_roaster,

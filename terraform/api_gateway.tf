@@ -20,6 +20,7 @@ resource "aws_apigatewayv2_integration" "lambda" {
 
 locals {
   api_routes = [
+    "GET /glossary",
     "POST /chat",
     "GET /roasters",
     "POST /roasters",
