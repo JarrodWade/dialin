@@ -189,6 +189,7 @@
         <span class="edit">edit</span>
       </button>
       <button id="refresh">Refresh</button>
+      <button type="button" id="glossary-btn" class="ghost">Terms</button>
       <button id="reset" class="ghost">Clear chat</button>
     </header>
 
@@ -444,7 +445,7 @@
     <div id="toast" class="toast"></div>
 
     <script src="dialin-config.js"></script>
-    <script src="shared.js"></script>
+    <script src="shared.js?v=5"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
       const apiInput    = document.getElementById("api-base");
@@ -1066,6 +1067,7 @@
         if (bg === roasterModal)  { _pendingRoasterSelectField = null; resetRoasterModal(); }
         if (bg === brewEditModal) _editingBrewId = null;
       });
+      initCoffeeGlossary("glossary-btn");
 
       document.getElementById("add-coffee-btn").addEventListener("click", () => openModal(coffeeModal));
       document.getElementById("add-brew-btn").addEventListener("click",   () => openModal(brewModal));

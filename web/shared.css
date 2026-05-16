@@ -228,3 +228,81 @@ header button.ghost {
 .toast.error { border-color: var(--bad); color: var(--bad); }
 
 code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+/* ── glossary modal (shared.js) ───────────────────────────────────────── */
+.glossary-modal.modal {
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.glossary-hint {
+  margin: -8px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.glossary-hint small {
+  display: block;
+  margin-top: 6px;
+}
+#glossary-search {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+}
+.glossary-list {
+  max-height: min(52vh, 400px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  flex: 1;
+  min-height: 120px;
+}
+.glossary-entry {
+  border-bottom: 1px dashed var(--line);
+}
+.glossary-entry:last-child {
+  border-bottom: none;
+}
+.glossary-entry summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  list-style: none;
+}
+.glossary-entry summary::-webkit-details-marker {
+  display: none;
+}
+.glossary-entry[open] summary {
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
+}
+.glossary-body {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.glossary-see {
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.glossary-loading,
+.glossary-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.glossary-empty.error {
+  color: var(--bad);
+}

@@ -407,3 +407,104 @@ function initPrefsChip(onLoad) {
 
   return loadPreferences;
 }
+
+/* ── coffee glossary modal (GET /glossary) ─────────────────────────────── */
+
+let _glossaryJsonCache = null;
+let _glossaryEntriesCached = null;
+
+async function fetchGlossaryJson() {
+  if (_glossaryJsonCache) return _glossaryJsonCache;
+  const data = await api("/glossary", { method: "GET" });
+  _glossaryJsonCache = data;
+  _glossaryEntriesCached = Array.isArray(data.entries) ? data.entries : [];
+  return data;
+}
+
+function ensureGlossaryModal() {
+  let modal = document.getElementById("glossary-modal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "glossary-modal";
+  modal.className = "modal-bg glossary-modal-bg";
+  modal.innerHTML = `
+    <div class="modal glossary-modal" role="dialog" aria-labelledby="glossary-title">
+      <h3 id="glossary-title">Coffee terms</h3>
+      <p class="glossary-hint">Curated drinks, regions, and gear — same list the bot uses. <small>For threads and shop specifics, ask in chat (incl. Reddit search).</small></p>
+      <input type="search" id="glossary-search" placeholder="Filter… e.g. WDT, flat white, kopitiam" autocomplete="off" />
+      <div id="glossary-list" class="glossary-list"></div>
+      <div class="modal-actions"><button type="button" data-glossary-close>Close</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+  const inner = modal.querySelector(".glossary-modal");
+  inner.addEventListener("click", (e) => e.stopPropagation());
+  modal.addEventListener("click", () => closeModal(modal));
+  modal.querySelector("[data-glossary-close]").addEventListener("click", () => closeModal(modal));
+  return modal;
+}
+
+function renderGlossaryList(entries, q) {
+  const list = document.getElementById("glossary-list");
+  const needle = (q || "").toLowerCase().trim();
+  const filtered = !needle
+    ? entries
+    : entries.filter((ent) => {
+        const aliasStr = (ent.aliases || []).join(" ");
+        const seeStr = (ent.seeAlso || []).join(" ");
+        const hay = `${ent.title || ""} ${ent.body || ""} ${aliasStr} ${seeStr}`.toLowerCase();
+        return hay.includes(needle);
+      });
+  list.innerHTML = "";
+  if (!filtered.length) {
+    list.innerHTML = '<div class="glossary-empty">No matches.</div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  filtered.forEach((ent) => {
+    const det = document.createElement("details");
+    det.className = "glossary-entry";
+    const sum = document.createElement("summary");
+    sum.textContent = ent.title || "";
+    det.appendChild(sum);
+    const body = document.createElement("div");
+    body.className = "glossary-body";
+    body.textContent = ent.body || "";
+    det.appendChild(body);
+    if (ent.seeAlso && ent.seeAlso.length) {
+      const see = document.createElement("div");
+      see.className = "glossary-see";
+      see.textContent = `See also: ${ent.seeAlso.join(", ")}`;
+      det.appendChild(see);
+    }
+    frag.appendChild(det);
+  });
+  list.appendChild(frag);
+}
+
+async function openCoffeeGlossary() {
+  const modal = ensureGlossaryModal();
+  const listEl = document.getElementById("glossary-list");
+  const searchEl = document.getElementById("glossary-search");
+  openModal(modal);
+  if (!_glossaryEntriesCached) {
+    listEl.innerHTML = '<div class="glossary-loading">Loading…</div>';
+    try {
+      await fetchGlossaryJson();
+    } catch (err) {
+      listEl.innerHTML = `<div class="glossary-empty error">${escapeHtml(err.message || "Failed to load")}</div>`;
+      return;
+    }
+  }
+  if (!searchEl.dataset.wired) {
+    searchEl.dataset.wired = "1";
+    searchEl.addEventListener("input", () => renderGlossaryList(_glossaryEntriesCached, searchEl.value));
+  }
+  renderGlossaryList(_glossaryEntriesCached, searchEl.value);
+}
+
+/** Wire header button #glossary-btn to open the glossary modal. */
+function initCoffeeGlossary(buttonId) {
+  const btn = document.getElementById(buttonId || "glossary-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => { openCoffeeGlossary().catch((e) => toast(e.message, true)); });
+}

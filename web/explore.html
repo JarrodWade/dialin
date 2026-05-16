@@ -141,6 +141,7 @@
         <span class="edit">edit</span>
       </button>
       <button id="refresh">Refresh</button>
+      <button type="button" id="glossary-btn" class="ghost">Terms</button>
     </header>
 
     <div class="explore-body">
@@ -302,7 +303,7 @@
     <div id="toast" class="toast"></div>
 
     <script src="dialin-config.js"></script>
-    <script src="shared.js?v=4"></script>
+    <script src="shared.js?v=5"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
       const apiInput    = document.getElementById("api-base");
@@ -790,6 +791,7 @@
         if (bg === placeModal) resetPlaceModal();
         if (bg === dupPlaceModal) _dupContext = null;
       });
+      initCoffeeGlossary("glossary-btn");
 
       document.getElementById("refresh").addEventListener("click", loadAll);
 
