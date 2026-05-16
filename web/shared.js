@@ -65,13 +65,43 @@ function apiBase() {
   return v;
 }
 
+/** Wait for Clerk to attach a Session after sign-in / reload (SDK can lag behind `user`). */
+async function _awaitClerkSession(maxMs = 4000) {
+  const c = window.__clerk;
+  if (!c) return;
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    if (c.session) return;
+    if (c.loaded && !c.user) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 async function _authHeaders() {
   const h = {};
-  if (!clerkConfigured() || !window.__clerk?.session) return h;
+  if (!clerkConfigured() || !window.__clerk) return h;
+  const c = window.__clerk;
+  if (!c.user) return h;
+  await _awaitClerkSession(4000);
+  const sess = c.session;
+  if (!sess) {
+    console.warn("Clerk: no session after wait — API call will be unauthenticated");
+    return h;
+  }
   try {
-    const t = await window.__clerk.session.getToken();
+    if (typeof c.getToken === "function") {
+      const t = await c.getToken();
+      if (t) {
+        h.authorization = `Bearer ${t}`;
+        return h;
+      }
+    }
+    const t = await sess.getToken();
     if (t) h.authorization = `Bearer ${t}`;
-  } catch (_) { /* session not ready */ }
+    else console.warn("Clerk getToken() returned null");
+  } catch (e) {
+    console.warn("Clerk getToken() failed:", e);
+  }
   return h;
 }
 
@@ -128,19 +158,35 @@ async function initDialinAuth() {
     window.__clerk = clerk;
 
     const mountEl = document.getElementById("clerk-mount");
+    let _wasSignedIn = !!clerk.user;
+
     function renderAuth() {
       if (!mountEl) return;
       mountEl.innerHTML = "";
       if (clerk.user) {
         clerk.mountUserButton(mountEl);
+        if (!_wasSignedIn) {
+          _wasSignedIn = true;
+          window.dispatchEvent(new CustomEvent("dialin:signed-in"));
+        }
       } else {
+        _wasSignedIn = false;
         clerk.mountSignIn(mountEl, { routing: "hash" });
       }
     }
-    renderAuth();
-    clerk.addListener(renderAuth);
 
-    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "clerk" } }));
+    function onClerkResourceUpdate() {
+      renderAuth();
+      const api = document.getElementById("api-base")?.value?.trim();
+      if (clerk.session && api) {
+        window.dispatchEvent(new CustomEvent("dialin:clerk-session-ready"));
+      }
+    }
+
+    onClerkResourceUpdate();
+    clerk.addListener(onClerkResourceUpdate);
+
+    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "clerk", signedIn: !!clerk.user } }));
   } catch (e) {
     console.error(e);
     toast("Clerk failed to load — check publishable key", true);
@@ -226,10 +272,35 @@ function initSharedInputs(onApiChange, onUserChange) {
   }
 
   apiInput.addEventListener("input", () => localStorage.setItem("dialin.apiBase", apiInput.value.trim()));
-  apiInput.addEventListener("change", () => { if (onApiChange) onApiChange(); });
+
+  /** Debounced: load data once API URL is set and (legacy OR Clerk has a session). */
+  let _dataLoadTimer = null;
+  function scheduleDataLoad() {
+    clearTimeout(_dataLoadTimer);
+    _dataLoadTimer = setTimeout(() => {
+      _dataLoadTimer = null;
+      if (!apiInput.value.trim()) return;
+      if (clerkConfigured() && !window.__clerk?.session) return;
+      if (onApiChange) onApiChange();
+    }, 120);
+  }
+
+  apiInput.addEventListener("change", scheduleDataLoad);
+
+  window.addEventListener("dialin:signed-in", scheduleDataLoad);
+  window.addEventListener("dialin:clerk-session-ready", scheduleDataLoad);
 
   initDialinAuth().then(() => {
-    if (onApiChange) onApiChange();
+    if (!clerkConfigured()) {
+      scheduleDataLoad();
+      return;
+    }
+    if (!window.__clerk?.session) {
+      console.info(
+        "[dialin] Clerk: no session yet — journal API calls are skipped until you sign in (then you will see GET /coffees etc. in Network)."
+      );
+    }
+    scheduleDataLoad();
   });
 }
 
