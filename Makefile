@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag
+.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate
 
 ARGS ?=
 
@@ -12,6 +12,9 @@ fmt:
 
 validate:
 	$(TF) validate
+
+glossary-validate:
+	@python3 "$(CURDIR)/scripts/validate_glossary.py"
 
 plan:
 	$(TF) plan
