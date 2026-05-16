@@ -1,0 +1,178 @@
+{
+  "entries": [
+    {
+      "aliases": ["one and one", "one & one", "1 and 1", "one-and-one", "one on one coffee"],
+      "title": "One and one",
+      "body": "In many US third-wave / specialty shops, a one-and-one is a single espresso split into two small serves side by side—most often one straight espresso and one classic macchiato (shot plus a dab of foamed milk)—so you taste the same extraction black and with a touch of milk. It is not 'a shot next to a cup of plain hot water' (that is closer to how some shops serve deconstructed Americano-style drinks, but that is a different idea). Menus are inconsistent; when unsure, ask the barista what theirs includes.",
+      "seeAlso": ["espresso macchiato", "cortado"]
+    },
+    {
+      "aliases": ["gibraltar", "gibralter"],
+      "title": "Gibraltar",
+      "body": "A specialty-cafe drink served in a Libbey 'Gibraltar' rocks glass (~4.5 oz): typically a short espresso-and-milk drink between a cortado and a small latte, with proportion depending on the shop. Popularized by Blue Bottle; other cafes may use the name for similar-sized milk drinks.",
+      "seeAlso": ["cortado", "flat white"]
+    },
+    {
+      "aliases": ["cortado"],
+      "title": "Cortado",
+      "body": "Espresso 'cut' with a roughly equal amount of steamed milk (Spanish/Latin tradition). Foam is minimal compared to cappuccino; size is small. Ratios and glassware differ by shop.",
+      "seeAlso": ["gibraltar", "piccolo"]
+    },
+    {
+      "aliases": ["piccolo latte", "piccolo"],
+      "title": "Piccolo",
+      "body": "Australian specialty format: ristretto (or short shot) topped with steamed milk in a small glass—like a mini latte emphasizing sweetness and strength. Not standardized everywhere outside AU/NZ-style shops.",
+      "seeAlso": ["flat white", "cortado"]
+    },
+    {
+      "aliases": ["flat white"],
+      "title": "Flat white",
+      "body": "Espresso with velvety microfoam milk; traditionally served in a smaller cup than a latte with a higher coffee-to-milk ratio in AU/NZ. In the US the name is looser and often overlaps latte or cappuccino—expect variance.",
+      "seeAlso": ["latte", "cortado"]
+    },
+    {
+      "aliases": ["latte"],
+      "title": "Latte (café latte)",
+      "body": "Espresso with a larger volume of steamed milk and a thin layer of microfoam. Size and strength vary enormously by café (8–16 oz+). Not the same as a flat white in places that distinguish them.",
+      "seeAlso": ["flat white", "cappuccino"]
+    },
+    {
+      "aliases": ["cappuccino"],
+      "title": "Cappuccino",
+      "body": "Traditionally equal-ish thirds of espresso, steamed milk, and foam (Italian idea); third-wave shops often use wetter microfoam and smaller volumes. 'Dry' means more foam; 'wet' means milkier, closer to a latte.",
+      "seeAlso": ["latte", "macchiato"]
+    },
+    {
+      "aliases": ["long black"],
+      "title": "Long black",
+      "body": "Australian/New Zealand style: hot water in the cup first, then espresso pulled on top—keeps more aromatics/crema than pouring water onto espresso. Different from Americano order-of-pouring in many US shops.",
+      "seeAlso": ["americano"]
+    },
+    {
+      "aliases": ["americano"],
+      "title": "Americano",
+      "body": "Espresso diluted with hot water to drip-coffee-like strength. Order of water vs espresso varies; flavor differs slightly from long black for that reason. Strength depends on shot count and water volume.",
+      "seeAlso": ["long black"]
+    },
+    {
+      "aliases": ["espresso macchiato", "macchiato", "traditional macchiato"],
+      "title": "Espresso macchiato",
+      "body": "'Stained' espresso: a single or double shot marked with a small amount of milk foam (Italian classic). Not the same as a Starbucks-style caramel latte macchiato (layered milk + espresso).",
+      "seeAlso": ["latte macchiato", "one and one"]
+    },
+    {
+      "aliases": ["latte macchiato"],
+      "title": "Latte macchiato",
+      "body": "Steamed milk drink 'stained' with espresso poured last—layered appearance, milk-forward. Differs from espresso macchiato (coffee-forward). Chains sometimes overload the word 'macchiato'; clarify milk-heavy vs espresso-heavy.",
+      "seeAlso": ["espresso macchiato", "latte"]
+    },
+    {
+      "aliases": ["ristretto", "lungo", "long shot espresso"],
+      "title": "Ristretto and lungo",
+      "body": "Ristretto: shorter yield from the same puck (more concentrated, often sweeter). Lungo: longer yield (more water through the puck, thinner/bitterness risk). Both are espresso modifications; exact volumes are café-specific.",
+      "seeAlso": ["espresso"]
+    },
+    {
+      "aliases": ["red eye", "shot in the dark", "eye opener"],
+      "title": "Red eye",
+      "body": "Drip or batch-brewed coffee with a shot of espresso added—stronger caffeine hit. 'Black eye' / 'dead eye' slang usually means two or three shots respectively (names vary).",
+      "seeAlso": ["americano"]
+    },
+    {
+      "aliases": ["black eye coffee"],
+      "title": "Black eye",
+      "body": "Usually batch coffee plus two espresso shots (proverbially two 'eyes'); exact naming differs by shop. If ordering, confirm how many shots they include.",
+      "seeAlso": ["red eye"]
+    },
+    {
+      "aliases": ["dead eye coffee"],
+      "title": "Dead eye",
+      "body": "Slang for batch coffee with three shots in many US shops; not universal. Order by 'coffee plus number of shots' if you want precision.",
+      "seeAlso": ["red eye"]
+    },
+    {
+      "aliases": ["affogato"],
+      "title": "Affogato",
+      "body": "Espresso poured over gelato or ice cream—dessert course as much as drink. Some cafés serve it in a demitasse with a tiny scoop.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["shakerato", "caffe shakerato"],
+      "title": "Shakerato",
+      "body": "Italian summer drink: freshly pulled espresso, ice, and often simple syrup shaken until frothy—served cold in a stemmed glass. Sweetness optional.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["espresso tonic", "cafe tonic", "tonic espresso"],
+      "title": "Espresso tonic",
+      "body": "Espresso (often single or double) over tonic water and ice—bright, aromatic, bubbly. Ratios and citrus garnish vary; order 'espresso tonic' to avoid confusion with cola-based drinks.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["magic coffee", "australian magic"],
+      "title": "Magic (Australian)",
+      "body": "Melbourne-area specialty drink: double ristretto (~same volume as a single normale) topped with silky milk in a ~5–6 oz cup—stronger and shorter than a flat white in shops that honor the name. Rarely standardized outside AU-style cafés.",
+      "seeAlso": ["flat white", "piccolo"]
+    },
+    {
+      "aliases": ["cafe bonbon", "café bonbon", "bombon coffee"],
+      "title": "Café bonbon",
+      "body": "Spanish drink: unsweetened espresso layered over sweetened condensed milk in a glass—stir before drinking. Sweet and dessert-like.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["dirty chai", "dirty coffee"],
+      "title": "Dirty chai",
+      "body": "Chai latte with a shot (or two) of espresso added—'dirty' signals espresso. 'Dirty coffee' without context may mean different things; specify chai vs mocha etc.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["wet cappuccino", "dry cappuccino"],
+      "title": "Wet vs dry cappuccino",
+      "body": "'Dry' cappuccino emphasizes thick microfoam. 'Wet' cappuccino has more liquid milk and less foam—closer to a flat white or small latte depending on the barista.",
+      "seeAlso": ["cappuccino"]
+    },
+    {
+      "aliases": ["batch brew", "batch brew coffee", "filter coffee"],
+      "title": "Batch brew / filter coffee",
+      "body": "Drip-style coffee made in a machine or automated brewer in larger batches (not single-serve pour-over). Often rotating single-origin in specialty shops. 'Filter coffee' may also mean any paper-filter brew including manual pour-over—context matters.",
+      "seeAlso": ["pour over"]
+    },
+    {
+      "aliases": ["pour over", "pour-over", "hand pour"],
+      "title": "Pour-over",
+      "body": "Manually brewed filter coffee (V60, Kalita, Chemex, etc.)—barista controls bloom, pours, and time. Distinct from batch brew for service and flavor profile.",
+      "seeAlso": ["batch brew"]
+    },
+    {
+      "aliases": ["iced latte", "iced coffee"],
+      "title": "Iced latte vs iced coffee",
+      "body": "Iced latte: espresso + cold milk over ice. Iced coffee often means cold batch brew or drip chilled—not necessarily containing espresso unless specified. Shop labels vary.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["cold brew"],
+      "title": "Cold brew",
+      "body": "Coffee steeped cold for many hours, then filtered—low acid, smooth, usually higher TDS concentrate diluted to taste. Not the same as hot-brewed coffee chilled (iced coffee).",
+      "seeAlso": ["iced coffee"]
+    },
+    {
+      "aliases": ["breve"],
+      "title": "Breve",
+      "body": "Espresso with half-and-half instead of milk—richer and heavier. Less common outside US-style espresso bars.",
+      "seeAlso": ["latte"]
+    },
+    {
+      "aliases": ["mocha", "caffè mocha", "cafe mocha"],
+      "title": "Caffè mocha",
+      "body": "Espresso, chocolate (syrup or real cocoa), and steamed milk—often topped with whipped cream in chains. Strength and sweetness vary widely.",
+      "seeAlso": []
+    },
+    {
+      "aliases": ["breve latte"],
+      "title": "Breve latte",
+      "body": "Same idea as breve: half-and-half replaces milk in a milk-based espresso drink. Calorie-dense; texture is thick.",
+      "seeAlso": ["breve", "latte"]
+    }
+  ]
+}

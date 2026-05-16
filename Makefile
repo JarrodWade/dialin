@@ -36,7 +36,8 @@ lambda-bundle:
 	    --implementation cp \
 	    --only-binary=:all: \
 	    && rm -rf "$$ROOT/build/youtube_transcript_api/test" \
-	    && cp "$$ROOT"/*.py "$$ROOT/build/"
+	    && cp "$$ROOT"/*.py "$$ROOT/build/" \
+	    && cp "$$ROOT/coffee_glossary.json" "$$ROOT/build/"
 
 deploy-lambda: lambda-bundle
 	@FUNC=$$($(TF) output -raw lambda_function_name); \

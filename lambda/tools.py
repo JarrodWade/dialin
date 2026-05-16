@@ -29,6 +29,64 @@ _WEBSEARCH_MONTHLY_LIMIT = int(os.environ.get("WEBSEARCH_MONTHLY_LIMIT_PER_USER"
 
 
 # ---------------------------------------------------------------------------
+# Curated drink / menu glossary (coffee_glossary.json, shipped in Lambda zip)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_glossary_query(s: str) -> str:
+    s = (s or "").lower().strip()
+    s = s.replace("&", " and ")
+    for ch in "‐–—":
+        s = s.replace(ch, "-")
+    s = s.replace("-", " ")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _load_coffee_glossary_index() -> dict[str, dict[str, Any]]:
+    path = os.path.join(os.path.dirname(__file__), "coffee_glossary.json")
+    index: dict[str, dict[str, Any]] = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        _LOGGER.warning("coffee_glossary.json missing or invalid: %s", e)
+        return index
+    for ent in raw.get("entries", []):
+        title = (ent.get("title") or "").strip()
+        body = (ent.get("body") or "").strip()
+        see_also = ent.get("seeAlso") or []
+        if not title or not body:
+            continue
+        rec = {"title": title, "body": body, "seeAlso": see_also}
+        for al in ent.get("aliases", []):
+            k = _normalize_glossary_query(str(al))
+            if k and k not in index:
+                index[k] = rec
+    return index
+
+
+_COFFEE_GLOSSARY_INDEX = _load_coffee_glossary_index()
+
+
+def _lookup_coffee_term(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    _ = user_id
+    q = _normalize_glossary_query(str(args.get("term", "")))
+    if not q:
+        return {"found": False, "message": "Provide a non-empty term to look up."}
+    if q in _COFFEE_GLOSSARY_INDEX:
+        hit = _COFFEE_GLOSSARY_INDEX[q]
+        return {"found": True, "title": hit["title"], "body": hit["body"], "seeAlso": hit["seeAlso"]}
+    return {
+        "found": False,
+        "message": (
+            "No curated glossary hit for that exact wording. Try the core drink name only, "
+            "or call search_web for live menu/regional variants."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Implementations (each takes the user_id + the model-supplied args dict)
 # ---------------------------------------------------------------------------
 
@@ -1051,6 +1109,29 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "toolSpec": {
+            "name": "lookup_coffee_term",
+            "description": (
+                "Curated short definitions for confusing drink names, menu jargon, and specialty-cafe terms "
+                "(e.g. one-and-one, Gibraltar, long black vs americano). "
+                "Call first for 'what is X' when X is likely a drink or bar term. "
+                "If found is false or the user needs regional/shop-specific nuance, use search_web (rule 3d)."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["term"],
+                    "properties": {
+                        "term": {
+                            "type": "string",
+                            "description": "Drink or term as the user said it (e.g. 'one and one', 'Gibraltar').",
+                        },
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
             "name": "update_brew",
             "description": (
                 "Edit a logged brew. Use when the user corrects a brew they already logged "
@@ -1371,6 +1452,7 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "update_preferences": _update_preferences,
     "summarize_coffee": _summarize_coffee,
     "retrieve_journal": _retrieve_journal,
+    "lookup_coffee_term": _lookup_coffee_term,
 }
 
 
