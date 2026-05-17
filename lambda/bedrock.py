@@ -2,6 +2,9 @@
 
 The model can call any tool registered in `tools.py`. We loop until
 either the model stops asking for tool calls or we hit MAX_TOOL_ITERATIONS.
+
+Trip-style café discovery uses a sizable Trip place discovery appendix only
+when heuristic routing detects that intent, so unconditional system text stays lean.
 """
 
 from __future__ import annotations
@@ -120,6 +123,159 @@ def chat_clock_system_text(
         f"  - impliedLastSunday: {last_sun}\n"
     )
 
+
+# ---------------------------------------------------------------------------
+# Trip discovery appendix (conditional router — trims core prompt defaults)
+# ---------------------------------------------------------------------------
+
+_APPENDIX_TRIP_PLACE_DISCOVERY = (
+    "Appendix — Trip place discovery (only when attached). "
+    "Use for open-ended where-should-I-drink-in-[place] questions, itineraries, or scouting a new café city; "
+    "if they mainly want to log a §2d named café visit, §2d wins — do not derail.\n\n"
+    "Mandatory process:\n"
+    "  Step 1 — check the user's own data: call list_cafes with a city filter. "
+    "Prioritise any place they've already visited and rated highly.\n"
+    "  Step 2 — live search when discovery needs fresh intel: call search_web before naming "
+    "*new* venues the user has not logged — especially new cities, international destinations, "
+    "'what's open / good now', verifying a specific shop name, or checking whether a place is "
+    "still operating. You have NO access to live Google Maps hours, 'open now', or closure "
+    "banners; training data is often stale. For each shop you might recommend from memory, run "
+    "a targeted search_web (shop name + city + 'closed' OR 'hours' OR 'Instagram' OR year) and "
+    "drop or deprioritise anything that looks temporarily closed, renovating, moved, or ended. "
+    "If search is inconclusive, say so — do not assert the shop is open. Results are cached server-side "
+    "for identical queries; prefer one broad query plus an optional reddit-focused follow-up only "
+    "if the first pass is thin. Skip search_web here when the user's ask is purely 'only from "
+    "my saved cafes' — but community brew/gear chatter still uses Reddit via search_web elsewhere.\n"
+    "  Step 3 — filter results through these tiers:\n"
+    "  TIER 1 (must-match): Is it a genuine specialty/3rd-wave shop with trained "
+    "baristas and sourced single-origins? Generic coffee chains or commodity shops "
+    "are disqualified. Confirm this before mentioning a shop.\n"
+    "  TIER 2 (primary fit): Match the user's preferred brew method from preferences. "
+    "If they prefer pour-over / filter — prioritise shops with a dedicated filter bar "
+    "and rotating single-origins on batch or manual brew. If they prefer espresso — "
+    "prioritise shops known for dialled-in espresso, latte art, and milk drinks. "
+    "Mention brew-method fit explicitly in the recommendation.\n"
+    "  TIER 3 (secondary fit): Classic execution vs experimental/progressive. "
+    "A 'classic' shop is consistent, approachable, well-dialled. An 'experimental' "
+    "shop chases rare lots, novel processes, unusual brew ratios. Match to user taste "
+    "signals from preferences.\n"
+    "  TIER 4 (tiebreaker): Processing style — align with preferredProcesses from "
+    "get_preferences (e.g. washed, natural, honey, anaerobic, co-ferment). For a clean/washed palate, "
+    "favour shops that regularly feature washed lots with clarity and structure (any origin). "
+    "For fruit-forward or ferment-forward tastes, favour shops that stock naturals, honeys, "
+    "or experimental lots. Mention only if it adds signal.\n"
+    "  Location & addresses: Lead with shop name plus neighborhood, district, or area "
+    "(or 'near [landmark/transit]' when search or the user's saved data gives it). "
+    "Only give a full street address when it is clearly present in list_cafes / list_roasters "
+    "tool output or in live search_web results you are paraphrasing — never invent or memorize "
+    "street numbers from training. If no verified address, say plainly to search "
+    "'[shop name] [city]' on Google Maps (or their Instagram) for the pin and hours.\n"
+    "  Confidence rules:\n"
+    "  a) Shops surfaced by live search with multiple community mentions AND no recent "
+    "closure/renovation signals — recommend with confidence, citing the source signal "
+    "(e.g. 'well-regarded on r/coffee').\n"
+    "  b) Shops from search with only one mention, old posts, OR any hint of temporary closure, "
+    "renovation, or moving — do not treat as a sure bet: "
+    "'[shop] came up but verify they're open — check Maps/Instagram before you go.' "
+    "If search says closed or 'temporarily closed', do NOT recommend as a primary visit; "
+    "name alternatives or ask the user to confirm.\n"
+    "  c) If the user names a specific shop — run a targeted search_web for it "
+    "(include 'closed' / city's subreddit) before you endorse it, then confirm tier 1 status "
+    "or flag uncertainty.\n"
+    "  d) If search returns no useful results and you have no strong training-data "
+    "knowledge, say so and suggest Google Maps for 'specialty coffee' or sca.coffee. "
+    "NEVER invent shop names.\n"
+    "  e) Trip-planning closure hygiene: whenever you list shops for a future visit, end with "
+    "one reminder: hours and closures change — confirm on Google Maps or the shop's socials "
+    "the same week you travel.\n"
+)
+
+_TRIP_APPENDIX_DUAL_INTENT_GUARD = re.compile(
+    r"\b(?:cafes?\s+in|coffee\s+shops?\s+in|coffee\s+scene|where\s+(?:should|to)\s+"
+    r"(?:drink|go|hit|grab)|itinerary|planning\s+a\s+trip)\b",
+    re.IGNORECASE,
+)
+_LOG_VISIT_PHRASE = re.compile(
+    r"\b(?:log|record|save)\s+(?:a\s+|my\s+|the\s+)?(?:cafe\s+)?visit\b",
+    re.IGNORECASE,
+)
+_APPENDIX_TRIGGERS_SIMPLE = (
+    r"\bcafes?\s+in\b",
+    r"\bcoffee\s+shops?\s+in\b",
+    r"\bcoffee\s+scene\b",
+    r"\bcoffee\s+culture\b",
+    r"\bitinerary\b",
+    r"\bplanning\s+a\s+(?:trip|vacation)\b",
+    r"\b(?:must\s*-?\s*visit|must\s+visit)\b",
+    r"\bwhere\s+(?:should|would|could|can)\s+i\s+(?:go|drink|stop|grab|hit|caffeinate)\b",
+)
+_TRAVEL_PLACE_PROBE = re.compile(
+    r"\b(?:"
+    r"headed\s+(?:to|towards)|"
+    r"heading\s+(?:to|towards)|"
+    r"travel(?:l)?ing\s+(?:to|through|around|in)|"
+    r"flying\s+to|"
+    r"trip\s+to|"
+    r"road\s+trip\s+to"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _mentions_venue_topic(t_low: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:coffee|caffeine|cafe|cafes|espresso|filter|pour[- ]?overs?|shops?|roastery|roaster)\b",
+            t_low,
+        )
+    )
+
+
+def _router_scan_text(history: list[dict], user_text: str, *, prior_user_slices: int = 1) -> str:
+    """Prior USER lines plus current message — short replies keep city-discovery context."""
+    prior: list[str] = []
+    for h in reversed(history or []):
+        if (h.get("role") or "") != "USER":
+            continue
+        blob = (h.get("text") or "").strip()
+        if blob:
+            prior.append(blob)
+        if len(prior) >= prior_user_slices:
+            break
+    prior.reverse()
+    cur = (user_text or "").strip()
+    chunks = [*prior]
+    if cur:
+        chunks.append(cur)
+    return "\n".join(chunks).strip()
+
+
+def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> bool:
+    """Heuristic lightweight router (no LLM cost). Prefer false negatives vs spamming appendix every turn."""
+    short_follow = len((user_text or "").strip()) < 96
+    scan = _router_scan_text(history, user_text, prior_user_slices=2 if short_follow else 1)
+    if not scan:
+        return False
+    t = scan.lower().replace("cafés", "cafes").replace("café", "cafe")
+
+    if _LOG_VISIT_PHRASE.search(t):
+        if not _TRIP_APPENDIX_DUAL_INTENT_GUARD.search(t):
+            return False
+
+    for p in _APPENDIX_TRIGGERS_SIMPLE:
+        if re.search(p, t):
+            return True
+
+    rec_or_suggest = bool(re.search(r"\b(?:recommend|recommendations?|suggest(?:ions?)?)\b", t))
+    if rec_or_suggest and _mentions_venue_topic(t):
+        return True
+
+    if _TRAVEL_PLACE_PROBE.search(t) and _mentions_venue_topic(t):
+        return True
+
+    return False
+
+
 _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 _REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "400"))
@@ -128,7 +284,7 @@ _MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "5"))
 
 _client = boto3.client("bedrock-runtime", region_name=_REGION)
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_CORE = (
     "You are dialin, a precise and friendly specialty-coffee coach. "
     "You maintain a single user's brew journal and help them dial in better cups.\n\n"
     "Capabilities (via tools):\n"
@@ -144,6 +300,8 @@ _SYSTEM_PROMPT = (
     "- YouTube narration: get_youtube_transcript — pull captions when the user sends a tutorial link "
     "(Hoffmann, espresso, PourOver demos); summarize, same quota/cache bucket as search\n\n"
     "Operating rules:\n"
+    "P0 Conflict tie-break — When §2d applies (logging or focusing on one café the user explicitly named), "
+    "stay with that café; avoid generic pivots such as unloading unrelated saved cafés unless they were vague about which spot.\n"
     "0. User-facing voice — hide implementation. Never show API/tool structure in replies: "
     "no field names (hasCafe, isRoaster, roasterId, cafeId, equipId, brewId, coffeeId, etc.), "
     "no JSON/tool dumps, error codes like DUPLICATE_PLACE, or argument names like skipDuplicateCheck. "
@@ -188,6 +346,13 @@ _SYSTEM_PROMPT = (
     "If the saved entity is roaster-primary, it is already a roaster; use update_roaster hasCafe when "
     "they have a walk-in cafe.\n"
     "  - Call list_cafes first to see if it's already tracked.\n"
+    "  - Named cafe missing from saves: if they ask to visit or log a specific café "
+    "by name and nothing in list_cafes fuzzy-matches (case-insensitive substring on name, neighborhood hint, city), "
+    "stay on that café — say succinctly it's not tracked yet without unloading unrelated saved cafes or suggesting "
+    "they pick from some other roster (wrong unless they were vague: e.g. \"log yesterday's café visit\" with "
+    "no name). "
+    "Then chain search_known_roasters and, before add_cafe, targeted search_web as in rule 2f (name + city/neighborhood "
+    "+ coffee / website cues) when you still need corroborating context to describe or place it faithfully.\n"
     "  - Before add_cafe, call list_roasters for cross-type conflicts; "
     "before add_roaster, call list_cafes. Cross-list same name+city returns DUPLICATE_PLACE; "
     "calling add_cafe when that cafe is already saved does too — call log_visit with the "
@@ -205,9 +370,9 @@ _SYSTEM_PROMPT = (
     "unless the visit clearly happened on another calendar day or the wording spans midnight/timezones ambiguously.\n"
     "  - To revise an existing visit line (e.g. change 8→10): update_visit with that row's visitId — "
     "not another log_visit.\n"
-    "  - When giving 'what to check out in [city]' recommendations: call list_cafes "
-    "with city filter to surface places the user already knows, then supplement with "
-    "your own knowledge using the tiered approach in rule 6.\n"
+    "  - When giving 'what to check out in [city]' cues: call list_cafes with city filter, then search_web "
+    "before naming unfamiliar shops; caveat stale hours/closures. When the Trip place discovery appendix "
+    "is attached, obey its tiers and hygiene verbatim (server attaches it automatically on scouting turns).\n"
     "2e. Written journal memory (RAG). For themes across many entries — recurring taste words, vague "
     "'what did I usually think about naturals?', visit impressions spanning shops — "
     "call retrieve_journal with a precise natural-language query. Use list_brews, summarize_coffee, "
@@ -259,62 +424,10 @@ _SYSTEM_PROMPT = (
     "it is normal to discuss subscription-style discovery alongside cafés and direct roasters. "
     "experimentalPreference seek means actively celebrate co-ferments and novel lots; open means mention "
     "them when relevant; omit or empty means stay approachable unless the user asks.\n"
-    "6. Cafe & place recommendations — mandatory process:\n"
-    "  Step 1 — check the user's own data: call list_cafes with a city filter. "
-    "Prioritise any place they've already visited and rated highly.\n"
-    "  Step 2 — live search when discovery needs fresh intel: call search_web before naming "
-    "*new* venues the user has not logged — especially new cities, international destinations, "
-    "'what's open / good now', verifying a specific shop name, or checking whether a place is "
-    "still operating. You have NO access to live Google Maps hours, 'open now', or closure "
-    "banners; training data is often stale. For each shop you might recommend from memory, run "
-    "a targeted search_web (shop name + city + 'closed' OR 'hours' OR 'Instagram' OR year) and "
-    "drop or deprioritise anything that looks temporarily closed, renovating, moved, or ended. "
-    "If search is inconclusive, say so — do not assert the shop is open. Results are cached server-side "
-    "for identical queries; prefer one broad query plus an optional reddit-focused follow-up only "
-    "if the first pass is thin. Skip search_web here when the user's ask is purely 'only from "
-    "my saved cafes' — but community brew/gear chatter still uses rule 3b.\n"
-    "  Step 3 — filter results through these tiers:\n"
-    "  TIER 1 (must-match): Is it a genuine specialty/3rd-wave shop with trained "
-    "baristas and sourced single-origins? Generic coffee chains or commodity shops "
-    "are disqualified. Confirm this before mentioning a shop.\n"
-    "  TIER 2 (primary fit): Match the user's preferred brew method from preferences. "
-    "If they prefer pour-over / filter — prioritise shops with a dedicated filter bar "
-    "and rotating single-origins on batch or manual brew. If they prefer espresso — "
-    "prioritise shops known for dialled-in espresso, latte art, and milk drinks. "
-    "Mention brew-method fit explicitly in the recommendation.\n"
-    "  TIER 3 (secondary fit): Classic execution vs experimental/progressive. "
-    "A 'classic' shop is consistent, approachable, well-dialled. An 'experimental' "
-    "shop chases rare lots, novel processes, unusual brew ratios. Match to user taste "
-    "signals from preferences.\n"
-    "  TIER 4 (tiebreaker): Processing style — align with preferredProcesses from "
-    "get_preferences (e.g. washed, natural, honey, anaerobic, co-ferment). For a clean/washed palate, "
-    "favour shops that regularly feature washed lots with clarity and structure (any origin). "
-    "For fruit-forward or ferment-forward tastes, favour shops that stock naturals, honeys, "
-    "or experimental lots. Mention only if it adds signal.\n"
-    "  Location & addresses: Lead with shop name plus neighborhood, district, or area "
-    "(or 'near [landmark/transit]' when search or the user's saved data gives it). "
-    "Only give a full street address when it is clearly present in list_cafes / list_roasters "
-    "tool output or in live search_web results you are paraphrasing — never invent or memorize "
-    "street numbers from training. If no verified address, say plainly to search "
-    "'[shop name] [city]' on Google Maps (or their Instagram) for the pin and hours.\n"
-    "  Confidence rules:\n"
-    "  a) Shops surfaced by live search with multiple community mentions AND no recent "
-    "closure/renovation signals — recommend with confidence, citing the source signal "
-    "(e.g. 'well-regarded on r/coffee').\n"
-    "  b) Shops from search with only one mention, old posts, OR any hint of temporary closure, "
-    "renovation, or moving — do not treat as a sure bet: "
-    "'[shop] came up but verify they're open — check Maps/Instagram before you go.' "
-    "If search says closed or 'temporarily closed', do NOT recommend as a primary visit; "
-    "name alternatives or ask the user to confirm.\n"
-    "  c) If the user names a specific shop — run a targeted search_web for it "
-    "(include 'closed' / city's subreddit) before you endorse it, then confirm tier 1 status "
-    "or flag uncertainty.\n"
-    "  d) If search returns no useful results and you have no strong training-data "
-    "knowledge, say so and suggest Google Maps for 'specialty coffee' or sca.coffee. "
-    "NEVER invent shop names.\n"
-    "  e) Trip-planning closure hygiene: whenever you list shops for a future visit, end with "
-    "one reminder: hours and closures change — confirm on Google Maps or the shop's socials "
-    "the same week you travel.\n"
+    "6. Café discovery & trip scouting (not §2d named-visit flows): baseline is list_cafes (city filter) "
+    "+ targeted search_web before you cite unfamiliar venues; specialty/3rd-wave bar framing only; "
+    "never invent shop names or streets; caveat stale closures. When Trip place discovery appendix "
+    "is absent, compact judgment still applies.\n"
     "7. Keep replies short and direct (2-5 sentences). Plain text, no headers. "
     "Numbers like '15g → 250g, 3:10' are great when discussing brews.\n"
     "8. Do not emit <thinking> tags."
@@ -353,16 +466,23 @@ def generate_reply(
 
     final_text_parts: list[str] = []
     clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
+    attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
+
+    base_system: list[dict[str, str]] = [{"text": _SYSTEM_PROMPT_CORE}]
+    if attach_trip_appendix:
+        base_system.append({"text": _APPENDIX_TRIP_PLACE_DISCOVERY})
+    base_system.append({"text": clock_supplement})
+
+    logger.info(
+        "converse_attachments trip_place_discovery_appendix=%s blocks=%s",
+        attach_trip_appendix,
+        len(base_system),
+    )
 
     for iteration in range(_MAX_TOOL_ITERATIONS):
-        system_blocks = [
-            {"text": _SYSTEM_PROMPT},
-            {"text": clock_supplement},
-        ]
-
         response = _client.converse(
             modelId=_MODEL_ID,
-            system=system_blocks,
+            system=base_system,
             messages=messages,
             toolConfig=tool_config,
             inferenceConfig={
