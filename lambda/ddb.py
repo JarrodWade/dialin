@@ -584,6 +584,36 @@ def _normalize_equipment_name(name: str) -> str:
     return s
 
 
+def _normalize_equipment_identity(raw_name: str) -> str:
+    """Like _normalize_equipment_name but maps stored/typed names through gear_canonical aliases first.
+
+    So a row saved as \"niche\" matches adding \"Niche Zero\", matching what users expect.
+    """
+    resolved, _ = resolve_equipment_display_name(raw_name)
+    return _normalize_equipment_name(resolved)
+
+
+def _equipment_row_active(item: dict[str, Any]) -> bool:
+    """True if gear is not retired. Uses coerce_bool so string \"false\" is not treated as archived."""
+    return not coerce_bool(item.get("archived"))
+
+
+def _query_user_equipment_items(user_id: str) -> list[dict[str, Any]]:
+    """All EQUIP# rows for a user (paginated — single-query truncation can hide gear / break deduping)."""
+    out: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("EQUIP#"),
+    }
+    while True:
+        resp = _table.query(**kwargs)
+        out.extend(resp.get("Items", []))
+        lek = resp.get("LastEvaluatedKey")
+        if not lek:
+            break
+        kwargs["ExclusiveStartKey"] = lek
+    return out
+
+
 def _find_active_equipment_same_name(
     user_id: str,
     equip_type: str,
@@ -593,9 +623,9 @@ def _find_active_equipment_same_name(
     want = _normalize_equipment_name(name)
     if not want:
         return None
-    et = equip_type.upper()
+    et = (equip_type or "").strip().upper()
     for item in list_equipment(user_id, equip_type=et, include_archived=False):
-        if _normalize_equipment_name(item.get("name") or "") == want:
+        if _normalize_equipment_identity(item.get("name") or "") == want:
             return item
     return None
 
@@ -620,6 +650,8 @@ def create_equipment(
     existing = _find_active_equipment_same_name(user_id, equip_type, resolved)
     if existing:
         dup_meta: dict[str, Any] = {**(name_meta or {}), "reusedDuplicate": True}
+        if existing.get("name") != resolved:
+            existing = update_equipment(user_id, existing["equipId"], {"name": resolved})
         return existing, dup_meta
 
     equip_id = _new_id("eq")
@@ -651,15 +683,15 @@ def list_equipment(
     equip_type: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("EQUIP#"),
-    )
-    items = [_strip_keys(i) for i in resp.get("Items", [])]
+    raw = _query_user_equipment_items(user_id)
+    items = [_strip_keys(i) for i in raw]
     if not include_archived:
-        items = [i for i in items if not i.get("archived")]
+        items = [i for i in items if _equipment_row_active(i)]
     if equip_type:
-        items = [i for i in items if i.get("equipType") == equip_type.upper()]
+        want_et = (equip_type or "").strip().upper()
+        items = [
+            i for i in items if (i.get("equipType") or "").strip().upper() == want_et
+        ]
     items.sort(key=lambda i: (i.get("equipType", ""), i.get("name", "")))
     return items
 
@@ -678,6 +710,8 @@ def update_equipment(
     """Patch an equipment item. Whitelist of editable fields."""
     allowed = {"name", "brand", "model", "notes", "equipType", "archived"}
     updates = {k: v for k, v in updates.items() if k in allowed}
+    if "archived" in updates:
+        updates["archived"] = coerce_bool(updates["archived"])
     if "name" in updates:
         raw_name = updates["name"]
         if not isinstance(raw_name, str):
