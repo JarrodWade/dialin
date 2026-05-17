@@ -1296,7 +1296,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "list_cafes",
-            "description": "List the user's tracked cafes, optionally filtered by city.",
+            "description": (
+                "List the user's tracked cafés, optionally filtered by city. "
+                "Whenever the café name shows up anywhere in dialogue, correlate it with these rows "
+                "before implying it isn't tracked or asking identity-clarifiers you could answer from matches."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
