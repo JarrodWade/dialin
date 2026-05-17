@@ -376,7 +376,47 @@ def _add_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
             "If they insist it is missing, suggest refreshing, list_equipment with includeArchived true, "
             "or signing into the same account in the app as in chat."
         )
+    elif isinstance(name_meta, dict) and name_meta.get("replacedVariant"):
+        out["assistantInstruction"] = (
+            "replaced_variant: An existing Hario V60 brewer row was updated to this size/name instead of "
+            "creating a second V60 entry. Confirm the final name from equipment.name."
+        )
     return out
+
+
+def _update_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Patch an existing gear row (rename, notes, retire, re-type). Requires equipId from list_equipment."""
+    equip_id = ""
+    for key in ("equipId", "equip_id", "equipmentId", "equipment_id"):
+        raw = args.get(key)
+        if raw is None or raw == "":
+            continue
+        equip_id = str(raw).strip()
+        break
+    if not equip_id:
+        raise ValueError("equipId is required")
+    patch: dict[str, Any] = {}
+    if "name" in args and args["name"] is not None:
+        if not isinstance(args["name"], str):
+            raise ValueError("name must be a string")
+        patch["name"] = args["name"]
+    for key in ("brand", "model", "notes"):
+        if key in args and args[key] is not None:
+            if not isinstance(args[key], str):
+                raise ValueError(f"{key} must be a string")
+            patch[key] = args[key]
+    if "equipType" in args and args["equipType"] is not None:
+        if not isinstance(args["equipType"], str):
+            raise ValueError("equipType must be a string")
+        patch["equipType"] = args["equipType"]
+    if "archived" in args and args["archived"] is not None:
+        patch["archived"] = args["archived"]
+    if not patch:
+        raise ValueError(
+            "provide at least one field to update: name, brand, model, notes, equipType, or archived"
+        )
+    updated = ddb.update_equipment(user_id, equip_id, patch)
+    return {"equipment": updated}
 
 
 # --- Preferences -------------------------------------------------------------
@@ -1251,6 +1291,39 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "toolSpec": {
+            "name": "update_equipment",
+            "description": (
+                "Update saved gear (rename e.g. Hario V60 02 → 01, edit brand/model/notes, change equipType, or retire). "
+                "Call list_equipment first to get equipId. add_equipment only creates rows — it does not fix typos or sizes."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["equipId"],
+                    "properties": {
+                        "equipId": {"type": "string"},
+                        "name": {
+                            "type": "string",
+                            "description": "New display name; normalized via gear_canonical when recognized.",
+                        },
+                        "brand": {"type": "string"},
+                        "model": {"type": "string"},
+                        "notes": {"type": "string"},
+                        "equipType": {
+                            "type": "string",
+                            "enum": sorted(ddb.EQUIP_TYPES),
+                        },
+                        "archived": {
+                            "type": "boolean",
+                            "description": "Set true to retire gear from active lists (soft-delete).",
+                        },
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
             "name": "get_preferences",
             "description": (
                 "Read stored taste preferences, home city, IANA timezone field (persistent fallback — the web app normally "
@@ -1544,13 +1617,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "log_visit",
             "description": (
-                "Log a NEW visit to a cafe OR a roaster-cafe (hasCafe: true). "
-                "Provide either cafeId (for pure cafes) or roasterId (for roasters that also have a cafe). "
-                "Also pass visitDate when known (infer from Clock context for \"yesterday\"/\"last Sunday\" — YYYY-MM-DD). "
-                "Also pass placeName so the visit can be displayed without a join. "
-                "Call list_cafes or list_roasters first to get the right id. "
-                "Do NOT call this to fix a rating or notes on an outing already logged — use update_visit "
-                "(after list_visits for visitId) instead, or you will create duplicate visit rows."
+                "Log ONE visit per outing to a cafe OR a roaster-cafe (hasCafe: true). "
+                "Never call twice in succession for the same stop — duplicates rows unless they are "
+                "~seconds apart (server merges those). Prefer update_visit after list_visits to amend "
+                "a row. Provide cafeId OR roasterId. Pass visitDate (YYYY-MM-DD) from Clock + user phrasing, "
+                "placeName for display, drinks, rating, notes."
             ),
             "inputSchema": {
                 "json": {
@@ -1788,6 +1859,7 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "get_dialin_advice": _get_dialin_advice,
     "list_equipment": _list_equipment,
     "add_equipment": _add_equipment,
+    "update_equipment": _update_equipment,
     "add_cafe": _add_cafe,
     "list_cafes": _list_cafes,
     "update_cafe": _update_cafe,

@@ -28,7 +28,7 @@ import re
 import time
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from statistics import mean
 from typing import Any
@@ -275,6 +275,24 @@ def update_roaster(user_id: str, roaster_id: str, updates: dict[str, Any]) -> di
 # ---------------------------------------------------------------------------
 
 
+def enrich_coffee_rows_roaster_denorm(user_id: str, rows: list[dict[str, Any]]) -> None:
+    """Ensure API clients see `roaster` whenever `roasterId` resolves to a ROASTER# row."""
+    by_rid: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        rid = str(row.get("roasterId") or "").strip()
+        if not rid:
+            continue
+        if str(row.get("roaster") or "").strip():
+            continue
+        by_rid.setdefault(rid, []).append(row)
+    for rid, group in by_rid.items():
+        label = resolve_roaster_display_name(user_id, rid)
+        if not label:
+            continue
+        for r in group:
+            r["roaster"] = label
+
+
 def create_coffee(
     user_id: str,
     roaster: str,
@@ -313,7 +331,9 @@ def create_coffee(
         Item=item,
         ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)",
     )
-    return _strip_keys(item) | {"coffeeId": coffee_id}
+    out = _strip_keys(item) | {"coffeeId": coffee_id}
+    enrich_coffee_rows_roaster_denorm(user_id, [out])
+    return out
 
 
 def delete_coffee(user_id: str, coffee_id: str) -> None:
@@ -334,7 +354,10 @@ def get_coffee(user_id: str, coffee_id: str) -> dict[str, Any] | None:
         Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}
     )
     item = resp.get("Item")
-    return _strip_keys(item) if item else None
+    row = _strip_keys(item) if item else None
+    if row:
+        enrich_coffee_rows_roaster_denorm(user_id, [row])
+    return row
 
 
 def list_coffees(user_id: str, *, include_archived: bool = False) -> list[dict[str, Any]]:
@@ -346,6 +369,7 @@ def list_coffees(user_id: str, *, include_archived: bool = False) -> list[dict[s
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
     items.sort(key=lambda i: i.get("createdAt", ""), reverse=True)
+    enrich_coffee_rows_roaster_denorm(user_id, items)
     return items
 
 
@@ -383,7 +407,9 @@ def update_coffee(
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
             raise ValueError(f"coffee {coffee_id} not found") from e
         raise
-    return _strip_keys(resp.get("Attributes", {}))
+    result = _strip_keys(resp.get("Attributes", {}))
+    enrich_coffee_rows_roaster_denorm(user_id, [result])
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -639,7 +665,7 @@ def _find_active_equipment_same_name(
     name: str,
 ) -> dict[str, Any] | None:
     """If a non-archived item of this type already has the same normalized name, return it."""
-    want = _normalize_equipment_name(name)
+    want = _normalize_equipment_identity(name)
     if not want:
         return None
     et = (equip_type or "").strip().upper()
@@ -647,6 +673,20 @@ def _find_active_equipment_same_name(
         if _normalize_equipment_identity(item.get("name") or "") == want:
             return item
     return None
+
+
+def _normalized_hario_v60_brewer_family(norm_identity: str) -> bool:
+    """True if normalized identity is Hario V60 or a sized variant (01 / 02 / …)."""
+    return norm_identity == "hario v60" or norm_identity.startswith("hario v60 ")
+
+
+def _brewers_hario_v60_family(user_id: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in list_equipment(user_id, equip_type="BREWER", include_archived=False):
+        ident = _normalize_equipment_identity(item.get("name") or "")
+        if _normalized_hario_v60_brewer_family(ident):
+            rows.append(item)
+    return rows
 
 
 def create_equipment(
@@ -672,6 +712,19 @@ def create_equipment(
         if existing.get("name") != resolved:
             existing = update_equipment(user_id, existing["equipId"], {"name": resolved})
         return existing, dup_meta
+
+    # One saved Hario V60 brewer + add_equipment for another size: upgrade the row instead of a duplicate.
+    if equip_type == "BREWER":
+        want_ident = _normalize_equipment_identity(resolved)
+        if _normalized_hario_v60_brewer_family(want_ident):
+            family = _brewers_hario_v60_family(user_id)
+            if len(family) == 1:
+                sole = family[0]
+                sole_ident = _normalize_equipment_identity(sole.get("name") or "")
+                if sole_ident != want_ident:
+                    variant_meta: dict[str, Any] = {**(name_meta or {}), "replacedVariant": True}
+                    updated = update_equipment(user_id, sole["equipId"], {"name": resolved})
+                    return updated, variant_meta
 
     equip_id = _new_id("eq")
     created_at = _now_iso()
@@ -711,6 +764,11 @@ def list_equipment(
         items = [
             i for i in items if (i.get("equipType") or "").strip().upper() == want_et
         ]
+    # Normalize type casing for clients (strict JS filters and legacy lowercase rows).
+    for i in items:
+        raw_et = i.get("equipType")
+        if isinstance(raw_et, str) and raw_et.strip():
+            i["equipType"] = raw_et.strip().upper()
     items.sort(key=lambda i: (i.get("equipType", ""), i.get("name", "")))
     return items
 
@@ -771,7 +829,11 @@ def update_equipment(
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
             raise ValueError(f"equipment {equip_id} not found") from e
         raise
-    return _strip_keys(resp.get("Attributes", {}))
+    out = _strip_keys(resp.get("Attributes", {}))
+    raw_et = out.get("equipType")
+    if isinstance(raw_et, str) and raw_et.strip():
+        out["equipType"] = raw_et.strip().upper()
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -989,6 +1051,47 @@ def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str
     return _strip_keys(resp.get("Attributes", {}))
 
 
+def _calendar_day_visit(raw: Any) -> str:
+    """Normalize visitDate strings to YYYY-MM-DD."""
+    return str(raw or "").strip()[:10]
+
+
+def _iso_ts_to_datetime(iso_ts: Any) -> datetime:
+    """Parse Dynamo `createdAt` / ISO-ish UTC timestamps."""
+    s = str(iso_ts or "").strip().replace("Z", "+00:00")
+    if not s:
+        raise ValueError("empty iso")
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _visit_drinks_list(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return [str(raw).strip()] if str(raw).strip() else []
+
+
+def _merged_visit_drinks(existing: Any, incoming: Any) -> list[str] | None:
+    """Dedupe-preserving concatenation for near-duplicate visit merges."""
+    cur = _visit_drinks_list(existing)
+    add = _visit_drinks_list(incoming)
+    if not add:
+        return None  # incoming absent or empty → do not PATCH drinks via merge
+    seen = {x.strip().lower() for x in cur}
+    out = list(cur)
+    for d in add:
+        k = d.strip().lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(d)
+    return out
+
+
 def log_visit(
     user_id: str,
     cafe_id: str | None = None,
@@ -1010,8 +1113,61 @@ def log_visit(
         raise ValueError(f"cafe {cafe_id} not found")
     if roaster_id and get_roaster(user_id, roaster_id) is None:
         raise ValueError(f"roaster {roaster_id} not found")
-    visit_id = _new_id("vis")
+    cid_raw = str(cafe_id or "").strip()
+    rid_raw = str(roaster_id or "").strip()
+
     iso_ts = _now_iso()
+    calendar_day = _calendar_day_visit(visit_date) or iso_ts[:10]
+
+    # Suppress accidental double-submit from the assistant (often two tool calls seconds apart).
+    try:
+        win_secs = float(os.environ.get("VISIT_NEAR_DUP_WINDOW_SEC", "180"))
+    except ValueError:
+        win_secs = 180.0
+    if win_secs > 0:
+        if cid_raw:
+            recent_scope = list_visits(user_id, cafe_id=cid_raw, limit=50)
+        else:
+            recent_scope = list_visits(user_id, roaster_id=rid_raw, limit=50)
+        now_dt = datetime.now(timezone.utc)
+        window_td = timedelta(seconds=win_secs)
+        dup_row: dict[str, Any] | None = None
+        for row in recent_scope:
+            if _calendar_day_visit(row.get("visitDate")) != calendar_day:
+                continue
+            created = row.get("createdAt")
+            if not created:
+                continue
+            try:
+                if now_dt - _iso_ts_to_datetime(created) > window_td:
+                    continue
+            except ValueError:
+                continue
+            dup_row = row
+            break
+
+        if dup_row is not None:
+            vid = str(dup_row.get("visitId") or "").strip()
+            if vid:
+                merge: dict[str, Any] = {}
+                if rating is not None:
+                    merge["rating"] = int(rating)
+                if notes is not None and str(notes).strip():
+                    merge["notes"] = str(notes).strip()
+                md = _merged_visit_drinks(dup_row.get("drinks"), drinks)
+                if md is not None:
+                    merge["drinks"] = md
+                if str(place_name or "").strip():
+                    merge["placeName"] = str(place_name).strip()
+                vd = _calendar_day_visit(visit_date)
+                if vd:
+                    merge["visitDate"] = vd
+                if merge:
+                    return update_visit(user_id, vid, merge)
+                refreshed = get_visit(user_id, vid)
+                return refreshed or dup_row
+
+    visit_id = _new_id("vis")
     item = {
         "PK": f"USER#{user_id}",
         "SK": f"VISIT#{iso_ts}#{visit_id}",

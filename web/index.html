@@ -545,7 +545,9 @@
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
           addBubble("BOT", data.reply || "(no reply)");
-          loadCoffees(); loadEquipment(); loadRoasters(); loadBrews();
+          await loadRoasters();
+          await loadCoffees();
+          loadEquipment(); loadBrews();
         } catch (err) {
           addBubble("BOT", "[error] " + err.message);
         } finally {
@@ -560,6 +562,18 @@
       });
 
       // ── coffees ───────────────────────────────────────────────────────────
+      /** Denormalized `roaster` from API or resolve from `_roasterCache` by `roasterId`. */
+      function coffeeRoasterLabel(c) {
+        const t = (c.roaster || "").trim();
+        if (t) return t;
+        const rid = String(c.roasterId || "").trim();
+        if (rid && _roasterCache.length) {
+          const hit = _roasterCache.find((r) => r.roasterId === rid);
+          if (hit && (hit.name || "").trim()) return hit.name.trim();
+        }
+        return "";
+      }
+
       async function loadCoffees() {
         if (!apiInput.value.trim()) return;
         try {
@@ -578,6 +592,7 @@
         }
         coffeeListEl.innerHTML = "";
         items.forEach((c) => {
+          const rn = coffeeRoasterLabel(c);
           const ds = daysSince(c.roastDate);
           const card = document.createElement("div");
           const lowStock = c.gramsRemaining != null && c.gramsRemaining < 50;
@@ -587,7 +602,7 @@
               <span class="name">${escapeHtml(c.name)}</span>
               ${c.gramsRemaining != null ? `<span class="stock">${c.gramsRemaining}g left</span>` : ""}
             </div>
-            ${c.roaster ? `<div class="roaster">${escapeHtml(c.roaster)}</div>` : ""}
+            ${rn ? `<div class="roaster">${escapeHtml(rn)}</div>` : ""}
             <div class="meta">
               ${c.origin ? `<span>${escapeHtml(c.origin)}</span>` : ""}
               ${c.process ? `<span>${escapeHtml(c.process)}</span>` : ""}
@@ -630,7 +645,8 @@
         items.forEach((c) => {
           const opt = document.createElement("option");
           opt.value = c.coffeeId;
-          opt.textContent = c.roaster ? `${c.name} — ${c.roaster}` : c.name;
+          const rn = coffeeRoasterLabel(c);
+          opt.textContent = rn ? `${c.name} — ${rn}` : c.name;
           sel.appendChild(opt);
         });
         if (prev) sel.value = prev;
@@ -726,7 +742,7 @@
           const sel = f.elements[field];
           if (!sel) return;
           sel.innerHTML = '<option value="">—</option>';
-          _equipmentCache.filter(e => e.equipType === type).forEach(e => {
+          _equipmentCache.filter(e => (e.equipType || "").toString().toUpperCase() === type).forEach(e => {
             const opt = document.createElement("option");
             opt.value = e.equipId; opt.textContent = e.name;
             sel.appendChild(opt);
@@ -846,7 +862,7 @@
           if (!sel) continue;
           const prev = sel.value;
           sel.innerHTML = '<option value="">—</option>';
-          items.filter(e => e.equipType === type).forEach(e => {
+          items.filter(e => (e.equipType || "").toString().toUpperCase() === type).forEach(e => {
             const opt = document.createElement("option");
             opt.value = e.equipId; opt.textContent = e.name;
             sel.appendChild(opt);
@@ -874,7 +890,7 @@
 
       function openEditEquipModal(item) {
         _editingEquipId = item.equipId;
-        equipForm.elements.equipType.value = item.equipType || "GRINDER";
+        equipForm.elements.equipType.value = (item.equipType || "GRINDER").toString().toUpperCase();
         equipForm.elements.name.value  = item.name  || "";
         equipForm.elements.brand.value = item.brand || "";
         equipForm.elements.model.value = item.model || "";
@@ -1264,11 +1280,14 @@
           brewsEl.innerHTML      = '<div class="empty">Set the API URL above to load brews.</div>';
           return;
         }
-        loadRoasters(); loadCoffees(); loadEquipment(); loadBrews(); loadPreferences();
-        // Trigger onboarding on first load if profile not yet set up
-        if (needsOnboarding()) {
-          setTimeout(startOnboarding, 400); // brief delay so the page paints first
-        }
+        (async () => {
+          await loadRoasters();
+          await loadCoffees();
+          loadEquipment(); loadBrews(); loadPreferences();
+          if (needsOnboarding()) {
+            setTimeout(startOnboarding, 400);
+          }
+        })();
       }
 
       renderChat();
