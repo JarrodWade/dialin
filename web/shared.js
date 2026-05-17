@@ -173,8 +173,9 @@ async function api(path, opts = {}) {
 }
 
 /**
- * Load Clerk, mount sign-in / user button into #clerk-auth-root, hide #legacy-user-row when configured.
- * Dispatches window event "dialin:auth-ready" when done (signed in or legacy path).
+ * Load Clerk: compact header (Sign in button + UserButton). Sign-in opens in a modal
+ * so we never remount the full form on every Clerk listener tick (that broke inputs).
+ * Dispatches "dialin:auth-ready" when done.
  */
 async function initDialinAuth() {
   const root = document.getElementById("clerk-auth-root");
@@ -193,10 +194,18 @@ async function initDialinAuth() {
   }
 
   if (legacyRow) legacyRow.style.display = "none";
+  let signInBtn = null;
+  let userMountEl = null;
   if (root) {
     root.style.display = "flex";
-    root.innerHTML = "<div id=\"clerk-mount\" class=\"clerk-mount\"></div>";
+    root.innerHTML =
+      "<button type=\"button\" id=\"clerk-sign-in-btn\" class=\"clerk-sign-in-btn\">Sign in</button>" +
+      "<div id=\"clerk-user-mount\" class=\"clerk-user-mount\"></div>";
+    signInBtn = document.getElementById("clerk-sign-in-btn");
+    userMountEl = document.getElementById("clerk-user-mount");
   }
+
+  const authRedirect = () => window.location.href;
 
   try {
     const mod = await import("https://esm.sh/@clerk/clerk-js@5.46.0");
@@ -205,36 +214,70 @@ async function initDialinAuth() {
     await clerk.load();
     window.__clerk = clerk;
 
-    const mountEl = document.getElementById("clerk-mount");
-    let _wasSignedIn = !!clerk.user;
+    let signedIn = !!clerk.user;
+    let userButtonMounted = false;
 
-    function renderAuth() {
-      if (!mountEl) return;
-      mountEl.innerHTML = "";
+    function notifySessionReady() {
+      if (!clerk.session) return;
+      const api = document.getElementById("api-base")?.value?.trim();
+      if (api) window.dispatchEvent(new CustomEvent("dialin:clerk-session-ready"));
+    }
+
+    function unmountUserButton() {
+      if (!userButtonMounted || !userMountEl) return;
+      try {
+        clerk.unmountUserButton(userMountEl);
+      } catch (_) {
+        /* already unmounted */
+      }
+      userButtonMounted = false;
+    }
+
+    function syncAuthChrome() {
+      if (!signInBtn || !userMountEl) return;
       if (clerk.user) {
-        clerk.mountUserButton(mountEl);
-        if (!_wasSignedIn) {
-          _wasSignedIn = true;
-          window.dispatchEvent(new CustomEvent("dialin:signed-in"));
+        signInBtn.hidden = true;
+        userMountEl.hidden = false;
+        if (!userButtonMounted) {
+          clerk.mountUserButton(userMountEl, { afterSignOutUrl: authRedirect() });
+          userButtonMounted = true;
         }
       } else {
-        _wasSignedIn = false;
-        clerk.mountSignIn(mountEl, { routing: "hash" });
+        unmountUserButton();
+        userMountEl.hidden = true;
+        signInBtn.hidden = false;
       }
+    }
+
+    if (signInBtn) {
+      signInBtn.addEventListener("click", () => {
+        clerk.openSignIn({
+          afterSignInUrl: authRedirect(),
+          afterSignUpUrl: authRedirect(),
+        });
+      });
     }
 
     function onClerkResourceUpdate() {
-      renderAuth();
-      const api = document.getElementById("api-base")?.value?.trim();
-      if (clerk.session && api) {
-        window.dispatchEvent(new CustomEvent("dialin:clerk-session-ready"));
+      const nowSignedIn = !!clerk.user;
+      if (nowSignedIn !== signedIn) {
+        const wasSignedIn = signedIn;
+        signedIn = nowSignedIn;
+        syncAuthChrome();
+        if (nowSignedIn && !wasSignedIn) {
+          window.dispatchEvent(new CustomEvent("dialin:signed-in"));
+        }
       }
+      notifySessionReady();
     }
 
-    onClerkResourceUpdate();
+    syncAuthChrome();
+    notifySessionReady();
     clerk.addListener(onClerkResourceUpdate);
 
-    window.dispatchEvent(new CustomEvent("dialin:auth-ready", { detail: { mode: "clerk", signedIn: !!clerk.user } }));
+    window.dispatchEvent(
+      new CustomEvent("dialin:auth-ready", { detail: { mode: "clerk", signedIn: !!clerk.user } })
+    );
   } catch (e) {
     console.error(e);
     toast("Clerk failed to load — check publishable key", true);
@@ -374,6 +417,9 @@ function initSharedInputs(onApiChange, onUserChange) {
 
   window.addEventListener("dialin:signed-in", scheduleDataLoad);
   window.addEventListener("dialin:clerk-session-ready", scheduleDataLoad);
+  window.addEventListener("dialin:auth-ready", (e) => {
+    if (e.detail?.mode === "clerk" && e.detail?.signedIn) scheduleDataLoad();
+  });
 
   initDialinAuth().then(() => {
     if (!clerkConfigured()) {

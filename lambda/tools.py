@@ -490,6 +490,36 @@ def _list_cafes(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return {"count": len(items), "cafes": items}
 
 
+def _search_places(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    nc_raw = args.get("nameContains") or args.get("name_contains")
+    nc = str(nc_raw).strip() if nc_raw is not None else ""
+    if not nc:
+        raise ValueError("nameContains is required")
+    places = ddb.search_places(
+        user_id,
+        name_contains=nc,
+        city=args.get("city"),
+        include_archived=bool(args.get("includeArchived")),
+    )
+    enriched: list[dict[str, Any]] = []
+    for p in places:
+        row = dict(p)
+        if p.get("placeType") == "cafe":
+            visits = ddb.list_visits(user_id, cafe_id=p.get("cafeId"), limit=10)
+        else:
+            visits = ddb.list_visits(user_id, roaster_id=p.get("roasterId"), limit=10)
+        row["visitCount"] = len(visits)
+        if visits:
+            latest = visits[0]
+            row["latestVisit"] = {
+                "visitId": latest.get("visitId"),
+                "visitDate": latest.get("visitDate"),
+                "rating": _visit_rating_int(latest.get("rating")),
+            }
+        enriched.append(row)
+    return {"count": len(enriched), "places": enriched}
+
+
 def _update_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return ddb.update_cafe(user_id, args["cafeId"], args)
 
@@ -572,10 +602,13 @@ def _visits_by_place_summary(visits: list[dict[str, Any]]) -> list[dict[str, Any
 def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     limit = int(args.get("limit", 40))
     limit = max(1, min(limit, 50))
+    pnc_raw = args.get("placeNameContains") or args.get("place_name_contains")
+    pnc = str(pnc_raw).strip() if pnc_raw is not None else None
     items = ddb.list_visits(
         user_id,
         cafe_id=args.get("cafeId"),
         roaster_id=args.get("roasterId"),
+        place_name_contains=pnc or None,
         limit=limit,
     )
     return {
@@ -1570,15 +1603,41 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "toolSpec": {
+            "name": "search_places",
+            "description": (
+                "Search **both** saved cafés and roasters by name substring in one call. "
+                "Prefer this (or list_cafes **and** list_roasters together) whenever the user names a "
+                "venue — e.g. Anchorhead, Devoción — before saying it is not tracked. "
+                "Returns placeType (cafe|roaster), ids, visitCount, and latestVisit when logged. "
+                "Roaster-primary shops (hasCafe) are **not** in list_cafes alone."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["nameContains"],
+                    "properties": {
+                        "nameContains": {
+                            "type": "string",
+                            "description": "Case-insensitive substring (e.g. \"Anchor\" for Anchorhead).",
+                        },
+                        "city": {"type": "string"},
+                        "includeArchived": {"type": "boolean"},
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
             "name": "list_cafes",
             "description": (
                 "List the user's tracked cafés, optionally filtered by city and/or name substring. "
                 "Whenever a **named café or roaster** appears — visit, logging, **or opinion / comparison** "
-                "— call with **nameContains** on a distinctive token (and list_roasters too) **before** "
+                "— call **search_places** or list_roasters too **before** "
                 "saying it isn't saved or offering add_cafe or add_roaster. "
                 "City filter matches flexible stored values "
                 "(e.g. filter \"Kyoto\" matches \"Kyoto, Japan\"). Roaster-cafés saved under **Roasters** "
-                "with hasCafe are NOT returned here — call list_roasters too. If city filter returns "
+                "with hasCafe are NOT returned here — call list_roasters or search_places. If city filter returns "
                 "empty but the user expects a named shop, use nameContains or omit city and scan."
             ),
             "inputSchema": {
@@ -1643,7 +1702,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "type": "object",
                     "properties": {
                         "cafeId": {"type": "string", "description": "Use for pure cafe entities"},
-                        "roasterId": {"type": "string", "description": "Use when visiting a roaster that has a cafe (hasCafe: true)"},
+                        "roasterId": {
+                            "type": "string",
+                            "description": "Use for roaster rows (including walk-in visits logged from the app).",
+                        },
                         "placeName": {"type": "string", "description": "Display name of the place, stored for easy rendering"},
                         "visitDate": {
                             "type": "string",
@@ -1666,11 +1728,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_visits",
             "description": (
                 "List the user's cafe/roaster visits. Filter with **cafeId** (café visits) or **roasterId** "
-                "(visits logged against a roaster row) — same GSI underneath. Result includes **byPlace** "
+                "(visits logged against a roaster row) — same GSI underneath. **placeNameContains** matches "
+                "stored placeName or linked cafe/roaster names (use when ids unknown). Result includes **byPlace** "
                 "(per-venue visitCount and each row's rating) — use these numbers for comparisons; do not "
                 "reconstruct scores from retrieve_journal. After resolving a named place the user asks about, "
                 "query visits with that id; if empty but they insist they logged, call again with "
-                "no cafeId/roasterId and limit 50, then match placeName. For multi-café comparisons or "
+                "placeNameContains or no id filter and limit 50. For multi-café comparisons or "
                 "catch-all history, prefer one unfiltered call with limit 50."
             ),
             "inputSchema": {
@@ -1684,6 +1747,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "roasterId": {
                             "type": "string",
                             "description": "Filter to visits logged with this roasterId.",
+                        },
+                        "placeNameContains": {
+                            "type": "string",
+                            "description": "Case-insensitive match on placeName or linked cafe/roaster display name.",
                         },
                         "limit": {
                             "type": "integer",
@@ -1876,6 +1943,7 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "add_equipment": _add_equipment,
     "update_equipment": _update_equipment,
     "add_cafe": _add_cafe,
+    "search_places": _search_places,
     "list_cafes": _list_cafes,
     "update_cafe": _update_cafe,
     "log_visit": _log_visit,

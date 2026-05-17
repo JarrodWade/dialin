@@ -27,6 +27,24 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+.clerk-sign-in-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.clerk-sign-in-btn:hover {
+  background: var(--paper);
+}
+.clerk-user-mount {
+  display: flex;
+  align-items: center;
   min-height: 32px;
 }
 .legacy-user-row {

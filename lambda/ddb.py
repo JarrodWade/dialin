@@ -158,6 +158,48 @@ def find_matching_roaster_for_new_cafe(
     return None
 
 
+def search_places(
+    user_id: str,
+    *,
+    name_contains: str,
+    city: str | None = None,
+    include_archived: bool = False,
+) -> list[dict[str, Any]]:
+    """Match saved cafés and roasters by name substring (one call for the assistant)."""
+    nc = (name_contains or "").strip()
+    if not nc:
+        return []
+    out: list[dict[str, Any]] = []
+    for c in list_cafes(
+        user_id, city=city, name_contains=nc, include_archived=include_archived
+    ):
+        out.append(
+            {
+                "placeType": "cafe",
+                "placeId": c.get("cafeId"),
+                "cafeId": c.get("cafeId"),
+                "name": c.get("name"),
+                "city": c.get("city"),
+                "isRoaster": c.get("isRoaster"),
+            }
+        )
+    for r in list_roasters(
+        user_id, city=city, name_contains=nc, include_archived=include_archived
+    ):
+        out.append(
+            {
+                "placeType": "roaster",
+                "placeId": r.get("roasterId"),
+                "roasterId": r.get("roasterId"),
+                "name": r.get("name"),
+                "city": r.get("city"),
+                "hasCafe": r.get("hasCafe"),
+            }
+        )
+    out.sort(key=lambda p: (p.get("name") or "").lower())
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Roaster
 # ---------------------------------------------------------------------------
@@ -1390,21 +1432,46 @@ def delete_visit(user_id: str, visit_id: str) -> None:
     )
 
 
+def _visit_matches_place_name(
+    user_id: str, visit: dict[str, Any], needle: str
+) -> bool:
+    """True if needle matches placeName or the linked cafe/roaster display name."""
+    if needle in (visit.get("placeName") or "").lower():
+        return True
+    cid = str(visit.get("cafeId") or "").strip()
+    if cid:
+        row = get_cafe(user_id, cid)
+        if row and needle in (row.get("name") or "").lower():
+            return True
+    rid = str(visit.get("roasterId") or "").strip()
+    if rid:
+        row = get_roaster(user_id, rid)
+        if row and needle in (row.get("name") or "").lower():
+            return True
+    return False
+
+
 def list_visits(
     user_id: str,
     *,
     cafe_id: str | None = None,
     roaster_id: str | None = None,
+    place_name_contains: str | None = None,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     place_id = (cafe_id or roaster_id or "").strip() or None
+    name_nc = (place_name_contains or "").strip().lower()
+    fetch_limit = limit
+    if name_nc and not place_id:
+        fetch_limit = min(max(limit, 1) * 4, 50)
+
     if place_id:
         resp = _table.query(
             IndexName="GSI1",
             KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{place_id}")
             & Key("GSI1SK").begins_with("VISIT#"),
             ScanIndexForward=False,
-            Limit=limit,
+            Limit=fetch_limit,
         )
         items = resp.get("Items", [])
     else:
@@ -1412,10 +1479,13 @@ def list_visits(
             KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
             & Key("SK").begins_with("VISIT#"),
             ScanIndexForward=False,
-            Limit=limit,
+            Limit=fetch_limit,
         )
         items = resp.get("Items", [])
-    return [_strip_keys(i) for i in items]
+    rows = [_strip_keys(i) for i in items]
+    if name_nc:
+        rows = [r for r in rows if _visit_matches_place_name(user_id, r, name_nc)]
+    return rows[: max(1, min(limit, 50))]
 
 
 # ---------------------------------------------------------------------------
