@@ -41,6 +41,8 @@ locals {
     "PATCH /cafes/{cafeId}",
     "GET /visits",
     "POST /visits",
+    "PATCH /visits/{visitId}",
+    "DELETE /visits/{visitId}",
     "GET /profile",
     "PATCH /profile",
   ]

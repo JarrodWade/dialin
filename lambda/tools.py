@@ -417,6 +417,25 @@ def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return {"count": len(items), "visits": items}
 
 
+def _update_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    visit_id = args["visitId"]
+    patch = {
+        k: args[k]
+        for k in ("rating", "notes", "drinks", "visitDate", "placeName")
+        if k in args and args[k] is not None
+    }
+    row = ddb.update_visit(user_id, visit_id, patch)
+    journal_rag.try_sync_visit(user_id, row)
+    return row
+
+
+def _delete_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    vid = args["visitId"]
+    ddb.delete_visit(user_id, vid)
+    journal_rag.delete_chunk(user_id, "VISIT", str(vid))
+    return {"deleted": vid}
+
+
 # --- Known roasters reference ------------------------------------------------
 
 _KNOWN_ROASTERS: list[dict[str, str]] = [
@@ -1316,10 +1335,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "log_visit",
             "description": (
-                "Log a visit to a cafe OR a roaster-cafe (hasCafe: true). "
+                "Log a NEW visit to a cafe OR a roaster-cafe (hasCafe: true). "
                 "Provide either cafeId (for pure cafes) or roasterId (for roasters that also have a cafe). "
                 "Also pass placeName so the visit can be displayed without a join. "
-                "Call list_cafes or list_roasters first to get the right id."
+                "Call list_cafes or list_roasters first to get the right id. "
+                "Do NOT call this to fix a rating or notes on an outing already logged — use update_visit "
+                "(after list_visits for visitId) instead, or you will create duplicate visit rows."
             ),
             "inputSchema": {
                 "json": {
@@ -1352,6 +1373,50 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "cafeId": {"type": "string"},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                     },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "update_visit",
+            "description": (
+                "Edit a logged cafe visit (wrong rating, notes, drinks, date, or display name). "
+                "Call list_visits first to get visitId. "
+                "Do NOT log_visit again for the same outing — that duplicates rows."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["visitId"],
+                    "properties": {
+                        "visitId": {"type": "string"},
+                        "rating": {"type": "integer", "minimum": 1, "maximum": 10},
+                        "notes": {"type": "string"},
+                        "drinks": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Replaces the drinks list when supplied.",
+                        },
+                        "visitDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                        "placeName": {"type": "string", "description": "Denormalized display label only"},
+                    },
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "delete_visit",
+            "description": (
+                "Permanently delete a duplicate or mistaken visit row. "
+                "Call list_visits first to confirm visitId. Cannot be undone."
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "required": ["visitId"],
+                    "properties": {"visitId": {"type": "string"}},
                 }
             },
         }
@@ -1489,6 +1554,8 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "update_cafe": _update_cafe,
     "log_visit": _log_visit,
     "list_visits": _list_visits,
+    "update_visit": _update_visit,
+    "delete_visit": _delete_visit,
     "get_preferences": _get_preferences,
     "update_preferences": _update_preferences,
     "summarize_coffee": _summarize_coffee,

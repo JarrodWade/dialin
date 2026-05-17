@@ -125,17 +125,25 @@ header button.ghost {
 /* ── visits ───────────────────────────────────────────────────────────── */
 .visit-list { padding: 8px 10px; overflow-y: auto; flex: 1; }
 .visit-row {
-  display: grid; grid-template-columns: 80px 1fr auto;
+  display: grid; grid-template-columns: 80px 1fr auto auto;
   gap: 10px; align-items: start;
   padding: 8px 4px; border-bottom: 1px dashed var(--line); font-size: 13px;
 }
 .visit-row:last-child { border-bottom: none; }
 .visit-row .v-date { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
-.visit-row .v-body { display: flex; flex-direction: column; gap: 2px; }
+.visit-row .v-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .visit-row .v-cafe { font-weight: 600; }
 .visit-row .v-drinks { color: var(--ink-2); font-size: 12px; }
 .visit-row .v-notes { color: var(--muted); font-size: 12px; font-style: italic; }
 .visit-row .v-rating { color: var(--accent-2); font-weight: 700; white-space: nowrap; }
+.visit-row .v-actions {
+  display: flex; align-items: flex-start; padding-top: 1px;
+}
+.visit-row .v-actions button {
+  background: transparent; color: var(--accent); border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: 5px; font-size: 10px; cursor: pointer; white-space: nowrap;
+}
+.visit-row .v-actions button:hover { background: var(--bg-2); }
 
 /* ── equipment ────────────────────────────────────────────────────────── */
 .equip-list { padding: 8px 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
@@ -204,7 +212,9 @@ header button.ghost {
 .modal .full { grid-column: 1 / -1; }
 .modal-actions {
   display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;
+  align-items: center;
 }
+.modal-actions .grow { flex: 1; min-width: 8px; }
 .modal-actions button {
   background: transparent; color: var(--ink); border: 1px solid var(--line);
   padding: 7px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;

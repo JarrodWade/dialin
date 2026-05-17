@@ -235,6 +235,7 @@
       <div class="modal">
         <h3 id="visit-modal-title">Log a visit</h3>
         <form id="visit-form" class="grid">
+          <input type="hidden" name="visitId" />
           <input type="hidden" name="cafeId" />
           <input type="hidden" name="roasterId" />
           <input type="hidden" name="placeName" />
@@ -243,7 +244,9 @@
           <label class="full">Drinks ordered<input name="drinks" placeholder="V60 Ethiopia, cortado" /></label>
           <label class="full">Notes<textarea name="notes" placeholder="vibe, service, anything memorable…"></textarea></label>
         </form>
-        <div class="modal-actions">
+        <div class="modal-actions visit-modal-actions">
+          <button type="button" class="danger-btn" id="visit-delete" style="display:none">Delete visit</button>
+          <span class="grow"></span>
           <button type="button" data-close>Cancel</button>
           <button type="button" class="primary" id="visit-submit">Log visit</button>
         </div>
@@ -631,6 +634,7 @@
       // ── visit modal ───────────────────────────────────────────────────────
       function openVisitModal(placeId, placeType) {
         visitForm.reset();
+        visitForm.elements.visitId.value = "";
         visitForm.elements.visitDate.value = new Date().toISOString().slice(0, 10);
         const place = _placesCache.find(p => p._id === placeId);
         const placeName = place ? place.name : "";
@@ -642,37 +646,124 @@
           visitForm.elements.roasterId.value = "";
         }
         visitForm.elements.placeName.value = placeName;
+        document.getElementById("visit-delete").style.display = "none";
+        document.getElementById("visit-submit").textContent = "Log visit";
         document.getElementById("visit-modal-title").textContent =
           "Log a visit" + (placeName ? ` — ${placeName}` : "");
         openModal(visitModal);
       }
 
+      function openVisitEditModal(v) {
+        visitForm.reset();
+        visitForm.elements.visitId.value = v.visitId || "";
+        const dateStr = v.visitDate ? String(v.visitDate).slice(0, 10) : "";
+        visitForm.elements.visitDate.value =
+          dateStr || new Date().toISOString().slice(0, 10);
+        if (v.cafeId) {
+          visitForm.elements.cafeId.value = v.cafeId;
+          visitForm.elements.roasterId.value = "";
+        } else {
+          visitForm.elements.roasterId.value = v.roasterId || "";
+          visitForm.elements.cafeId.value = "";
+        }
+        let placeName = null;
+        if (v.cafeId) {
+          const c = _cafeCache.find((x) => x.cafeId === v.cafeId);
+          placeName = c ? c.name : null;
+        }
+        if (!placeName && v.roasterId) {
+          const r = _roasterCache.find((x) => x.roasterId === v.roasterId);
+          placeName = r ? r.name : null;
+        }
+        placeName = placeName || v.placeName || "";
+        visitForm.elements.placeName.value = placeName;
+        visitForm.elements.rating.value =
+          v.rating != null && v.rating !== "" ? String(v.rating) : "";
+        visitForm.elements.drinks.value = (v.drinks || []).join(", ");
+        visitForm.elements.notes.value = v.notes || "";
+        document.getElementById("visit-delete").style.display = "";
+        document.getElementById("visit-submit").textContent = "Save changes";
+        document.getElementById("visit-modal-title").textContent =
+          "Edit visit" + (placeName ? ` — ${placeName}` : "");
+        openModal(visitModal);
+      }
+
       document.getElementById("visit-submit").addEventListener("click", async () => {
-        const fd        = new FormData(visitForm);
-        const cafeId    = (fd.get("cafeId")    || "").trim();
+        const fd = new FormData(visitForm);
+        const visitId = (fd.get("visitId") || "").trim();
+        const cafeId = (fd.get("cafeId") || "").trim();
         const roasterId = (fd.get("roasterId") || "").trim();
-        if (!cafeId && !roasterId) return;
+
         const body = {};
-        if (cafeId)    body.cafeId    = cafeId;
-        if (roasterId) body.roasterId = roasterId;
         const pn = (fd.get("placeName") || "").trim();
         if (pn) body.placeName = pn;
+
         const drinksRaw = (fd.get("drinks") || "").trim();
-        if (drinksRaw) body.drinks = drinksRaw.split(",").map(s => s.trim()).filter(Boolean);
-        if (fd.get("visitDate")) body.visitDate = fd.get("visitDate");
-        if (fd.get("rating"))    body.rating    = parseInt(fd.get("rating"), 10);
-        if (fd.get("notes"))     body.notes     = fd.get("notes").trim();
+        if (drinksRaw) {
+          body.drinks = drinksRaw.split(",").map((s) => s.trim()).filter(Boolean);
+        } else if (visitId) {
+          body.drinks = [];
+        }
+
+        const visitDateVal = fd.get("visitDate");
+        if (visitDateVal) body.visitDate = visitDateVal;
+
+        const ratingRaw = fd.get("rating");
+        if (ratingRaw !== null && ratingRaw !== undefined && String(ratingRaw).trim() !== "") {
+          body.rating = parseInt(String(ratingRaw), 10);
+        }
+
+        if (visitId) {
+          body.notes = (fd.get("notes") || "").trim();
+        } else {
+          const n = (fd.get("notes") || "").trim();
+          if (n) body.notes = n;
+        }
+
         try {
-          await api("/visits", { method: "POST", body: authedJsonBody(body) });
-          toast("Visit logged!"); closeModal(visitModal); await loadVisits();
-        } catch (err) { toast(err.message, true); }
+          if (visitId) {
+            await api(`/visits/${encodeURIComponent(visitId)}`, {
+              method: "PATCH",
+              body: authedJsonBody(body),
+            });
+            toast("Saved.");
+          } else {
+            if (!cafeId && !roasterId) return;
+            if (cafeId) body.cafeId = cafeId;
+            if (roasterId) body.roasterId = roasterId;
+            await api("/visits", { method: "POST", body: authedJsonBody(body) });
+            toast("Visit logged!");
+          }
+          document.getElementById("visit-delete").style.display = "none";
+          document.getElementById("visit-submit").textContent = "Log visit";
+          closeModal(visitModal);
+          await loadVisits();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+
+      document.getElementById("visit-delete").addEventListener("click", async () => {
+        const vid = (visitForm.elements.visitId.value || "").trim();
+        if (!vid) return;
+        if (!confirm("Remove this visit from your journal? This cannot be undone.")) return;
+        try {
+          await api(`/visits/${encodeURIComponent(vid)}`, { method: "DELETE" });
+          toast("Visit removed.");
+          document.getElementById("visit-delete").style.display = "none";
+          document.getElementById("visit-submit").textContent = "Log visit";
+          closeModal(visitModal);
+          await loadVisits();
+        } catch (err) {
+          toast(err.message, true);
+        }
       });
 
       // ── visits ────────────────────────────────────────────────────────────
       async function loadVisits() {
         if (!apiInput.value.trim()) return;
         try {
-          const data = await api(withLegacyUserQuery("/visits", "limit=15"));
+          const data = await api(withLegacyUserQuery("/visits", "limit=25"));
           renderVisits(data.visits || []);
         } catch (err) {
           visitListEl.innerHTML = `<div class="empty">${err.message}</div>`;
@@ -710,6 +801,14 @@
             </div>
             <div class="v-rating">${v.rating ? v.rating + "/10" : ""}</div>
           `;
+          const actions = document.createElement("div");
+          actions.className = "v-actions";
+          const editBtn = document.createElement("button");
+          editBtn.type = "button";
+          editBtn.textContent = "Edit";
+          editBtn.addEventListener("click", () => openVisitEditModal(v));
+          actions.appendChild(editBtn);
+          row.appendChild(actions);
           visitListEl.appendChild(row);
         });
       }

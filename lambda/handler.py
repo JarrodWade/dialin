@@ -20,6 +20,13 @@ Routes (representative):
 
   GET  /brews?coffeeId=&method=&limit=   (legacy: ?userId=)
   POST /brews                            body: full brew fields
+  PATCH /brews/{brewId}                  body: patch fields
+  DELETE /brews/{brewId}
+
+  GET  /visits?cafeId=&limit=          (legacy: ?userId=)
+  POST /visits                         body: cafeId | roasterId, visitDate, drinks, rating, notes, placeName
+  PATCH /visits/{visitId}             body: patch fields (rating, notes, drinks, visitDate, placeName)
+  DELETE /visits/{visitId}
 
 Chat is stateless from the server's POV: the client sends recent
 history each turn. That keeps DynamoDB writes cheap and keeps the
@@ -657,6 +664,45 @@ def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
     return _response(201, {"visit": item})
 
 
+def _handle_update_visit(event: dict[str, Any]) -> dict[str, Any]:
+    body = _parse_body(event)
+    user_id = _user_id(event)
+    visit_id = (_path_params(event).get("visitId") or "").strip()
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not visit_id:
+        return _response(400, {"error": "visitId is required"})
+    try:
+        item = ddb.update_visit(user_id, visit_id, body)
+    except ValueError as e:
+        msg = str(e)
+        status = 404 if "not found" in msg else 400
+        return _response(status, {"error": msg})
+    except Exception:  # noqa: BLE001
+        logger.exception("update_visit failed")
+        return _response(500, {"error": "could not update visit"})
+    journal_rag.try_sync_visit(user_id, item)
+    return _response(200, {"visit": item})
+
+
+def _handle_delete_visit(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = _user_id(event)
+    visit_id = (_path_params(event).get("visitId") or "").strip()
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    if not visit_id:
+        return _response(400, {"error": "visitId is required"})
+    try:
+        ddb.delete_visit(user_id, visit_id)
+    except ValueError as e:
+        return _response(404, {"error": str(e)})
+    except Exception:  # noqa: BLE001
+        logger.exception("delete_visit failed")
+        return _response(500, {"error": "could not delete visit"})
+    journal_rag.delete_chunk(user_id, "VISIT", str(visit_id))
+    return _response(200, {"deleted": visit_id})
+
+
 _ROUTES = {
     "GET /glossary": _handle_get_glossary,
     "POST /chat": _handle_chat,
@@ -679,6 +725,8 @@ _ROUTES = {
     "PATCH /cafes/{cafeId}": _handle_update_cafe,
     "GET /visits": _handle_list_visits,
     "POST /visits": _handle_create_visit,
+    "PATCH /visits/{visitId}": _handle_update_visit,
+    "DELETE /visits/{visitId}": _handle_delete_visit,
     "GET /profile": _handle_get_profile,
     "PATCH /profile": _handle_update_profile,
 }

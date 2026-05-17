@@ -946,6 +946,83 @@ def log_visit(
     return _strip_keys(item)
 
 
+def get_visit(user_id: str, visit_id: str) -> dict[str, Any] | None:
+    """Look up a single visit by visitId (queries recent VISIT# SK entries)."""
+    resp = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with("VISIT#"),
+        FilterExpression=Attr("visitId").eq(visit_id),
+        ScanIndexForward=False,
+        Limit=200,
+    )
+    items = resp.get("Items", [])
+    return _strip_keys(items[0]) if items else None
+
+
+def _visit_sk(user_id: str, visit_id: str) -> str:
+    resp = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with("VISIT#"),
+        FilterExpression=Attr("visitId").eq(visit_id),
+        ProjectionExpression="SK",
+        ScanIndexForward=False,
+        Limit=200,
+    )
+    items = resp.get("Items", [])
+    if not items:
+        raise ValueError(f"visit {visit_id} not found")
+    return items[0]["SK"]
+
+
+_VISIT_EDITABLE = {"rating", "notes", "drinks", "visitDate", "placeName"}
+
+
+def update_visit(user_id: str, visit_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Patch fields on a logged visit. Does not move the visit to another cafe/roaster."""
+    updates = {k: v for k, v in updates.items() if k in _VISIT_EDITABLE}
+    if not updates:
+        raise ValueError("no editable fields provided")
+
+    sk = _visit_sk(user_id, visit_id)
+
+    set_parts = ["updatedAt = :now"]
+    values: dict[str, Any] = {":now": _now_iso()}
+    names: dict[str, str] = {}
+
+    for i, (k, v) in enumerate(updates.items()):
+        nk, vk = f"#k{i}", f":v{i}"
+        names[nk] = k
+        if k == "rating" and v is not None:
+            values[vk] = int(v)
+        elif k == "drinks":
+            if v is None:
+                values[vk] = []
+            elif isinstance(v, list):
+                values[vk] = [str(x).strip() for x in v if str(x).strip()]
+            else:
+                raise ValueError("drinks must be a list of strings or null")
+        else:
+            values[vk] = v
+        set_parts.append(f"{nk} = {vk}")
+
+    _table.update_item(
+        Key={"PK": f"USER#{user_id}", "SK": sk},
+        UpdateExpression="SET " + ", ".join(set_parts),
+        ConditionExpression="attribute_exists(PK)",
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
+    return get_visit(user_id, visit_id) or {}
+
+
+def delete_visit(user_id: str, visit_id: str) -> None:
+    sk = _visit_sk(user_id, visit_id)
+    _table.delete_item(
+        Key={"PK": f"USER#{user_id}", "SK": sk},
+        ConditionExpression="attribute_exists(PK)",
+    )
+
+
 def list_visits(
     user_id: str,
     *,

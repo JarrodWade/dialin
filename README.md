@@ -78,6 +78,8 @@ This checks JSON syntax and duplicate normalized aliases (same rules as the look
 | GET / POST | `/cafes` | List / add cafes |
 | PATCH | `/cafes/{cafeId}` | Edit / retire a cafe |
 | GET / POST | `/visits` | List / log cafe visits |
+| PATCH | `/visits/{visitId}` | Edit a logged visit (rating, notes, drinks, date, display name) |
+| DELETE | `/visits/{visitId}` | Permanently delete a visit |
 | GET / PATCH | `/profile` | Get / update taste preferences |
 
 ---
@@ -94,7 +96,7 @@ This checks JSON syntax and duplicate normalized aliases (same rules as the look
 | `get_dialin_advice` | Best brew + ratio delta + grind note + trend |
 | `summarize_coffee` | Avg rating, top taste words, best/last brew |
 | `add_cafe` / `list_cafes` / `update_cafe` | Cafe management |
-| `log_visit` / `list_visits` | Cafe visit log |
+| `log_visit` / `list_visits` / `update_visit` / `delete_visit` | Cafe visit log |
 | `get_preferences` / `update_preferences` | Persistent taste profile |
 | `lookup_coffee_term` | Curated glossary (drinks, regions, gear); same data as GET `/glossary` |
 | `search_web` | Live search (Tavily; e.g. Reddit for technique chatter) |
