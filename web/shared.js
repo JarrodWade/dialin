@@ -151,7 +151,20 @@ async function api(path, opts = {}) {
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   if (!res.ok) {
-    const err = new Error(data?.error || data?.message || res.statusText);
+    let msg = data?.error || data?.message || res.statusText;
+    if (res.status === 401) {
+      if (!clerkConfigured()) {
+        msg =
+          "Unauthorized — API expects Clerk sign-in. Set clerkPublishableKey in web/dialin-config.js " +
+          "(copy from dialin-config.example.js + your Clerk dashboard) or localStorage dialin.clerkPk.";
+      } else if (!auth.authorization) {
+        msg =
+          "Unauthorized — Clerk session has no token. Sign out and sign in again (user menu top-right).";
+      } else {
+        msg = msg || "Unauthorized — session token rejected. Try signing out and back in.";
+      }
+    }
+    const err = new Error(msg);
     err.status = res.status;
     err.body = data;
     throw err;

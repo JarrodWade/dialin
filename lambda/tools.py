@@ -124,6 +124,7 @@ def _list_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     nc = str(nc_raw).strip() if nc_raw is not None else ""
     items = ddb.list_roasters(
         user_id,
+        city=args.get("city"),
         name_contains=nc or None,
         include_archived=bool(args.get("includeArchived")),
     )
@@ -685,7 +686,11 @@ _KNOWN_ROASTERS: list[dict[str, str]] = [
     {"name": "George Howell Coffee", "city": "Acton", "state": "MA"},
     {"name": "Broadsheet Coffee Roasters", "city": "Cambridge", "state": "MA"},
     # Indianapolis
-    {"name": "Weekenders Coffee", "city": "Indianapolis", "state": "IN"},
+    {"name": "Tinker Coffee Co.", "city": "Indianapolis", "state": "IN"},
+    # Japan (select anchors — search_known_roasters is US-heavy; use search_web for full JP lists)
+    {"name": "Weekenders Coffee", "city": "Kyoto", "state": "Japan"},
+    {"name": "Kurasu", "city": "Kyoto", "state": "Japan"},
+    {"name": "% Arabica", "city": "Kyoto", "state": "Japan"},
     # National / notable
     {"name": "Stumptown Coffee Roasters", "city": "New York", "state": "NY"},
     {"name": "Intelligentsia Coffee", "city": "Chicago", "state": "IL"},
@@ -693,7 +698,7 @@ _KNOWN_ROASTERS: list[dict[str, str]] = [
 
 
 def _search_known_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Search a curated reference list of ~70 well-known US specialty roasters.
+    """Search a curated reference list of well-known specialty roasters (mostly US + select intl anchors).
 
     Use before calling add_roaster to verify canonical name + city and avoid typos.
     This list is not exhaustive — absence does NOT mean the roaster is not real.
@@ -705,15 +710,19 @@ def _search_known_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]
     results = []
     for r in _KNOWN_ROASTERS:
         name_match = not query or query in r["name"].lower()
-        city_match = not city or city in r.get("city", "").lower()
-        state_match = not state or state in r.get("state", "").lower()
+        city_match = not city or ddb._city_matches_user_filter(r.get("city"), city)
+        state_blob = (r.get("state") or "").lower()
+        state_match = not state or state in state_blob or state in (r.get("city") or "").lower()
         if name_match and city_match and state_match:
             results.append(r)
 
     return {
         "count": len(results),
         "results": results[:10],
-        "note": "This list covers ~70 well-known US specialty roasters. Absence does not mean the roaster is not real.",
+        "note": (
+            "Curated US specialty roasters plus a few international anchors (e.g. Weekenders, Kurasu in Kyoto). "
+            "Absence does not mean the roaster is not real."
+        ),
     }
 
 
@@ -982,18 +991,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "list_roasters",
             "description": (
-                "List the user's saved roasters, optionally filtered by name substring. For trip / city "
-                "scouting and \"do I already track X?\", call with **nameContains** alongside list_cafes — "
-                "roaster-cafés (hasCafe) often live here only. Before offering add_roaster, resolve the "
-                "name here first."
+                "List the user's saved roasters, optionally filtered by city and/or name substring. "
+                "For trip / city scouting: call with the **destination city** (e.g. Kyoto) plus once "
+                "with **no** city filter to see favorites elsewhere. Roaster-cafés (hasCafe) live here, "
+                "not list_cafes. Before offering add_roaster, resolve the name here first."
             ),
             "inputSchema": {
                 "json": {
                     "type": "object",
                     "properties": {
+                        "city": {
+                            "type": "string",
+                            "description": "Flexible city match (e.g. Kyoto matches Kyoto, Japan).",
+                        },
                         "nameContains": {
                             "type": "string",
-                            "description": "Case-insensitive substring on roaster name (e.g. \"Moxie\").",
+                            "description": "Case-insensitive substring on roaster name (e.g. \"Weekenders\").",
                         },
                         "includeArchived": {"type": "boolean"},
                     },

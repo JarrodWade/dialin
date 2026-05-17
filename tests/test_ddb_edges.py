@@ -40,6 +40,25 @@ def test_websearch_cache_and_monthly_quota(dynamodb_env):
     assert c1 == 1 and c2 == 2 and c3 == 2
 
 
+def test_list_roasters_city_filter_kyoto(dynamodb_env):
+    ddb = dynamodb_env["ddb"]
+    ddb.create_roaster(user_id=USER, name="Weekenders Coffee", city="Kyoto, Japan", has_cafe=True)
+    ddb.create_roaster(user_id=USER, name="Other Roaster", city="Portland, OR")
+
+    kyoto = ddb.list_roasters(USER, city="Kyoto")
+    assert len(kyoto) == 1
+    assert "Weekenders" in kyoto[0]["name"]
+
+
+def test_search_known_roasters_weekenders_kyoto(dynamodb_env):
+    tools = dynamodb_env["tools"]
+    out = tools.dispatch("search_known_roasters", USER, {"query": "weekenders", "city": "Kyoto"})
+    assert out["ok"] is True
+    names = [r["name"] for r in out["result"]["results"]]
+    assert any("Weekenders" in n for n in names)
+    assert not any("Indianapolis" in str(r) for r in out["result"]["results"])
+
+
 def test_chat_daily_quota(dynamodb_env):
     ddb = dynamodb_env["ddb"]
     ok1, n1 = ddb.consume_chat_quota(USER, 2)

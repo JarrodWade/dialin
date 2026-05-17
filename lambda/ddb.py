@@ -218,6 +218,7 @@ def resolve_roaster_display_name(user_id: str, roaster_id: str | None) -> str:
 def list_roasters(
     user_id: str,
     *,
+    city: str | None = None,
     name_contains: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
@@ -231,6 +232,8 @@ def list_roasters(
     nc = (name_contains or "").strip().lower()
     if nc:
         items = [i for i in items if nc in (i.get("name") or "").lower()]
+    if city and city.strip():
+        items = [i for i in items if _city_matches_user_filter(i.get("city"), city)]
     items.sort(key=lambda i: i.get("name", "").lower())
     return items
 
