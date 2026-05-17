@@ -244,14 +244,25 @@ def _handle_create_coffee(event: dict[str, Any]) -> dict[str, Any]:
     user_id = _user_id(event)
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
-    if not body.get("roaster") and not body.get("roasterId"):
+    rid = body.get("roasterId")
+    rid_str = rid.strip() if isinstance(rid, str) else ""
+    rid_str = rid_str or None
+    roaster_name = str(body.get("roaster") or "").strip()
+    if not roaster_name and not rid_str:
         return _response(400, {"error": "missing required field: roaster or roasterId"})
+    if rid_str and not roaster_name:
+        roaster_name = ddb.resolve_roaster_display_name(user_id, rid_str)
+    if not roaster_name:
+        return _response(
+            400,
+            {"error": "roaster label missing — pass roaster display name or a valid roasterId"},
+        )
     try:
         item = ddb.create_coffee(
             user_id=user_id,
-            roaster=(body.get("roaster") or "").strip(),
+            roaster=roaster_name,
             name=body["name"].strip(),
-            roaster_id=body.get("roasterId"),
+            roaster_id=rid_str,
             origin=body.get("origin"),
             process=body.get("process"),
             roast_date=body.get("roastDate"),

@@ -204,6 +204,17 @@ def get_roaster(user_id: str, roaster_id: str) -> dict[str, Any] | None:
     return _strip_keys(item) if item else None
 
 
+def resolve_roaster_display_name(user_id: str, roaster_id: str | None) -> str:
+    """Return the canonical `name` from the user's roaster row, or ''."""
+    rid = str(roaster_id or "").strip()
+    if not rid:
+        return ""
+    row = get_roaster(user_id, rid)
+    if not row:
+        return ""
+    return str(row.get("name") or "").strip()
+
+
 def list_roasters(
     user_id: str,
     *,

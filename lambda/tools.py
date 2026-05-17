@@ -166,12 +166,13 @@ def _list_coffees(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _add_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    # If roasterId supplied, resolve the display name from the roaster entity.
-    roaster_id = args.get("roasterId")
-    roaster_name = args.get("roaster") or ""
+    # Denormalized `roaster` on the coffee row: strip LLM fluff; hydrate from ROASTER# when blank.
+    roaster_raw = args.get("roasterId")
+    roaster_id = str(roaster_raw).strip() if roaster_raw is not None else ""
+    roaster_id = roaster_id or None
+    roaster_name = str(args.get("roaster") or "").strip()
     if roaster_id and not roaster_name:
-        r = ddb.get_roaster(user_id, roaster_id)
-        roaster_name = r["name"] if r else ""
+        roaster_name = ddb.resolve_roaster_display_name(user_id, roaster_id)
     row = ddb.create_coffee(
         user_id=user_id,
         roaster=roaster_name,
@@ -1025,7 +1026,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "venues are often cafés-only in the café list until a ROASTER row exists. "
                 "If there is still no ROASTER#, call add_roaster (after user confirms) "
                 "to get a roasterId; add_roaster returns duplicatePlace if it matches "
-                "an existing café. Then call add_coffee."
+                "an existing café. Then call add_coffee. Split what the user said across "
+                "name, origin, process, roastDate, weightG, notes with reasoning — do "
+                "not oversimplify specialty process wording."
             ),
             "inputSchema": {
                 "json": {
@@ -1033,12 +1036,32 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "required": ["roasterId", "name"],
                     "properties": {
                         "roasterId": {"type": "string", "description": "FK from list_roasters or add_roaster"},
-                        "name": {"type": "string", "description": "Coffee/SKU name, e.g. 'Wote Ethiopia'"},
-                        "origin": {"type": "string"},
-                        "process": {"type": "string", "description": "e.g. washed, natural, anaerobic"},
+                        "roaster": {
+                            "type": "string",
+                            "description": "Optional; omit to inherit display name from the roaster row (preferred).",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Lot/coffee title as on the bag (producer, SKU, flagship line)",
+                        },
+                        "origin": {
+                            "type": "string",
+                            "description": "Country/region (and locality if stated as geography, not the lot title)",
+                        },
+                        "process": {
+                            "type": "string",
+                            "description": (
+                                "Full process phrase from the label or user (e.g. 'thermal shock washed', "
+                                "'double anaerobic natural'). Preserve modifiers — do not reduce to coarse "
+                                "washed/natural/honey-only unless that's all they said."
+                            ),
+                        },
                         "roastDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                         "weightG": {"type": "number", "description": "bag weight in grams"},
-                        "notes": {"type": "string"},
+                        "notes": {
+                            "type": "string",
+                            "description": "Extra structured bag facts that do not belong in name/origin/process",
+                        },
                     },
                 }
             },
@@ -1098,7 +1121,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "update_coffee",
             "description": (
                 "Edit a coffee's fields. Use when the user corrects info about a coffee "
-                "(name, roaster, origin, process, roastDate, notes). "
+                "(name, roaster, origin, process, roastDate, notes). Preserve full specialty "
+                "process wording on updates — do NOT strip modifiers. "
                 "Do NOT create a new coffee — call this instead."
             ),
             "inputSchema": {
@@ -1110,7 +1134,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "roaster": {"type": "string"},
                         "name": {"type": "string"},
                         "origin": {"type": "string"},
-                        "process": {"type": "string"},
+                        "process": {
+                            "type": "string",
+                            "description": "Full specialty process phrase incl. modifiers; do not shorten",
+                        },
                         "roastDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                         "notes": {"type": "string"},
                     },
