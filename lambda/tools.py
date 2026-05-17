@@ -204,9 +204,11 @@ def _update_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def _delete_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["coffeeId"]
-    ddb.delete_coffee(user_id, cid)
+    deleted_brew_ids = ddb.delete_coffee(user_id, cid)
+    for bid in deleted_brew_ids:
+        journal_rag.delete_chunk(user_id, "BREW", str(bid))
     journal_rag.delete_chunk(user_id, "COFFEE", str(cid))
-    return {"deleted": cid}
+    return {"deleted": cid, "deletedBrewIds": deleted_brew_ids}
 
 
 def _log_brew(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -1875,22 +1877,50 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
 }
 
 
+def _wrap_tool_result(result: Any) -> dict[str, Any]:
+    """Normalize tool return values for Bedrock toolResult status (success vs error)."""
+    if not isinstance(result, dict):
+        return {"ok": True, "result": result}
+
+    if result.get("duplicatePlace"):
+        return {
+            "ok": False,
+            "code": "DUPLICATE_PLACE",
+            "error": result.get("hint", "duplicate place"),
+            "existingType": result.get("existingType"),
+            "existingId": result.get("existingId"),
+            "existingName": result.get("existingName"),
+        }
+
+    if result.get("ok") is False:
+        err = str(result.get("error") or "tool failed")
+        payload = {k: v for k, v in result.items() if k not in ("ok", "error")}
+        out: dict[str, Any] = {"ok": False, "error": err}
+        if payload:
+            out["result"] = payload
+        return out
+
+    if result.get("ok") is True:
+        return {"ok": True, "result": result}
+
+    # e.g. get_dialin_advice when coffeeId is missing — {"error": "..."} without ok.
+    if "error" in result:
+        err = str(result["error"])
+        payload = {k: v for k, v in result.items() if k != "error"}
+        out = {"ok": False, "error": err}
+        if payload:
+            out["result"] = payload
+        return out
+
+    return {"ok": True, "result": result}
+
+
 def dispatch(name: str, user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     fn = _TOOL_FUNCS.get(name)
     if fn is None:
-        return {"error": f"unknown tool {name}"}
+        return {"ok": False, "error": f"unknown tool {name}"}
     try:
-        result = fn(user_id, args or {})
-        if isinstance(result, dict) and result.get("duplicatePlace"):
-            return {
-                "ok": False,
-                "code": "DUPLICATE_PLACE",
-                "error": result.get("hint", "duplicate place"),
-                "existingType": result.get("existingType"),
-                "existingId": result.get("existingId"),
-                "existingName": result.get("existingName"),
-            }
-        return {"ok": True, "result": result}
+        return _wrap_tool_result(fn(user_id, args or {}))
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:  # noqa: BLE001

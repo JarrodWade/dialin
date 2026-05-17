@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate
+.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate
 
 ARGS ?=
 
@@ -18,6 +18,13 @@ glossary-validate:
 
 gear-canonical-validate:
 	@python3 "$(CURDIR)/scripts/validate_gear_canonical.py"
+
+# Unit + moto integration tests (no AWS credentials or Bedrock).
+VENV ?= $(CURDIR)/.venv
+test:
+	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
+	@"$(VENV)/bin/pip" install -q -r "$(CURDIR)/requirements-dev.txt"
+	@"$(VENV)/bin/pytest" "$(CURDIR)/tests" -q
 
 plan:
 	$(TF) plan

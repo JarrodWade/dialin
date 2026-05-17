@@ -498,10 +498,7 @@
 
       // ── chat ──────────────────────────────────────────────────────────────
       function chatStorageKey() {
-        if (typeof clerkConfigured === "function" && clerkConfigured()) {
-          try { return "dialin.chat." + userId(); } catch { return "dialin.chat._signed_out"; }
-        }
-        return "dialin.chat." + (userInput.value.trim() || "_");
+        return "dialin.chat." + storageUserKey();
       }
       function loadChat() {
         try { return JSON.parse(localStorage.getItem(chatStorageKey()) || "[]"); }
@@ -1107,7 +1104,7 @@
         ["method","grind","taste","notes","grinderId","machineId","brewerId"].forEach(k => { if (fd.get(k)) body[k] = fd.get(k); });
         try {
           await api(withLegacyUserQuery(`/brews/${encodeURIComponent(brewId)}`), {
-            method: "PATCH", body: JSON.stringify(body),
+            method: "PATCH", body: authedJsonBody(body),
           });
           toast("Brew updated."); closeModal(brewEditModal); _editingBrewId = null; await loadBrews();
         } catch (err) { toast(err.message, true); }
@@ -1157,7 +1154,7 @@
       let _onboardBooted = false;
 
       function onboardStorageKey() {
-        return "dialin.onboarded." + (userInput.value.trim() || "_");
+        return "dialin.onboarded." + storageUserKey();
       }
 
       function markOnboarded() {
@@ -1165,7 +1162,11 @@
       }
 
       function needsOnboarding() {
-        return !localStorage.getItem(onboardStorageKey()) && apiInput.value.trim();
+        if (!apiInput.value.trim()) return false;
+        if (typeof clerkConfigured === "function" && clerkConfigured()) {
+          if (!window.__clerk?.user?.id) return false;
+        }
+        return !localStorage.getItem(onboardStorageKey());
       }
 
       function addOnboardBubble(role, text) {

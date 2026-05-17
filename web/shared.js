@@ -43,6 +43,14 @@ function userId() {
   return v;
 }
 
+/** Stable per-user suffix for localStorage (Clerk sub or legacy user id). Does not throw. */
+function storageUserKey() {
+  if (clerkConfigured()) {
+    return window.__clerk?.user?.id || "_signed_out";
+  }
+  return (document.getElementById("user-id")?.value || "").trim() || "_";
+}
+
 /** Append ?userId= only for legacy mode (no Clerk). */
 function withLegacyUserQuery(path, extraQuery = "") {
   if (clerkConfigured()) {

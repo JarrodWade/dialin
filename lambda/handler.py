@@ -564,11 +564,13 @@ def _handle_delete_coffee(event: dict[str, Any]) -> dict[str, Any]:
     if not coffee_id:
         return _response(400, {"error": "coffeeId required"})
     try:
-        ddb.delete_coffee(user_id, coffee_id)
+        deleted_brew_ids = ddb.delete_coffee(user_id, coffee_id)
     except ValueError as e:
         return _response(404, {"error": str(e)})
+    for bid in deleted_brew_ids:
+        journal_rag.delete_chunk(user_id, "BREW", str(bid))
     journal_rag.delete_chunk(user_id, "COFFEE", str(coffee_id))
-    return _response(200, {"deleted": coffee_id})
+    return _response(200, {"deleted": coffee_id, "deletedBrewIds": deleted_brew_ids})
 
 
 def _handle_list_cafes(event: dict[str, Any]) -> dict[str, Any]:

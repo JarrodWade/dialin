@@ -336,8 +336,23 @@ def create_coffee(
     return out
 
 
-def delete_coffee(user_id: str, coffee_id: str) -> None:
-    """Permanently delete a coffee item. Associated brews are NOT deleted."""
+def delete_coffee(user_id: str, coffee_id: str) -> list[str]:
+    """Permanently delete a coffee and all brews logged against it.
+
+    Returns deleted ``brewId`` values (for journal/RAG cleanup). Restores stock for
+    each deleted brew when ``gramsRemaining`` is tracked on the bag.
+    """
+    if get_coffee(user_id, coffee_id) is None:
+        raise ValueError(f"coffee {coffee_id} not found")
+
+    deleted_brew_ids: list[str] = []
+    for brew in _list_all_brews_for_coffee(coffee_id):
+        bid = str(brew.get("brewId") or "").strip()
+        if not bid:
+            continue
+        delete_brew(user_id, bid)
+        deleted_brew_ids.append(bid)
+
     try:
         _table.delete_item(
             Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
@@ -347,6 +362,7 @@ def delete_coffee(user_id: str, coffee_id: str) -> None:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
             raise ValueError(f"coffee {coffee_id} not found") from e
         raise
+    return deleted_brew_ids
 
 
 def get_coffee(user_id: str, coffee_id: str) -> dict[str, Any] | None:
@@ -421,6 +437,87 @@ VALID_METHODS = {
     "V60", "AeroPress", "Espresso", "FrenchPress", "Chemex",
     "Kalita", "Origami", "OXO Rapid Brewer", "Moka", "ColdBrew",
 }
+
+
+def _dose_g_amount(raw: Any) -> float:
+    if raw is None:
+        return 0.0
+    if isinstance(raw, Decimal):
+        v = float(raw)
+    else:
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+    return v if v > 0 else 0.0
+
+
+def _apply_coffee_stock_delta(user_id: str, coffee_id: str, delta_g: float) -> None:
+    """Adjust ``gramsRemaining`` when stock is tracked (+ restores, − consumes)."""
+    if not coffee_id or delta_g == 0:
+        return
+    coffee = get_coffee(user_id, coffee_id)
+    if coffee is None:
+        raise ValueError(f"coffee {coffee_id} not found")
+    if coffee.get("gramsRemaining") is None:
+        return
+
+    now = _now_iso()
+    if delta_g > 0:
+        _table.update_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
+            UpdateExpression="SET gramsRemaining = gramsRemaining + :d, updatedAt = :now",
+            ConditionExpression="attribute_exists(PK) AND attribute_exists(gramsRemaining)",
+            ExpressionAttributeValues={
+                ":d": Decimal(str(delta_g)),
+                ":now": now,
+            },
+        )
+        return
+
+    consume = abs(delta_g)
+    try:
+        _table.update_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
+            UpdateExpression="SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now",
+            ConditionExpression=(
+                "attribute_exists(PK) "
+                "AND attribute_exists(gramsRemaining) "
+                "AND gramsRemaining >= :dose"
+            ),
+            ExpressionAttributeValues={
+                ":dose": Decimal(str(consume)),
+                ":now": now,
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+        refreshed = get_coffee(user_id, coffee_id)
+        remaining = (refreshed or {}).get("gramsRemaining")
+        raise ValueError(
+            f"insufficient stock on coffee {coffee_id} for {consume}g "
+            f"(remaining: {remaining}g)"
+        ) from e
+
+
+def _list_all_brews_for_coffee(coffee_id: str) -> list[dict[str, Any]]:
+    """All brew rows for a bag (GSI1), newest first."""
+    items: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {
+        "IndexName": "GSI1",
+        "KeyConditionExpression": Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
+        & Key("GSI1SK").begins_with("BREW#"),
+        "ScanIndexForward": False,
+    }
+    while True:
+        resp = _table.query(**kwargs)
+        items.extend(resp.get("Items", []))
+        lek = resp.get("LastEvaluatedKey")
+        if not lek:
+            break
+        kwargs["ExclusiveStartKey"] = lek
+    return [_strip_keys(i) for i in items]
 
 
 def create_brew(
@@ -521,33 +618,55 @@ def create_brew(
     return _strip_keys(item)
 
 
+_TIMELINE_QUERY_PAGE = 200
+
+
+def _find_timeline_item_by_id(
+    user_id: str,
+    sk_prefix: str,
+    id_attribute: str,
+    entity_id: str,
+    *,
+    projection: str | None = None,
+) -> dict[str, Any] | None:
+    """Paginate a user's time-ordered SK prefix until ``id_attribute`` matches."""
+    eid = (entity_id or "").strip()
+    if not eid:
+        return None
+    kwargs: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(sk_prefix),
+        "FilterExpression": Attr(id_attribute).eq(eid),
+        "ScanIndexForward": False,
+        "Limit": _TIMELINE_QUERY_PAGE,
+    }
+    if projection:
+        kwargs["ProjectionExpression"] = projection
+    while True:
+        resp = _table.query(**kwargs)
+        items = resp.get("Items", [])
+        if items:
+            row = items[0]
+            return row if projection else _strip_keys(row)
+        lek = resp.get("LastEvaluatedKey")
+        if not lek:
+            return None
+        kwargs["ExclusiveStartKey"] = lek
+
+
 def get_brew(user_id: str, brew_id: str) -> dict[str, Any] | None:
-    """Look up a single brew by brewId (scans recent 200 SK entries)."""
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("BREW#"),
-        FilterExpression=Attr("brewId").eq(brew_id),
-        ScanIndexForward=False,
-        Limit=200,
-    )
-    items = resp.get("Items", [])
-    return _strip_keys(items[0]) if items else None
+    """Look up a single brew by ``brewId`` (full timeline scan, paginated)."""
+    return _find_timeline_item_by_id(user_id, "BREW#", "brewId", brew_id)
 
 
 def _brew_sk(user_id: str, brew_id: str) -> str:
     """Return the full SK for a brew, raising ValueError if not found."""
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("BREW#"),
-        FilterExpression=Attr("brewId").eq(brew_id),
-        ProjectionExpression="SK",
-        ScanIndexForward=False,
-        Limit=200,
+    row = _find_timeline_item_by_id(
+        user_id, "BREW#", "brewId", brew_id, projection="SK"
     )
-    items = resp.get("Items", [])
-    if not items:
+    if not row:
         raise ValueError(f"brew {brew_id} not found")
-    return items[0]["SK"]
+    return row["SK"]
 
 
 _BREW_EDITABLE = {
@@ -570,6 +689,15 @@ def update_brew(user_id: str, brew_id: str, updates: dict[str, Any]) -> dict[str
     # Fetch current item so we can recalculate ratio if needed.
     resp = _table.get_item(Key={"PK": f"USER#{user_id}", "SK": sk})
     current = resp.get("Item") or {}
+
+    if "doseG" in updates:
+        old_dose = _dose_g_amount(current.get("doseG"))
+        new_dose = _dose_g_amount(updates.get("doseG"))
+        stock_delta = old_dose - new_dose
+        if stock_delta != 0:
+            cid = str(current.get("coffeeId") or "").strip()
+            if cid:
+                _apply_coffee_stock_delta(user_id, cid, stock_delta)
 
     set_parts = ["updatedAt = :now"]
     values: dict[str, Any] = {":now": _now_iso()}
@@ -609,8 +737,14 @@ def update_brew(user_id: str, brew_id: str, updates: dict[str, Any]) -> dict[str
 
 
 def delete_brew(user_id: str, brew_id: str) -> None:
-    """Permanently delete a brew. Does NOT restore gramsRemaining."""
+    """Permanently delete a brew; restores ``gramsRemaining`` when stock is tracked."""
     sk = _brew_sk(user_id, brew_id)
+    resp = _table.get_item(Key={"PK": f"USER#{user_id}", "SK": sk})
+    current = resp.get("Item") or {}
+    cid = str(current.get("coffeeId") or "").strip()
+    dose = _dose_g_amount(current.get("doseG"))
+    if cid and dose > 0:
+        _apply_coffee_stock_delta(user_id, cid, dose)
     _table.delete_item(
         Key={"PK": f"USER#{user_id}", "SK": sk},
         ConditionExpression="attribute_exists(PK)",
@@ -1191,31 +1325,17 @@ def log_visit(
 
 
 def get_visit(user_id: str, visit_id: str) -> dict[str, Any] | None:
-    """Look up a single visit by visitId (queries recent VISIT# SK entries)."""
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("VISIT#"),
-        FilterExpression=Attr("visitId").eq(visit_id),
-        ScanIndexForward=False,
-        Limit=200,
-    )
-    items = resp.get("Items", [])
-    return _strip_keys(items[0]) if items else None
+    """Look up a single visit by ``visitId`` (full timeline scan, paginated)."""
+    return _find_timeline_item_by_id(user_id, "VISIT#", "visitId", visit_id)
 
 
 def _visit_sk(user_id: str, visit_id: str) -> str:
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("VISIT#"),
-        FilterExpression=Attr("visitId").eq(visit_id),
-        ProjectionExpression="SK",
-        ScanIndexForward=False,
-        Limit=200,
+    row = _find_timeline_item_by_id(
+        user_id, "VISIT#", "visitId", visit_id, projection="SK"
     )
-    items = resp.get("Items", [])
-    if not items:
+    if not row:
         raise ValueError(f"visit {visit_id} not found")
-    return items[0]["SK"]
+    return row["SK"]
 
 
 _VISIT_EDITABLE = {"rating", "notes", "drinks", "visitDate", "placeName"}

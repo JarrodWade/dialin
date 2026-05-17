@@ -1,0 +1,4 @@
+# Local dev / CI — not bundled into Lambda.
+-r lambda/requirements.txt
+pytest>=8,<9
+moto[dynamodb]>=5,<6

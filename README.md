@@ -140,6 +140,14 @@ make ui UI_PORT=8001
 
 Paste the API URL into the input at the top of the UI.
 
+### Tests
+
+```bash
+make test   # pytest + moto DynamoDB; creates .venv if needed
+```
+
+Covers tool dispatch error envelopes and a golden-path journal flow (roaster → coffee → brew → visit) without Bedrock or AWS credentials.
+
 ### Authentication (Clerk, optional)
 
 For multi-user–safe auth, use **Clerk** in the UI and set **`clerk_jwt_issuer`** in Terraform so API Gateway validates session JWTs before Lambda runs. Step-by-step (Dashboard URLs, issuer, audience, local redirects) is in **[CLERK.md](./CLERK.md)**. Quick pieces:
