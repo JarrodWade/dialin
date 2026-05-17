@@ -182,7 +182,9 @@ def _handle_get_glossary(_event: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-_HISTORY_TURN_LIMIT = 12  # last N messages from the client (rolling window)
+_HISTORY_TURN_LIMIT = int(
+    os.environ.get("CHAT_HISTORY_TURN_LIMIT", "24")
+)  # last N messages from the client (rolling window; keep in sync with web UI)
 
 
 def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:

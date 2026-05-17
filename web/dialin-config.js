@@ -4,4 +4,6 @@
  */
 window.DIALIN_CONFIG = window.DIALIN_CONFIG || {
   clerkPublishableKey: "pk_test_bmV1dHJhbC1ibHVlamF5LTE4LmNsZXJrLmFjY291bnRzLmRldiQ",
+  /** Keep in sync with Lambda env CHAT_HISTORY_TURN_LIMIT (default 24). */
+  chatHistoryTurnLimit: 24,
 };

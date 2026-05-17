@@ -371,10 +371,16 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: authedJsonBody(withClientTimezone({ message: text, history: _askHistory.slice(-6) })),
+            body: authedJsonBody(withClientTimezone({ message: text, history: trimChatHistory(_askHistory) })),
           });
-          if (data.history) _askHistory = data.history.slice(-12);
-          else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);
+          if (data.history) _askHistory = trimChatHistory(data.history);
+          else {
+            _askHistory = trimChatHistory([
+              ..._askHistory,
+              { role: "USER", text },
+              { role: "BOT", text: data.reply },
+            ]);
+          }
           askReply.innerHTML = "";
           renderMarkdown(askReply, data.reply || "(no reply)");
           askReply.className = "ask-reply visible";

@@ -24,7 +24,7 @@ _TABLE_NAME = os.environ.get("TABLE_NAME", "")
 _EMBED_MODEL = (os.environ.get("BEDROCK_EMBEDDING_MODEL_ID") or "").strip()
 
 _MAX_INPUT_CHARS = int(os.environ.get("JOURNAL_RAG_EMBED_INPUT_CHARS", "12000"))
-_MAX_CHUNKS_SCAN = int(os.environ.get("JOURNAL_RAG_MAX_CHUNKS", "500"))
+_MAX_CHUNKS_SCAN = int(os.environ.get("JOURNAL_RAG_MAX_CHUNKS", "2000"))
 
 _dynamodb = boto3.resource("dynamodb")
 _table = _dynamodb.Table(_TABLE_NAME) if _TABLE_NAME else None
@@ -179,7 +179,8 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (math.sqrt(na) * math.sqrt(nb))
 
 
-def _list_user_chunks(user_id: str) -> list[dict[str, Any]]:
+def _list_user_chunks(user_id: str) -> tuple[list[dict[str, Any]], bool]:
+    """Load RAG chunks for cosine search. Returns ``(items, truncated_at_cap)``."""
     items: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
         "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("RAGCHUNK#"),
@@ -191,11 +192,11 @@ def _list_user_chunks(user_id: str) -> list[dict[str, Any]]:
     while True:
         resp = _table.query(**kwargs)  # type: ignore[union-attr]
         items.extend(resp.get("Items", []))
-        if len(items) >= _MAX_CHUNKS_SCAN:
-            return items[:_MAX_CHUNKS_SCAN]
         lek = resp.get("LastEvaluatedKey")
+        if len(items) >= _MAX_CHUNKS_SCAN:
+            return items[:_MAX_CHUNKS_SCAN], True
         if not lek:
-            return items
+            return items, False
         kwargs["ExclusiveStartKey"] = lek
 
 
@@ -212,7 +213,7 @@ def search(user_id: str, query: str, top_k: int = 6) -> dict[str, Any]:
     qv = embed_text(q)
     if not qv:
         return {"ok": False, "error": "could not embed query"}
-    items = _list_user_chunks(user_id)
+    items, truncated = _list_user_chunks(user_id)
     if not items:
         return {
             "ok": True,
@@ -242,13 +243,19 @@ def search(user_id: str, query: str, top_k: int = 6) -> dict[str, Any]:
                 "text": it.get("displayText") or "",
             }
         )
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "query": q,
         "chunksLoaded": len(items),
-        "cappedToMaxChunks": len(items) >= _MAX_CHUNKS_SCAN,
+        "cappedToMaxChunks": truncated,
         "hits": hits,
     }
+    if truncated:
+        out["note"] = (
+            f"Journal search capped at {_MAX_CHUNKS_SCAN} indexed chunks; "
+            "older entries may be omitted from semantic recall."
+        )
+    return out
 
 
 # --- sync helpers (called after successful writes) ---------------------------------

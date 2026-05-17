@@ -34,7 +34,19 @@ variable "max_output_tokens" {
 variable "max_tool_iterations" {
   description = "Maximum tool-use loop iterations per chat turn (safety cap). Larger because the bot may chain: list_coffees -> list_equipment -> summarize_coffee -> get_preferences."
   type        = number
-  default     = 8
+  default     = 12
+}
+
+variable "chat_history_turn_limit" {
+  description = "Max chat messages (USER+BOT) sent to Bedrock per turn; keep in sync with web dialin-config.js chatHistoryTurnLimit."
+  type        = number
+  default     = 24
+}
+
+variable "journal_rag_max_chunks" {
+  description = "Max journal RAG chunks scanned per retrieve_journal query (pagination cap for latency)."
+  type        = number
+  default     = 2000
 }
 
 variable "log_retention_days" {

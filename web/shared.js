@@ -43,6 +43,20 @@ function userId() {
   return v;
 }
 
+/** Rolling chat window (messages, not exchanges). Match Lambda ``CHAT_HISTORY_TURN_LIMIT``. */
+function chatHistoryTurnLimit() {
+  const raw = window.DIALIN_CONFIG && window.DIALIN_CONFIG.chatHistoryTurnLimit;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 24;
+}
+
+/** Trim chat history arrays to the same limit the API keeps. */
+function trimChatHistory(history) {
+  const list = Array.isArray(history) ? history : [];
+  const cap = chatHistoryTurnLimit();
+  return list.slice(-cap);
+}
+
 /** Stable per-user suffix for localStorage (Clerk sub or legacy user id). Does not throw. */
 function storageUserKey() {
   if (clerkConfigured()) {

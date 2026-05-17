@@ -148,6 +148,8 @@ make test   # pytest + moto DynamoDB; creates .venv if needed
 
 Covers tool dispatch error envelopes and a golden-path journal flow (roaster → coffee → brew → visit) without Bedrock or AWS credentials.
 
+Chat history: set `chatHistoryTurnLimit` in `web/dialin-config.js` to match Lambda `CHAT_HISTORY_TURN_LIMIT` (default 24 messages).
+
 ### Authentication (Clerk, optional)
 
 For multi-user–safe auth, use **Clerk** in the UI and set **`clerk_jwt_issuer`** in Terraform so API Gateway validates session JWTs before Lambda runs. Step-by-step (Dashboard URLs, issuer, audience, local redirects) is in **[CLERK.md](./CLERK.md)**. Quick pieces:

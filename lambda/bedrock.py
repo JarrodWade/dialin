@@ -398,7 +398,7 @@ _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 _REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "400"))
 _TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.3"))
-_MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "7"))
+_MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "12"))
 
 _client = boto3.client("bedrock-runtime", region_name=_REGION)
 
