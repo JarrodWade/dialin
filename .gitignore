@@ -31,6 +31,9 @@ tfplan
 .env
 .env.*
 
+# Per-developer / per-deploy frontend config (API URL, Clerk pk, etc.)
+web/dialin-config.js
+
 # OS / editor
 .DS_Store
 .idea/

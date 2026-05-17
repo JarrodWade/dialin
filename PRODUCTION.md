@@ -11,7 +11,7 @@ Current state is a personal-use tool with no auth and a manually-entered user ID
 
 **Implemented: optional Clerk.** Set Terraform `clerk_jwt_issuer` (Clerk Frontend API URL, same as JWT `iss`). When non-empty, Lambda verifies `Authorization` session JWTs against that instance’s JWKS (`verify_aud=false` so Clerk’s default tokens work) and sets `ALLOW_CLIENT_USER_ID=false`. API Gateway remains open to the world at the HTTP layer — auth is enforced in Lambda — so tighten CORS and consider edge protection before growth.
 
-**Frontend:** `web/dialin-config.js` — set `clerkPublishableKey`, or leave it empty and use localStorage key `dialin.clerkPk`. The UI loads `@clerk/clerk-js` and sends `Authorization: Bearer <session token>` on API calls.
+**Frontend:** copy `web/dialin-config.example.js` → `web/dialin-config.js` (gitignored) — set `clerkPublishableKey`, or leave it empty and use localStorage key `dialin.clerkPk`. The UI loads `@clerk/clerk-js` and sends `Authorization: Bearer <session token>` on API calls.
 
 **Legacy local mode:** leave `clerk_jwt_issuer` empty; Lambda allows `userId` from body/query again and the manual user id field stays visible.
 

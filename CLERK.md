@@ -34,11 +34,11 @@ Labels move between releases; if you cannot find “Paths”, use the dashboard 
 
 ---
 
-## 3. Publishable key → `web/dialin-config.js`
+## 3. Publishable key → `web/dialin-config.js` (local, gitignored)
 
 1. **Configure → API Keys** (or **Developers → API keys**).
 2. Copy the **Publishable key** (`pk_test_…` or `pk_live_…`).
-3. Set it in `web/dialin-config.js`:
+3. `cp web/dialin-config.example.js web/dialin-config.js` and set the key:
 
 ```javascript
 window.DIALIN_CONFIG = window.DIALIN_CONFIG || {

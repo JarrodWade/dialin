@@ -150,10 +150,12 @@ Covers tool dispatch error envelopes and a golden-path journal flow (roaster →
 
 Chat history: set `chatHistoryTurnLimit` in `web/dialin-config.js` to match Lambda `CHAT_HISTORY_TURN_LIMIT` (default 24 messages).
 
-After deploy, bake the API URL into the UI:
+`web/dialin-config.js` is **gitignored** (API URL + Clerk key). Copy the example once:
 
 ```bash
-make web-config   # writes apiBase from terraform output into web/dialin-config.js
+cp web/dialin-config.example.js web/dialin-config.js
+# edit clerkPublishableKey, or use localStorage dialin.clerkPk
+make web-config   # fills apiBase from terraform output
 ```
 
 ### Authentication (Clerk, optional)
