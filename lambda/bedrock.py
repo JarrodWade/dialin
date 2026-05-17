@@ -138,7 +138,18 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "  Step 2 — live search when discovery needs fresh intel: call search_web before naming "
     "*new* venues the user has not logged — especially new cities, international destinations, "
     "'what's open / good now', verifying a specific shop name, or checking whether a place is "
-    "still operating. You have NO access to live Google Maps hours, 'open now', or closure "
+    "still operating. Training data is not a source of truth for **which city a shop is in**; "
+    "famous names are often Tokyo/Kyoto while the user asked elsewhere — verify every candidate.\n"
+    "  City anchoring (hard rule): When the user names a destination city or area, run search_web "
+    "at least once with that place in the query (e.g. \"specialty coffee Osaka\" or "
+    "\"third wave cafe Osaka\"). Before you state that a shop is a pick **for that place**, "
+    "run a targeted search_web for \"<shop name> <that same place> coffee\" (or address / "
+    "\"Tabelog\" / neighborhood). If snippets or titles clearly place the shop in a different "
+    "city or prefecture (e.g. Tokyo, Kyoto, Fukuoka when the user said Osaka), **drop it** "
+    "from the list or name it explicitly as a day-trip option in the other city — never "
+    "mis-label it as local. If city-level grounding is unclear from snippets, say so and ask "
+    "the user to confirm on Maps; do not guess.\n"
+    "  You have NO access to live Google Maps hours, 'open now', or closure "
     "banners; training data is often stale. For each shop you might recommend from memory, run "
     "a targeted search_web (shop name + city + 'closed' OR 'hours' OR 'Instagram' OR year) and "
     "drop or deprioritise anything that looks temporarily closed, renovating, moved, or ended. "
@@ -201,6 +212,7 @@ _LOG_VISIT_PHRASE = re.compile(
 )
 _APPENDIX_TRIGGERS_SIMPLE = (
     r"\bcafes?\s+in\b",
+    r"\bcoffee\s+in\b",
     r"\bcoffee\s+shops?\s+in\b",
     r"\bcoffee\s+scene\b",
     r"\bcoffee\s+culture\b",
@@ -208,11 +220,15 @@ _APPENDIX_TRIGGERS_SIMPLE = (
     r"\bplanning\s+a\s+(?:trip|vacation)\b",
     r"\b(?:must\s*-?\s*visit|must\s+visit)\b",
     r"\bwhere\s+(?:should|would|could|can)\s+i\s+(?:go|drink|stop|grab|hit|caffeinate)\b",
+    r"\bwhat(?:'s|s| is)\s+good\s+(?:in|around|near)\b",
+    r"\b(?:spots?|places?|stops?|picks?)\s+(?:in|for|around|near)\b",
 )
 _TRAVEL_PLACE_PROBE = re.compile(
     r"\b(?:"
     r"headed\s+(?:to|towards)|"
     r"heading\s+(?:to|towards)|"
+    r"going\s+to|"
+    r"visit(?:ing)?\s+(?:to\s+)?|"
     r"travel(?:l)?ing\s+(?:to|through|around|in)|"
     r"flying\s+to|"
     r"trip\s+to|"
@@ -252,8 +268,11 @@ def _router_scan_text(history: list[dict], user_text: str, *, prior_user_slices:
 
 def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> bool:
     """Heuristic lightweight router (no LLM cost). Prefer false negatives vs spamming appendix every turn."""
-    short_follow = len((user_text or "").strip()) < 96
-    scan = _router_scan_text(history, user_text, prior_user_slices=2 if short_follow else 1)
+    ulen = len((user_text or "").strip())
+    short_follow = ulen < 96
+    # Short replies like "Osaka?" inherit city intent from more prior user turns.
+    prior_user_slices = 3 if ulen < 40 else (2 if short_follow else 1)
+    scan = _router_scan_text(history, user_text, prior_user_slices=prior_user_slices)
     if not scan:
         return False
     t = scan.lower().replace("cafés", "cafes").replace("café", "cafe")
@@ -426,7 +445,9 @@ _SYSTEM_PROMPT_CORE = (
     "them when relevant; omit or empty means stay approachable unless the user asks.\n"
     "6. Café discovery & trip scouting (not §2d named-visit flows): baseline is list_cafes (city filter) "
     "+ targeted search_web before you cite unfamiliar venues; specialty/3rd-wave bar framing only; "
-    "never invent shop names or streets; caveat stale closures. When Trip place discovery appendix "
+    "never invent shop names or streets; never claim a shop is in city X without search_web (or "
+    "the user's list_cafes row) showing that city — Japan/Korea/US names are easy to confuse "
+    "across metros. Caveat stale closures. When Trip place discovery appendix "
     "is absent, compact judgment still applies.\n"
     "7. Keep replies short and direct (2-5 sentences). Plain text, no headers. "
     "Numbers like '15g → 250g, 3:10' are great when discussing brews.\n"
