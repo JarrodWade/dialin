@@ -20,6 +20,7 @@ from typing import Any
 import boto3
 from zoneinfo import ZoneInfo
 
+import chat_context
 import ddb
 import tools
 
@@ -133,8 +134,15 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "Use for open-ended where-should-I-drink-in-[place] questions, itineraries, or scouting a new café city; "
     "if they mainly want to log a §2d named café visit, §2d wins — do not derail.\n\n"
     "Mandatory process:\n"
-    "  Step 1 — check the user's own data: call list_cafes with a city filter. "
-    "Prioritise any place they've already visited and rated highly.\n"
+    "  Step 1 — check the user's own data: call list_cafes with a city filter for that trip "
+    "and **list_roasters** — users often save roaster-cafés as roasters (hasCafe), which list_cafes "
+    "will not show. Stored city strings vary (\"Kyoto\" vs \"Kyoto, Japan\"); matching is flexible on "
+    "the server. Before saying they have **no** saves in a city or that a **named** shop is not "
+    "tracked, use list_cafes with **nameContains** and/or omit the city filter once, and cross-check "
+    "list_roasters for the same name.\n"
+    "  Do not **omit** a widely agreed specialty anchor from the destination rundown only because "
+    "it already appears in list_cafes / list_roasters — mention it and note they already track it "
+    "if so; omission reads like a miss.\n"
     "  Step 2 — live search when discovery needs fresh intel: call search_web before naming "
     "*new* venues the user has not logged — especially new cities, international destinations, "
     "'what's open / good now', verifying a specific shop name, or checking whether a place is "
@@ -563,60 +571,64 @@ def generate_reply(
         len(base_system),
     )
 
-    for iteration in range(_MAX_TOOL_ITERATIONS):
-        response = _client.converse(
-            modelId=_MODEL_ID,
-            system=base_system,
-            messages=messages,
-            toolConfig=tool_config,
-            inferenceConfig={
-                "maxTokens": _MAX_OUTPUT_TOKENS,
-                "temperature": _TEMPERATURE,
-            },
-        )
+    trip_ctx_token = chat_context.trip_place_discovery_active.set(attach_trip_appendix)
+    try:
+        for iteration in range(_MAX_TOOL_ITERATIONS):
+            response = _client.converse(
+                modelId=_MODEL_ID,
+                system=base_system,
+                messages=messages,
+                toolConfig=tool_config,
+                inferenceConfig={
+                    "maxTokens": _MAX_OUTPUT_TOKENS,
+                    "temperature": _TEMPERATURE,
+                },
+            )
 
-        stop_reason = response.get("stopReason")
-        output_message = response["output"]["message"]
-        content_blocks = output_message.get("content", [])
+            stop_reason = response.get("stopReason")
+            output_message = response["output"]["message"]
+            content_blocks = output_message.get("content", [])
 
-        # Collect any text the model produced this round.
-        for block in content_blocks:
-            if "text" in block and block["text"]:
-                final_text_parts.append(block["text"])
+            # Collect any text the model produced this round.
+            for block in content_blocks:
+                if "text" in block and block["text"]:
+                    final_text_parts.append(block["text"])
 
-        if stop_reason != "tool_use":
-            break
+            if stop_reason != "tool_use":
+                break
 
-        # The model wants to call one or more tools. Append its message,
-        # run the tools, then append the toolResult blocks as the next user message.
-        messages.append({"role": "assistant", "content": content_blocks})
+            # The model wants to call one or more tools. Append its message,
+            # run the tools, then append the toolResult blocks as the next user message.
+            messages.append({"role": "assistant", "content": content_blocks})
 
-        tool_results: list[dict[str, Any]] = []
-        for block in content_blocks:
-            tu = block.get("toolUse")
-            if not tu:
-                continue
-            tool_name = tu["name"]
-            tool_input = tu.get("input", {})
-            tool_use_id = tu["toolUseId"]
-            logger.info("tool_use name=%s input=%s", tool_name, tool_input)
-            result = tools.dispatch(tool_name, user_id, tool_input)
-            tool_results.append({
-                "toolResult": {
-                    "toolUseId": tool_use_id,
-                    "content": [{"json": _to_jsonable(result)}],
-                    "status": "success" if result.get("ok", True) else "error",
-                }
-            })
+            tool_results: list[dict[str, Any]] = []
+            for block in content_blocks:
+                tu = block.get("toolUse")
+                if not tu:
+                    continue
+                tool_name = tu["name"]
+                tool_input = tu.get("input", {})
+                tool_use_id = tu["toolUseId"]
+                logger.info("tool_use name=%s input=%s", tool_name, tool_input)
+                result = tools.dispatch(tool_name, user_id, tool_input)
+                tool_results.append({
+                    "toolResult": {
+                        "toolUseId": tool_use_id,
+                        "content": [{"json": _to_jsonable(result)}],
+                        "status": "success" if result.get("ok", True) else "error",
+                    }
+                })
 
-        if not tool_results:
-            break
+            if not tool_results:
+                break
 
-        messages.append({"role": "user", "content": tool_results})
-    else:
-        final_text_parts.append(
-            "(Stopped after maximum tool iterations. Try rephrasing.)"
-        )
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            final_text_parts.append(
+                "(Stopped after maximum tool iterations. Try rephrasing.)"
+            )
+    finally:
+        chat_context.trip_place_discovery_active.reset(trip_ctx_token)
 
     text = "\n".join(_strip_meta(p) for p in final_text_parts if p.strip())
     return text.strip() or "(no reply)"

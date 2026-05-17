@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 import ddb
 import journal_rag
+import chat_context
 
 _TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 _LOGGER = logging.getLogger(__name__)
@@ -26,6 +27,32 @@ _LOGGER = logging.getLogger(__name__)
 # Production-shaped safeguards (still reasonable for solo use): shared DynamoDB cache + monthly quota per user.
 _WEBSEARCH_CACHE_TTL_SEC = int(os.environ.get("WEBSEARCH_CACHE_TTL_SECONDS", "86400"))
 _WEBSEARCH_MONTHLY_LIMIT = int(os.environ.get("WEBSEARCH_MONTHLY_LIMIT_PER_USER", "300"))
+_LOG_TRIP_WEBSEARCH = os.environ.get("LOG_TRIP_WEBSEARCH", "").lower() in ("1", "true", "yes")
+
+
+def _log_trip_search_web_summary(
+    *,
+    query: str,
+    include_domains: list[Any],
+    max_results: int,
+    payload: dict[str, Any],
+    cache_hit: bool,
+) -> None:
+    """Opt-in CloudWatch aid: did Tavily return title X (e.g. a missing roaster) on trip-discovery turns?"""
+    if not _LOG_TRIP_WEBSEARCH or not chat_context.trip_place_discovery_active.get():
+        return
+    results = payload.get("results") or []
+    titles = [str((r.get("title") or ""))[:160] for r in results[:12]]
+    domains = list(include_domains) if include_domains else []
+    _LOGGER.info(
+        "trip_search_web cache_hit=%s maxResults=%s domains=%s n_results=%s query=%r titles=%s",
+        cache_hit,
+        max_results,
+        domains,
+        len(results),
+        query[:800],
+        titles,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +416,14 @@ def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _list_cafes(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    items = ddb.list_cafes(user_id, city=args.get("city"), include_archived=bool(args.get("includeArchived")))
+    nc_raw = args.get("nameContains") or args.get("name_contains")
+    nc = str(nc_raw).strip() if nc_raw is not None else ""
+    items = ddb.list_cafes(
+        user_id,
+        city=args.get("city"),
+        name_contains=nc or None,
+        include_archived=bool(args.get("includeArchived")),
+    )
     return {"count": len(items), "cafes": items}
 
 
@@ -584,11 +618,20 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if cached is not None:
         out = dict(cached)
         out["_cache"] = {"hit": True}
+        _log_trip_search_web_summary(
+            query=query,
+            include_domains=include_domains,
+            max_results=max_results,
+            payload=out,
+            cache_hit=True,
+        )
         return out
 
     allowed, usage_count = ddb.consume_websearch_quota(user_id, _WEBSEARCH_MONTHLY_LIMIT)
     if not allowed:
         lim = _WEBSEARCH_MONTHLY_LIMIT
+        if _LOG_TRIP_WEBSEARCH and chat_context.trip_place_discovery_active.get():
+            _LOGGER.info("trip_search_web quota_exceeded query=%r", query[:800])
         return {
             "ok": False,
             "error": (
@@ -652,6 +695,13 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if _WEBSEARCH_MONTHLY_LIMIT > 0:
         meta["monthlyLimit"] = _WEBSEARCH_MONTHLY_LIMIT
     out["_cache"] = meta
+    _log_trip_search_web_summary(
+        query=query,
+        include_domains=include_domains,
+        max_results=max_results,
+        payload=out,
+        cache_hit=False,
+    )
     return out
 
 
@@ -798,7 +848,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "list_roasters",
-            "description": "List the user's saved roasters.",
+            "description": (
+                "List the user's saved roasters. For trip / city scouting and \"do I already track X?\", "
+                "call this alongside list_cafes — roaster-cafés (hasCafe) often live here only."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
@@ -1297,15 +1350,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "list_cafes",
             "description": (
-                "List the user's tracked cafés, optionally filtered by city. "
+                "List the user's tracked cafés, optionally filtered by city and/or name substring. "
                 "Whenever the café name shows up anywhere in dialogue, correlate it with these rows "
-                "before implying it isn't tracked or asking identity-clarifiers you could answer from matches."
+                "before implying it isn't tracked. City filter matches flexible stored values "
+                "(e.g. filter \"Kyoto\" matches \"Kyoto, Japan\"). Roaster-cafés saved under **Roasters** "
+                "with hasCafe are NOT returned here — call list_roasters too. If city filter returns "
+                "empty but the user expects a named shop, use nameContains or omit city and scan."
             ),
             "inputSchema": {
                 "json": {
                     "type": "object",
                     "properties": {
                         "city": {"type": "string"},
+                        "nameContains": {
+                            "type": "string",
+                            "description": "Case-insensitive substring on cafe name (e.g. \"Weekenders\").",
+                        },
                         "includeArchived": {"type": "boolean"},
                     },
                 }

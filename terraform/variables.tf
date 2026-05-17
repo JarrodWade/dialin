@@ -21,8 +21,8 @@ variable "bedrock_embedding_model_id" {
     Bedrock embedding model for journal RAG (retrieve_journal tool), e.g. amazon.titan-embed-text-v2:0.
     Set to empty string to disable embedding sync and semantic search. Enable model access in Bedrock console.
   EOT
-  type    = string
-  default = "amazon.titan-embed-text-v2:0"
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
 }
 
 variable "max_output_tokens" {
@@ -71,6 +71,12 @@ variable "websearch_monthly_limit_per_user" {
   description = "Max live Tavily calls per userId per UTC month (cache hits do not count). Set 0 for unlimited."
   type        = number
   default     = 300
+}
+
+variable "log_trip_websearch" {
+  description = "When true, Lambda logs search_web query + result titles for trip-discovery turns (LOG_TRIP_WEBSEARCH). No user message bodies."
+  type        = bool
+  default     = false
 }
 
 variable "chat_local_timezone" {

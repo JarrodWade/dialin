@@ -848,10 +848,33 @@ def get_cafe(user_id: str, cafe_id: str) -> dict[str, Any] | None:
     return _strip_keys(item) if item else None
 
 
+def _city_matches_user_filter(stored_raw: str | None, filter_city: str) -> bool:
+    """True if a cafe row's ``city`` should match the user's filter.
+
+    Users and LLMs often use "Kyoto" while the row stores "Kyoto, Japan", ward names, etc.
+    Empty stored city never matches a non-empty filter.
+    """
+    q = (filter_city or "").strip().lower()
+    if not q:
+        return True
+    s = (stored_raw or "").strip().lower()
+    if not s:
+        return False
+    if s == q:
+        return True
+    head = s.split(",")[0].strip()
+    if head == q:
+        return True
+    if head.startswith(q + "-") or head.startswith(q + " "):
+        return True
+    return False
+
+
 def list_cafes(
     user_id: str,
     *,
     city: str | None = None,
+    name_contains: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     resp = _table.query(
@@ -861,8 +884,11 @@ def list_cafes(
     items = [_strip_keys(i) for i in resp.get("Items", [])]
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
-    if city:
-        items = [i for i in items if (i.get("city") or "").lower() == city.lower()]
+    nc = (name_contains or "").strip().lower()
+    if nc:
+        items = [i for i in items if nc in (i.get("name") or "").lower()]
+    if city and (city.strip()):
+        items = [i for i in items if _city_matches_user_filter(i.get("city"), city)]
     items.sort(key=lambda i: (i.get("city") or "", i.get("name") or ""))
     return items
 

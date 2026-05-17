@@ -560,8 +560,14 @@ def _handle_list_cafes(event: dict[str, Any]) -> dict[str, Any]:
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
     city = _qs(event).get("city")
+    name_contains = (_qs(event).get("nameContains") or _qs(event).get("name_contains") or "").strip()
     include_archived = _qs(event).get("includeArchived", "").lower() in ("1", "true")
-    items = ddb.list_cafes(user_id, city=city, include_archived=include_archived)
+    items = ddb.list_cafes(
+        user_id,
+        city=city,
+        name_contains=name_contains or None,
+        include_archived=include_archived,
+    )
     return _response(200, {"cafes": items})
 
 

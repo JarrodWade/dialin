@@ -71,6 +71,7 @@ resource "aws_lambda_function" "api" {
       TAVILY_API_KEY                   = var.tavily_api_key
       WEBSEARCH_CACHE_TTL_SECONDS      = tostring(var.websearch_cache_ttl_seconds)
       WEBSEARCH_MONTHLY_LIMIT_PER_USER = tostring(var.websearch_monthly_limit_per_user)
+      LOG_TRIP_WEBSEARCH               = var.log_trip_websearch ? "true" : "false"
       ALLOW_CLIENT_USER_ID             = local.clerk_auth_enabled ? "false" : "true"
       CLERK_JWT_ISSUER                 = trimspace(var.clerk_jwt_issuer)
       CLERK_ALLOWED_ORIGINS            = join(",", [for o in var.cors_allowed_origins : o if o != "*"])
