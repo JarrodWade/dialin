@@ -159,6 +159,19 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "with the city — not just \"specialty cafe\" — because independent roasting-led bars are "
     "what many travelers mean by \"best specialty\"; restaurant-, hotel-, or fashion-brand coffee "
     "often dominates generic results.\n"
+    "  Listicle & awards hygiene: Do not crown a **single** \"top pick\" from one tourism listicle, "
+    "\"best N cafes\" blog, or a lone hyped awards headline — merge the roaster + forum/consensus "
+    "queries first and prefer names that repeat across **independent** passes. Awards are fine as "
+    "extra color, not as the main reason something leads a coffee-first list.\n"
+    "  Cup-first vs spectacle: If search mostly describes a venue as **brunch, terrace views, "
+    "temple/shrine adjacency, or scenic café** with coffee as secondary, keep it in **atmosphere / "
+    "bonus** territory for generic specialty asks — not ahead of **home-city roastery bars**. If "
+    "the user asked for views or brunch, invert that ordering.\n"
+    "  Japan metros: When hits skew generic tourist cafés or regional chains, add another merge "
+    "query: roman city + specialty + **roaster** + (reddit.com **or** \"third wave\"). English/IG "
+    "exports often surface roaster-led bars that JP listicles bury. **Tokyo-headquartered brands:** "
+    "run \"<brand> <user's city>\" before claiming a branch; if results show only Tokyo (or no "
+    "confirmed branch), do not list it under the other city.\n"
     "  You have NO access to live Google Maps hours, 'open now', or closure "
     "banners; training data is often stale. For each shop you might recommend from memory, run "
     "a targeted search_web (shop name + city + 'closed' OR 'hours' OR 'Instagram' OR year) and "
@@ -167,6 +180,11 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "for identical queries; for **city shortlists** the two-query strategy above is the default — "
     "add a third targeted query only if both are still thin. Skip search_web here when the user's ask is purely 'only from "
     "my saved cafes' — but community brew/gear chatter still uses Reddit via search_web elsewhere.\n"
+    "  Step 3a — If after merging you still lack obvious **export-facing roaster cafés** the city "
+    "is widely known for among specialty drinkers (per reddit / specialty media / roaster query), "
+    "run **one** more targeted search before finalising — e.g. city + \"coffee roaster\" + "
+    "\"specialty\" or city + r/coffee — **do not** ship a headline list dominated by scenic brunch "
+    "spots alone.\n"
     "  Step 3 — filter results through these tiers:\n"
     "  TIER 1 (must-match): Is it a genuine specialty/3rd-wave shop with trained "
     "baristas and sourced single-origins? Generic coffee chains or commodity shops "
@@ -197,6 +215,15 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "favour shops that regularly feature washed lots with clarity and structure (any origin). "
     "For fruit-forward or ferment-forward tastes, favour shops that stock naturals, honeys, "
     "or experimental lots. Mention only if it adds signal.\n"
+    "  Reply composition (no hardcoded venues — infer from search only): shape answers so the **spine** "
+    "is **widely agreed specialty** — the kind of names that show up when a curious drinker checks "
+    "\"best / top specialty coffee [city]\" **and** sees the same roaster-led bars echoed on Reddit "
+    "or specialty forums (after your merged queries — not one random listicle). Then add, when "
+    "supported by snippets: **(1)** one or two **experimental / progressive** picks, **(2)** one or two "
+    "**classic** cups (clean, iconic dial-in or approachable third-wave — not commodity), **(3)** "
+    "**brunch / pastry / dessert**-forward spots as a clearly **separate** bonus lane (\"if you want "
+    "great viennoiseries with good coffee…\") so food-forward places do not masquerade as consensus "
+    "anchors. Stay within §7 reply length — tighten wording rather than dropping the consensus spine.\n"
     "  Pricing: do not state typical cup prices, currencies, or \"$X per cup\" unless search "
     "snippets explicitly support it — else omit pricing.\n"
     "  Location & addresses: Lead with shop name plus neighborhood, district, or area "
@@ -205,6 +232,10 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "tool output or in live search_web results you are paraphrasing — never invent or memorize "
     "street numbers from training. If no verified address, say plainly to search "
     "'[shop name] [city]' on Google Maps (or their Instagram) for the pin and hours.\n"
+    "  Multi-outlet / chain clarity: When a brand has many locations in the city, name the "
+    "**neighborhood or landmark** search results tie to the standout bar (or roastery/flagship if snippets say so). "
+    "If outlets differ and snippets do not say which is best for filter service vs takeaway, say that in one short "
+    "clause — do not imply every branch is the same experience.\n"
     "  Confidence rules:\n"
     "  a) Shops surfaced by live search with multiple community mentions AND no recent "
     "closure/renovation signals — recommend with confidence, citing the source signal "
@@ -223,6 +254,12 @@ _APPENDIX_TRIP_PLACE_DISCOVERY = (
     "  e) Trip-planning closure hygiene: whenever you list shops for a future visit, end with "
     "one reminder: hours and closures change — confirm on Google Maps or the shop's socials "
     "the same week you travel.\n"
+    "  f) Vague mega-lists: do not invent or lean on unnamed \"World's best\" / \"top 100\" rankings; "
+    "if you mention an award or list, name the **publisher/year** only when the snippet "
+    "supplies it — otherwise omit.\n"
+    "  g) Source tension: If tourism/blog listicles and Reddit or specialty threads disagree on what "
+    "counts as **essential** vs **skippable**, say so in one short clause and reflect both leanings — "
+    "do not collapse the conflict silently.\n"
 )
 
 _TRIP_APPENDIX_DUAL_INTENT_GUARD = re.compile(
@@ -323,7 +360,7 @@ _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 _REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "400"))
 _TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.3"))
-_MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "5"))
+_MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "7"))
 
 _client = boto3.client("bedrock-runtime", region_name=_REGION)
 
