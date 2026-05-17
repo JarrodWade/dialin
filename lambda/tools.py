@@ -348,7 +348,11 @@ def _get_dialin_advice(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _list_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    items = ddb.list_equipment(user_id, equip_type=args.get("equipType"))
+    items = ddb.list_equipment(
+        user_id,
+        equip_type=args.get("equipType"),
+        include_archived=ddb.coerce_bool(args.get("includeArchived")),
+    )
     return {"count": len(items), "equipment": items}
 
 
@@ -364,6 +368,14 @@ def _add_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {"equipment": item}
     if name_meta:
         out["nameResolution"] = name_meta
+    if isinstance(name_meta, dict) and name_meta.get("reusedDuplicate"):
+        out["assistantInstruction"] = (
+            "reuse_duplicate_match: The database reports this name already exists as ACTIVE saved gear. "
+            "Tell the user the exact row you matched (see equipment.equipType and equipment.name) and "
+            "that it should appear under My gear under that category. "
+            "If they insist it is missing, suggest refreshing, list_equipment with includeArchived true, "
+            "or signing into the same account in the app as in chat."
+        )
     return out
 
 
@@ -1187,7 +1199,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "list_equipment",
-            "description": "List the user's gear (machines, grinders, brewers, kettles).",
+            "description": (
+                "List the user's saved gear (machines, grinders, brewers, kettles). "
+                "Omit equipType to see **all** categories. Set includeArchived true to include retired rows."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
@@ -1195,7 +1210,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "equipType": {
                             "type": "string",
                             "enum": sorted(ddb.EQUIP_TYPES),
-                        }
+                        },
+                        "includeArchived": {
+                            "type": "boolean",
+                            "description": "When true, include retired (archived) gear. Default false.",
+                        },
                     },
                 }
             },
@@ -1207,8 +1226,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "description": (
                 "Add brewing gear. Unknown names are stored with trimmed spacing; recognized names "
                 "are normalized to a canonical display string (see gear_canonical). "
+                "Before adding, call list_equipment without equipType when the user asks to catalog gear. "
+                "Niche Zero → equipType GRINDER. "
                 "If the user already has active gear of the same type with the same normalized name, "
-                "the existing item is reused — no duplicate row."
+                "the existing item is reused (nameResolution.reusedDuplicate) — no duplicate row."
             ),
             "inputSchema": {
                 "json": {
