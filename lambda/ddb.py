@@ -196,7 +196,12 @@ def get_roaster(user_id: str, roaster_id: str) -> dict[str, Any] | None:
     return _strip_keys(item) if item else None
 
 
-def list_roasters(user_id: str, *, include_archived: bool = False) -> list[dict[str, Any]]:
+def list_roasters(
+    user_id: str,
+    *,
+    name_contains: str | None = None,
+    include_archived: bool = False,
+) -> list[dict[str, Any]]:
     resp = _table.query(
         KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
         & Key("SK").begins_with("ROASTER#"),
@@ -204,6 +209,9 @@ def list_roasters(user_id: str, *, include_archived: bool = False) -> list[dict[
     items = [_strip_keys(i) for i in resp.get("Items", [])]
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
+    nc = (name_contains or "").strip().lower()
+    if nc:
+        items = [i for i in items if nc in (i.get("name") or "").lower()]
     items.sort(key=lambda i: i.get("name", "").lower())
     return items
 
@@ -1054,12 +1062,14 @@ def list_visits(
     user_id: str,
     *,
     cafe_id: str | None = None,
+    roaster_id: str | None = None,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    if cafe_id:
+    place_id = (cafe_id or roaster_id or "").strip() or None
+    if place_id:
         resp = _table.query(
             IndexName="GSI1",
-            KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{cafe_id}")
+            KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{place_id}")
             & Key("GSI1SK").begins_with("VISIT#"),
             ScanIndexForward=False,
             Limit=limit,

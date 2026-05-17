@@ -23,7 +23,7 @@ Routes (representative):
   PATCH /brews/{brewId}                  body: patch fields
   DELETE /brews/{brewId}
 
-  GET  /visits?cafeId=&limit=          (legacy: ?userId=)
+  GET  /visits?cafeId=&roasterId=&limit=   (legacy: ?userId=)
   POST /visits                         body: cafeId | roasterId, visitDate, drinks, rating, notes, placeName
   PATCH /visits/{visitId}             body: patch fields (rating, notes, drinks, visitDate, placeName)
   DELETE /visits/{visitId}
@@ -395,7 +395,12 @@ def _handle_list_roasters(event: dict[str, Any]) -> dict[str, Any]:
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
     include_archived = qs.get("includeArchived", "").lower() in {"1", "true", "yes"}
-    items = ddb.list_roasters(user_id, include_archived=include_archived)
+    name_contains = (qs.get("nameContains") or qs.get("name_contains") or "").strip()
+    items = ddb.list_roasters(
+        user_id,
+        name_contains=name_contains or None,
+        include_archived=include_archived,
+    )
     return _response(200, {"count": len(items), "roasters": items})
 
 
@@ -644,9 +649,16 @@ def _handle_list_visits(event: dict[str, Any]) -> dict[str, Any]:
     user_id = _user_id(event)
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
-    cafe_id = _qs(event).get("cafeId")
-    limit = int(_qs(event).get("limit", "20"))
-    items = ddb.list_visits(user_id, cafe_id=cafe_id, limit=limit)
+    qs = _qs(event)
+    cafe_id = qs.get("cafeId")
+    roaster_id = qs.get("roasterId")
+    limit = int(qs.get("limit", "20"))
+    items = ddb.list_visits(
+        user_id,
+        cafe_id=cafe_id,
+        roaster_id=roaster_id,
+        limit=limit,
+    )
     return _response(200, {"visits": items})
 
 

@@ -119,7 +119,13 @@ def _lookup_coffee_term(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _list_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    items = ddb.list_roasters(user_id, include_archived=bool(args.get("includeArchived")))
+    nc_raw = args.get("nameContains") or args.get("name_contains")
+    nc = str(nc_raw).strip() if nc_raw is not None else ""
+    items = ddb.list_roasters(
+        user_id,
+        name_contains=nc or None,
+        include_archived=bool(args.get("includeArchived")),
+    )
     return {"count": len(items), "roasters": items}
 
 
@@ -447,7 +453,12 @@ def _log_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    items = ddb.list_visits(user_id, cafe_id=args.get("cafeId"), limit=int(args.get("limit", 10)))
+    items = ddb.list_visits(
+        user_id,
+        cafe_id=args.get("cafeId"),
+        roaster_id=args.get("roasterId"),
+        limit=int(args.get("limit", 10)),
+    )
     return {"count": len(items), "visits": items}
 
 
@@ -849,13 +860,19 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "list_roasters",
             "description": (
-                "List the user's saved roasters. For trip / city scouting and \"do I already track X?\", "
-                "call this alongside list_cafes — roaster-cafés (hasCafe) often live here only."
+                "List the user's saved roasters, optionally filtered by name substring. For trip / city "
+                "scouting and \"do I already track X?\", call with **nameContains** alongside list_cafes — "
+                "roaster-cafés (hasCafe) often live here only. Before offering add_roaster, resolve the "
+                "name here first."
             ),
             "inputSchema": {
                 "json": {
                     "type": "object",
                     "properties": {
+                        "nameContains": {
+                            "type": "string",
+                            "description": "Case-insensitive substring on roaster name (e.g. \"Moxie\").",
+                        },
                         "includeArchived": {"type": "boolean"},
                     },
                 }
@@ -1351,8 +1368,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_cafes",
             "description": (
                 "List the user's tracked cafés, optionally filtered by city and/or name substring. "
-                "Whenever the café name shows up anywhere in dialogue, correlate it with these rows "
-                "before implying it isn't tracked. City filter matches flexible stored values "
+                "Whenever a **named café or roaster** appears — visit, logging, **or opinion / comparison** "
+                "— call with **nameContains** on a distinctive token (and list_roasters too) **before** "
+                "saying it isn't saved or offering add_cafe or add_roaster. "
+                "City filter matches flexible stored values "
                 "(e.g. filter \"Kyoto\" matches \"Kyoto, Japan\"). Roaster-cafés saved under **Roasters** "
                 "with hasCafe are NOT returned here — call list_roasters too. If city filter returns "
                 "empty but the user expects a named shop, use nameContains or omit city and scan."
@@ -1442,12 +1461,24 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "list_visits",
-            "description": "List the user's cafe visits, optionally filtered by cafe.",
+            "description": (
+                "List the user's cafe/roaster visits. Filter with **cafeId** (café visits) or **roasterId** "
+                "(visits logged against a roaster row) — same GSI underneath. After resolving a named place "
+                "the user asks about, query visits to see if they already have history there before offering "
+                "to add the place."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
                     "properties": {
-                        "cafeId": {"type": "string"},
+                        "cafeId": {
+                            "type": "string",
+                            "description": "Filter to visits for this café (cafeId).",
+                        },
+                        "roasterId": {
+                            "type": "string",
+                            "description": "Filter to visits logged with this roasterId.",
+                        },
                         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                     },
                 }
