@@ -418,7 +418,7 @@ def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
             country=body.get("country"),
             website=body.get("website"),
             notes=body.get("notes"),
-            has_cafe=bool(body.get("hasCafe")),
+            has_cafe=ddb.coerce_bool(body.get("hasCafe")),
         )
     except Exception:  # noqa: BLE001
         logger.exception("create_roaster failed")
@@ -598,7 +598,7 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
         country=body.get("country"),
         website=body.get("website"),
         notes=body.get("notes"),
-        is_roaster=bool(body.get("isRoaster")),
+        is_roaster=ddb.coerce_bool(body.get("isRoaster")),
     )
     return _response(201, {"cafe": item})
 

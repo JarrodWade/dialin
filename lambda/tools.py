@@ -1283,7 +1283,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "update_cafe",
-            "description": "Edit a cafe or mark it archived.",
+            "description": (
+                "Edit a cafe or mark it archived. "
+                "IMPORTANT: The app's 'also a roaster' badge for cafe-primary places is the boolean "
+                "isRoaster only — you must pass isRoaster: true to turn it on. "
+                "Putting 'they roast on site' only in notes does NOT set the badge. "
+                "After updating, the tool result echoes the saved cafe — confirm isRoaster in your head before telling the user it's done."
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
@@ -1297,7 +1303,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
                         "archived": {"type": "boolean"},
-                        "isRoaster": {"type": "boolean"},
+                        "isRoaster": {
+                            "type": "boolean",
+                            "description": "Set true so this cafe shows the roaster badge (on-site roasting). Required for that UI — not inferred from notes.",
+                        },
                     },
                 }
             },

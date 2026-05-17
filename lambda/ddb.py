@@ -67,6 +67,27 @@ def _to_decimal(v: Any) -> Decimal | None:
     return Decimal(str(v))
 
 
+def coerce_bool(v: Any) -> bool:
+    """Normalize JSON / form / LLM tool values to bool.
+
+    Python's bool(\"false\") is True — callers must use this for API bodies and tool input.
+    """
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in ("", "0", "false", "no", "n", "off", "null", "none"):
+            return False
+        if s in ("1", "true", "yes", "y", "on"):
+            return True
+        return False
+    return bool(v)
+
+
 def _strip_keys(item: dict[str, Any]) -> dict[str, Any]:
     """Remove DynamoDB-only keys before returning items to API clients."""
     return {k: v for k, v in item.items() if k not in {"PK", "SK", "GSI1PK", "GSI1SK"}}
@@ -190,6 +211,10 @@ def list_roasters(user_id: str, *, include_archived: bool = False) -> list[dict[
 def update_roaster(user_id: str, roaster_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     allowed = {"name", "city", "country", "website", "notes", "archived", "hasCafe"}
     updates = {k: v for k, v in updates.items() if k in allowed}
+    if "hasCafe" in updates:
+        updates["hasCafe"] = coerce_bool(updates["hasCafe"])
+    if "archived" in updates:
+        updates["archived"] = coerce_bool(updates["archived"])
     if not updates:
         raise ValueError("no allowed fields to update")
 
@@ -844,6 +869,10 @@ def list_cafes(
 def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     allowed = {"name", "neighborhood", "city", "country", "website", "notes", "archived", "isRoaster"}
     updates = {k: v for k, v in updates.items() if k in allowed}
+    if "isRoaster" in updates:
+        updates["isRoaster"] = coerce_bool(updates["isRoaster"])
+    if "archived" in updates:
+        updates["archived"] = coerce_bool(updates["archived"])
     if not updates:
         raise ValueError("no allowed fields to update")
 
