@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate
+.PHONY: init plan apply destroy fmt validate ui logs test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate
 
 ARGS ?=
 
@@ -15,6 +15,9 @@ validate:
 
 glossary-validate:
 	@python3 "$(CURDIR)/scripts/validate_glossary.py"
+
+gear-canonical-validate:
+	@python3 "$(CURDIR)/scripts/validate_gear_canonical.py"
 
 plan:
 	$(TF) plan
@@ -40,7 +43,7 @@ lambda-bundle:
 	    --only-binary=:all: \
 	    && rm -rf "$$ROOT/build/youtube_transcript_api/test" \
 	    && cp "$$ROOT"/*.py "$$ROOT/build/" \
-	    && cp "$$ROOT/coffee_glossary.json" "$$ROOT/build/"
+	    && cp "$$ROOT/coffee_glossary.json" "$$ROOT/gear_canonical.json" "$$ROOT/build/"
 
 deploy-lambda: lambda-bundle
 	@FUNC=$$($(TF) output -raw lambda_function_name); \

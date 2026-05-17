@@ -37,6 +37,8 @@ import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
+from equipment_canonical import resolve_equipment_display_name
+
 _TABLE_NAME = os.environ["TABLE_NAME"]
 _dynamodb = boto3.resource("dynamodb")
 _table = _dynamodb.Table(_TABLE_NAME)
@@ -573,14 +575,19 @@ def create_equipment(
     brand: str | None = None,
     model: str | None = None,
     notes: str | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     equip_type = equip_type.upper()
     if equip_type not in EQUIP_TYPES:
         raise ValueError(f"unknown equipType {equip_type!r}; one of {sorted(EQUIP_TYPES)}")
 
-    existing = _find_active_equipment_same_name(user_id, equip_type, name)
+    resolved, name_meta = resolve_equipment_display_name(name)
+    if not resolved:
+        raise ValueError("equipment name is required")
+
+    existing = _find_active_equipment_same_name(user_id, equip_type, resolved)
     if existing:
-        return existing
+        dup_meta: dict[str, Any] = {**(name_meta or {}), "reusedDuplicate": True}
+        return existing, dup_meta
 
     equip_id = _new_id("eq")
     created_at = _now_iso()
@@ -591,7 +598,7 @@ def create_equipment(
         "userId": user_id,
         "equipId": equip_id,
         "equipType": equip_type,
-        "name": name,
+        "name": resolved,
         "brand": brand,
         "model": model,
         "notes": notes,
@@ -602,7 +609,7 @@ def create_equipment(
         Item=item,
         ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)",
     )
-    return _strip_keys(item)
+    return _strip_keys(item), name_meta
 
 
 def list_equipment(
@@ -638,6 +645,14 @@ def update_equipment(
     """Patch an equipment item. Whitelist of editable fields."""
     allowed = {"name", "brand", "model", "notes", "equipType", "archived"}
     updates = {k: v for k, v in updates.items() if k in allowed}
+    if "name" in updates:
+        raw_name = updates["name"]
+        if not isinstance(raw_name, str):
+            raise ValueError("name must be a string")
+        resolved, _meta = resolve_equipment_display_name(raw_name)
+        if not resolved:
+            raise ValueError("equipment name cannot be empty")
+        updates["name"] = resolved
     if "equipType" in updates:
         updates["equipType"] = updates["equipType"].upper()
         if updates["equipType"] not in EQUIP_TYPES:

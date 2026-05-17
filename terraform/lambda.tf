@@ -2,6 +2,7 @@ locals {
   _lambda_bundle_trigger = sha256(join("", concat(
     [filesha256("${path.module}/../lambda/requirements.txt")],
     [filesha256("${path.module}/../lambda/coffee_glossary.json")],
+    [filesha256("${path.module}/../lambda/gear_canonical.json")],
     [for p in sort(fileset("${path.module}/../lambda", "*.py")) : filesha256("${path.module}/../lambda/${p}")],
   )))
 }
@@ -26,7 +27,7 @@ python3 -m pip install -q -r "$ROOT/requirements.txt" -t "$ROOT/build" \
   --only-binary=:all:
 rm -rf "$ROOT/build/youtube_transcript_api/test"
 cp "$ROOT"/*.py "$ROOT/build/"
-cp "$ROOT/coffee_glossary.json" "$ROOT/build/"
+cp "$ROOT/coffee_glossary.json" "$ROOT/gear_canonical.json" "$ROOT/build/"
 EOT
   }
 }

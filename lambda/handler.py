@@ -356,7 +356,7 @@ def _handle_create_equipment(event: dict[str, Any]) -> dict[str, Any]:
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
     try:
-        item = ddb.create_equipment(
+        item, name_meta = ddb.create_equipment(
             user_id=user_id,
             equip_type=body["equipType"].strip(),
             name=body["name"].strip(),
@@ -369,7 +369,10 @@ def _handle_create_equipment(event: dict[str, Any]) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         logger.exception("create_equipment failed")
         return _response(500, {"error": "could not create equipment"})
-    return _response(201, {"equipment": item})
+    payload: dict[str, Any] = {"equipment": item}
+    if name_meta:
+        payload["nameResolution"] = name_meta
+    return _response(201, payload)
 
 
 def _handle_list_roasters(event: dict[str, Any]) -> dict[str, Any]:

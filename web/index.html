@@ -1016,7 +1016,17 @@
           } else {
             const data = await api("/equipment", { method: "POST", body: authedJsonBody(body) });
             const newId = data?.equipment?.equipId;
-            resetEquipModal(); closeModal(equipModal); toast("Gear added");
+            const nr = data?.nameResolution;
+            resetEquipModal(); closeModal(equipModal);
+            let msg = "Gear added";
+            if (data?.nameResolution?.reusedDuplicate) {
+              msg = "Already in your gear list (no duplicate)";
+            } else if (nr?.kind === "alias" && data?.equipment?.name) {
+              msg = `Gear added as “${data.equipment.name}” (recognized name)`;
+            } else if (nr?.kind === "whitespace") {
+              msg = "Gear added (cleaned up spacing)";
+            }
+            toast(msg);
             await loadEquipment();
             if (_pendingGearSelectField && newId) {
               const sel = brewForm.elements[_pendingGearSelectField];

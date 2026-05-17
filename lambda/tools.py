@@ -318,7 +318,7 @@ def _list_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _add_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    return ddb.create_equipment(
+    item, name_meta = ddb.create_equipment(
         user_id=user_id,
         equip_type=args["equipType"],
         name=args["name"],
@@ -326,6 +326,10 @@ def _add_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         model=args.get("model"),
         notes=args.get("notes"),
     )
+    out: dict[str, Any] = {"equipment": item}
+    if name_meta:
+        out["nameResolution"] = name_meta
+    return out
 
 
 # --- Preferences -------------------------------------------------------------
@@ -1016,8 +1020,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "add_equipment",
             "description": (
-                "Add brewing gear. If the user already has active gear of the same type with the same name "
-                "(ignoring case/spacing), the existing item is reused — no duplicate row."
+                "Add brewing gear. Unknown names are stored with trimmed spacing; recognized names "
+                "are normalized to a canonical display string (see gear_canonical). "
+                "If the user already has active gear of the same type with the same normalized name, "
+                "the existing item is reused — no duplicate row."
             ),
             "inputSchema": {
                 "json": {
