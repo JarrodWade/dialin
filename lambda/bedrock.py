@@ -10,12 +10,57 @@ import json
 import logging
 import os
 import re
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 import boto3
+from zoneinfo import ZoneInfo
 
+import ddb
 import tools
+
+
+_CLIENT_TZ_RE = re.compile(r"^[A-Za-z0-9_\+\-\/]+$")
+
+
+def _try_zone(name: str) -> ZoneInfo | None:
+    n = name.strip()
+    if not n:
+        return None
+    try:
+        return ZoneInfo(n)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def sanitize_client_timezone(raw: str | None) -> str | None:
+    """Clamp untrusted ``clientTimezone`` from ``/chat`` to a sane IANA-ish token."""
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if not s or len(s) > 120 or not _CLIENT_TZ_RE.match(s):
+        return None
+    return s
+
+
+def _effective_tz_for_user(user_id: str, *, client_timezone: str | None) -> tuple[ZoneInfo, str]:
+    """Return timezone for inferring phrases like ``last Sunday`` and a short provenance hint."""
+    cz = sanitize_client_timezone(client_timezone)
+    if cz:
+        z = _try_zone(cz)
+        if z:
+            return z, "client device timezone for this chat request"
+
+    prof = ddb.get_profile(user_id) or {}
+    z = _try_zone(str(prof.get("timezone") or ""))
+    if z:
+        return z, "user profile timezone"
+    env_name = (os.environ.get("CHAT_LOCAL_TIMEZONE") or "").strip()
+    env_z = _try_zone(env_name) if env_name else None
+    if env_z:
+        return env_z, "server CHAT_LOCAL_TIMEZONE default"
+    return ZoneInfo("UTC"), "UTC (no client TZ, profile TZ, nor CHAT_LOCAL_TIMEZONE)"
 
 # Some Nova/Claude models like to emit <thinking>...</thinking> blocks even
 # when not asked to. Strip them before returning to the user.
@@ -26,6 +71,54 @@ def _strip_meta(text: str) -> str:
     return _THINKING_RE.sub("", text).strip()
 
 logger = logging.getLogger(__name__)
+
+
+def _prior_weekday_iso(anchor_local_day: date, *, weekday: int) -> str:
+    """Most recent ``weekday`` (``date.weekday()`` scale) occurring **before** ``anchor``.
+
+    Interpret colloquial *last Monday / last Sunday*: if today **is** that weekday, anchor is tomorrow's
+    date for wording purposes — callers pass **today**, so ``last Sunday`` while today is Sunday
+    resolves to the previous Sunday (not today).
+    """
+    d = anchor_local_day - timedelta(days=1)
+    while d.weekday() != weekday:
+        d -= timedelta(days=1)
+    return d.isoformat()
+
+
+def chat_clock_system_text(
+    user_id: str,
+    *,
+    client_timezone: str | None = None,
+    now_utc: datetime | None = None,
+) -> str:
+    """Dynamic system preamble: anchor dates for resolving relative phrases without questioning the user."""
+    now = now_utc or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    else:
+        now = now.astimezone(UTC)
+    tz, tz_source = _effective_tz_for_user(user_id, client_timezone=client_timezone)
+    local = now.astimezone(tz)
+    local_date = local.date()
+    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    yesterday = (local_date - timedelta(days=1)).isoformat()
+    last_mon = _prior_weekday_iso(local_date, weekday=0)
+    last_sun = _prior_weekday_iso(local_date, weekday=6)
+
+    return (
+        "Clock context for this turn (infer brew/visit calendar dates from this; "
+        "do not recite machine-like field labels to users):\n"
+        f"- utcNowISO: {now.isoformat(timespec='seconds')}\n"
+        f"- localTimeZone: {tz.key} — {tz_source}\n"
+        f"- localNow: {local.strftime('%Y-%m-%d %H:%M')} ({weekdays[local.weekday()]})\n"
+        f"- localTodayISO: {local_date.isoformat()}\n"
+        f"- yesterdayLocalISO: {yesterday}\n"
+        "- commonRelativeHintsLocal (ISO dates; \"last Monday/Sunday\" = prior occurrence before today):\n"
+        f"  - impliedLastMonday: {last_mon}\n"
+        f"  - impliedLastSunday: {last_sun}\n"
+    )
 
 _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 _REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
@@ -103,7 +196,13 @@ _SYSTEM_PROMPT = (
     "  - If not found, call search_known_roasters in case it's a roaster-cafe — use "
     "that data to pre-fill add_cafe.\n"
     "  - To log a new visit: call log_visit with cafeId (or roasterId for roaster-cafes), "
-    "drinks ordered, rating, notes, and placeName for display.\n"
+    "drinks ordered, rating, notes, visitDate when known, and placeName for display.\n"
+    "  - Dates: each request prepends Clock context — localToday's ISO calendar date, timezone, yesterday, "
+    "and hints for typical \"last Monday/last Sunday\" phrasing using that timezone "
+    "(client browser timezone when the app sends it, else profile timezone via get_preferences/update_preferences, "
+    "else CHAT_LOCAL_TIMEZONE fallback). Infer visitDate (YYYY-MM-DD) from relative "
+    "phrases; say the date plainly and invite correction. Do NOT ask trivia like \"what date was last Sunday\" "
+    "unless the visit clearly happened on another calendar day or the wording spans midnight/timezones ambiguously.\n"
     "  - To revise an existing visit line (e.g. change 8→10): update_visit with that row's visitId — "
     "not another log_visit.\n"
     "  - When giving 'what to check out in [city]' recommendations: call list_cafes "
@@ -149,6 +248,7 @@ _SYSTEM_PROMPT = (
     "experimentalPreference, and notes — not only origins. "
     "Call update_preferences when the user reveals a durable preference "
     "(e.g. 'I love Ethiopian naturals', 'I'm based in Brooklyn', 'I get curated subscriptions'). "
+    "Also persist timezone (IANA id) when the user states where they anchor relative visit phrases. "
     "Do NOT store one-off opinions about a single brew.\n"
     "5a. Audience skew (no extra cost — read fields above). Many dialin users follow modern specialty: "
     "curated rotating subscriptions, Nordic/ultralight roasting, and experimental processing (co-ferments, "
@@ -233,7 +333,13 @@ def _to_jsonable(obj: Any) -> Any:
     return json.loads(json.dumps(obj, cls=_DecimalEncoder))
 
 
-def generate_reply(user_id: str, history: list[dict], user_text: str) -> str:
+def generate_reply(
+    user_id: str,
+    history: list[dict],
+    user_text: str,
+    *,
+    client_timezone: str | None = None,
+) -> str:
     """Run a chat turn through Bedrock with tool-use enabled."""
     messages: list[dict[str, Any]] = []
     for h in history:
@@ -246,11 +352,17 @@ def generate_reply(user_id: str, history: list[dict], user_text: str) -> str:
     tool_config = {"tools": tools.TOOL_SPECS}
 
     final_text_parts: list[str] = []
+    clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
 
     for iteration in range(_MAX_TOOL_ITERATIONS):
+        system_blocks = [
+            {"text": _SYSTEM_PROMPT},
+            {"text": clock_supplement},
+        ]
+
         response = _client.converse(
             modelId=_MODEL_ID,
-            system=[{"text": _SYSTEM_PROMPT}],
+            system=system_blocks,
             messages=messages,
             toolConfig=tool_config,
             inferenceConfig={

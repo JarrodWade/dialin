@@ -53,6 +53,19 @@ function withLegacyUserQuery(path, extraQuery = "") {
   return path.includes("?") ? `${path}&${uid}&${extraQuery}` : `${path}?${uid}&${extraQuery}`;
 }
 
+/** Merge device IANA timezone for POST /chat so the server aligns "today/last Sunday" with the user's locale. */
+function withClientTimezone(obj) {
+  let tz = "";
+  try {
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    /* ignore */
+  }
+  const trimmed = tz.trim();
+  const base = typeof obj === "object" && obj ? obj : {};
+  return trimmed ? { ...base, clientTimezone: trimmed } : base;
+}
+
 /** JSON body: legacy mode adds userId; Clerk mode relies on Authorization only. */
 function authedJsonBody(obj) {
   if (clerkConfigured()) return JSON.stringify(obj);

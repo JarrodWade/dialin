@@ -540,7 +540,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: authedJsonBody({ message: text, history }),
+            body: authedJsonBody(withClientTimezone({ message: text, history })),
           });
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
@@ -1187,7 +1187,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: authedJsonBody({ message: ONBOARD_SEED, history: [] }),
+            body: authedJsonBody(withClientTimezone({ message: ONBOARD_SEED, history: [] })),
           });
           typing.remove();
           _onboardHistory = data.history || [
@@ -1215,7 +1215,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: authedJsonBody({ message: text, history: _onboardHistory }),
+            body: authedJsonBody(withClientTimezone({ message: text, history: _onboardHistory })),
           });
           typing.remove();
           _onboardHistory = data.history || [

@@ -11,7 +11,7 @@ Routes (representative):
       -> returns coffee_glossary.json (public; used by UI + same data as lookup_coffee_term)
 
   POST /chat
-      body: {message, history?: [{role: "USER"|"BOT", text}]}  (+ legacy userId)
+      body: {message, history?, clientTimezone?: IANA TZ from browser}  (+ legacy userId)
       -> calls Bedrock with tools, returns {reply, history}
 
   GET  /coffees?includeArchived=   (legacy: ?userId=)
@@ -191,6 +191,8 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
     message = (body.get("message") or "").strip()
+    raw_tz = body.get("clientTimezone")
+    client_tz = raw_tz.strip() if isinstance(raw_tz, str) else None
     history = body.get("history") or []
     if not isinstance(history, list):
         history = []
@@ -202,7 +204,12 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     trimmed = history[-_HISTORY_TURN_LIMIT:]
 
     try:
-        reply = bedrock.generate_reply(user_id=user_id, history=trimmed, user_text=message)
+        reply = bedrock.generate_reply(
+            user_id=user_id,
+            history=trimmed,
+            user_text=message,
+            client_timezone=client_tz,
+        )
     except Exception:  # noqa: BLE001
         logger.exception("bedrock failed")
         return _response(502, {"error": "model invocation failed"})

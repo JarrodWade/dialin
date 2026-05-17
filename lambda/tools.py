@@ -1066,10 +1066,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "get_preferences",
             "description": (
-                "Read stored taste preferences, home city, discovery habits, and experimental openness. "
+                "Read stored taste preferences, home city, IANA timezone field (persistent fallback — the web app normally "
+                "sends browser timezone each /chat anyway), discovery habits, and experimental openness. "
                 "Call before recommending coffees, roasters, or cafés. "
                 "Fields include preferredRoastLevel (may be ultralight), preferredProcesses, "
-                "discoveryChannels, experimentalPreference, and notes."
+                "discoveryChannels, experimentalPreference, notes, timezone."
             ),
             "inputSchema": {"json": {"type": "object", "properties": {}}},
         }
@@ -1081,7 +1082,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "Persist durable taste and discovery preferences so future sessions remember them. "
                 "Lists are merged (deduped); strings replace. "
                 "Use for roast philosophy, how they discover coffee (subscriptions, drops), openness to co-ferments, "
-                "origins/processes — not one-off brew comments."
+                "IANA timezone for relative visit dates, origins/processes — not one-off brew comments."
             ),
             "inputSchema": {
                 "json": {
@@ -1097,6 +1098,14 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "favoriteRoasters": {"type": "array", "items": {"type": "string"}},
                         "favoriteCafes": {"type": "array", "items": {"type": "string"}},
                         "homeCity": {"type": "string"},
+                        "timezone": {
+                            "type": "string",
+                            "description": (
+                                "IANA timezone id for calendar-relative logging, e.g. America/Phoenix, "
+                                "Europe/Berlin. Persist when user states where they usually log visits "
+                                "from; improves \"last Sunday\" visitDate without asking them for dates."
+                            ),
+                        },
                         "notes": {"type": "string"},
                         "discoveryChannels": {
                             "type": "array",
@@ -1337,6 +1346,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "description": (
                 "Log a NEW visit to a cafe OR a roaster-cafe (hasCafe: true). "
                 "Provide either cafeId (for pure cafes) or roasterId (for roasters that also have a cafe). "
+                "Also pass visitDate when known (infer from Clock context for \"yesterday\"/\"last Sunday\" — YYYY-MM-DD). "
                 "Also pass placeName so the visit can be displayed without a join. "
                 "Call list_cafes or list_roasters first to get the right id. "
                 "Do NOT call this to fix a rating or notes on an outing already logged — use update_visit "
@@ -1349,7 +1359,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "cafeId": {"type": "string", "description": "Use for pure cafe entities"},
                         "roasterId": {"type": "string", "description": "Use when visiting a roaster that has a cafe (hasCafe: true)"},
                         "placeName": {"type": "string", "description": "Display name of the place, stored for easy rendering"},
-                        "visitDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                        "visitDate": {
+                            "type": "string",
+                            "description": "YYYY-MM-DD; prefer Clock context + user phrasing rather than prompting for calendar trivia",
+                        },
                         "drinks": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -1398,7 +1411,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "items": {"type": "string"},
                             "description": "Replaces the drinks list when supplied.",
                         },
-                        "visitDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                        "visitDate": {
+                            "type": "string",
+                            "description": "YYYY-MM-DD; prefer Clock context + user phrasing rather than prompting for calendar trivia",
+                        },
                         "placeName": {"type": "string", "description": "Denormalized display label only"},
                     },
                 }

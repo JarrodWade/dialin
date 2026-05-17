@@ -371,7 +371,7 @@
         try {
           const data = await api("/chat", {
             method: "POST",
-            body: authedJsonBody({ message: text, history: _askHistory.slice(-6) }),
+            body: authedJsonBody(withClientTimezone({ message: text, history: _askHistory.slice(-6) })),
           });
           if (data.history) _askHistory = data.history.slice(-12);
           else _askHistory = [..._askHistory, { role: "USER", text }, { role: "BOT", text: data.reply }].slice(-12);

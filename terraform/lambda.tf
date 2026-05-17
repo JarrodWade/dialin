@@ -74,6 +74,7 @@ resource "aws_lambda_function" "api" {
       ALLOW_CLIENT_USER_ID             = local.clerk_auth_enabled ? "false" : "true"
       CLERK_JWT_ISSUER                 = trimspace(var.clerk_jwt_issuer)
       CLERK_ALLOWED_ORIGINS            = join(",", [for o in var.cors_allowed_origins : o if o != "*"])
+      CHAT_LOCAL_TIMEZONE              = trimspace(var.chat_local_timezone)
     }
   }
 

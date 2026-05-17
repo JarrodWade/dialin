@@ -726,6 +726,7 @@ _PROFILE_FIELDS = {
     "favoriteRoasters",       # list[str]
     "favoriteCafes",          # list[str]
     "homeCity",               # str
+    "timezone",               # str IANA TZ, e.g. America/New_York (used when inferring relative visit dates)
     "notes",                  # str (freeform memory)
     "discoveryChannels",      # list[str] — how they find coffee (e.g. subscription boxes)
     "experimentalPreference",  # str: "" | "open" | "seek" — taste for funky/co-ferment lots

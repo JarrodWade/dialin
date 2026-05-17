@@ -73,6 +73,15 @@ variable "websearch_monthly_limit_per_user" {
   default     = 300
 }
 
+variable "chat_local_timezone" {
+  description = <<-EOT
+    IANA timezone used only when resolving relative dates and the client's browser omitted clientTimezone,
+    AND the Dynamo profile omits timezone. Defaults to UTC. Normal users rely on Intl (web) plus optional profile override.
+  EOT
+  type        = string
+  default     = "UTC"
+}
+
 variable "cors_allowed_origins" {
   description = "Origins for CORS allow_origins and Clerk azp validation. Use [\"*\"] for dev; restrict to your real domain(s) for production."
   type        = list(string)
