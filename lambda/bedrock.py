@@ -321,6 +321,8 @@ _APPENDIX_TRIGGERS_SIMPLE = (
     r"\bwhere\s+(?:should|would|could|can)\s+i\s+(?:go|drink|stop|grab|hit|caffeinate)\b",
     r"\bwhat(?:'s|s| is)\s+good\s+(?:in|around|near)\b",
     r"\b(?:spots?|places?|stops?|picks?)\s+(?:in|for|around|near)\b",
+    r"\bbest\s+(?:coffee|cafes?|coffee\s+shops?|third[- ]?wave)\s+in\b",
+    r"\bthird[- ]?wave\s+(?:coffee\s+)?(?:in|around|near)\b",
 )
 _TRAVEL_PLACE_PROBE = re.compile(
     r"\b(?:"

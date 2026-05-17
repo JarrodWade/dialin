@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate
+.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate web-config
 
 ARGS ?=
 
@@ -25,6 +25,10 @@ test:
 	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
 	@"$(VENV)/bin/pip" install -q -r "$(CURDIR)/requirements-dev.txt"
 	@"$(VENV)/bin/pytest" "$(CURDIR)/tests" -q
+
+web-config:
+	@chmod +x "$(CURDIR)/scripts/write-dialin-config.sh"
+	@"$(CURDIR)/scripts/write-dialin-config.sh"
 
 plan:
 	$(TF) plan

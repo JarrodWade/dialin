@@ -203,6 +203,26 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     if err:
         return _response(400, {"error": err})
 
+    try:
+        chat_daily_limit = int(os.environ.get("CHAT_DAILY_LIMIT_PER_USER", "0"))
+    except ValueError:
+        chat_daily_limit = 0
+    if chat_daily_limit > 0:
+        allowed, used = ddb.consume_chat_quota(user_id, chat_daily_limit)
+        if not allowed:
+            return _response(
+                429,
+                {
+                    "error": (
+                        f"Daily chat limit reached ({used}/{chat_daily_limit} turns UTC). "
+                        "Try again tomorrow or raise CHAT_DAILY_LIMIT_PER_USER."
+                    ),
+                    "code": "CHAT_QUOTA_EXCEEDED",
+                    "used": used,
+                    "limit": chat_daily_limit,
+                },
+            )
+
     trimmed = history[-_HISTORY_TURN_LIMIT:]
 
     try:

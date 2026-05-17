@@ -49,6 +49,24 @@ variable "journal_rag_max_chunks" {
   default     = 2000
 }
 
+variable "chat_daily_limit_per_user" {
+  description = "Max POST /chat turns per user per UTC day (0 = unlimited). Enforced in Lambda."
+  type        = number
+  default     = 0
+}
+
+variable "api_throttle_rate_limit" {
+  description = "API Gateway steady-state requests per second (account-wide on this stage)."
+  type        = number
+  default     = 50
+}
+
+variable "api_throttle_burst_limit" {
+  description = "API Gateway burst capacity for this stage."
+  type        = number
+  default     = 100
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for the Lambda function."
   type        = number

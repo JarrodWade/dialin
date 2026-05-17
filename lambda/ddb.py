@@ -1582,3 +1582,38 @@ def consume_websearch_quota(user_id: str, monthly_limit: int) -> tuple[bool, int
     got = _table.get_item(Key={"PK": pk, "SK": sk})
     cur = int((got.get("Item") or {}).get("callCount") or monthly_limit)
     return False, cur
+
+
+def consume_chat_quota(user_id: str, daily_limit: int) -> tuple[bool, int]:
+    """Reserve one ``/chat`` turn for the user's current UTC day.
+
+    Returns (allowed, count_after_increment_or_at_cap). ``daily_limit <= 0`` = unlimited.
+    """
+    if daily_limit <= 0:
+        return True, -1
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    pk = f"USER#{user_id}"
+    sk = f"USAGE#CHAT#{day}"
+
+    try:
+        resp = _table.update_item(
+            Key={"PK": pk, "SK": sk},
+            UpdateExpression="ADD turnCount :one SET itemType = :it, updatedAt = :now",
+            ExpressionAttributeValues={
+                ":one": 1,
+                ":lim": daily_limit,
+                ":it": "UsageCounter",
+                ":now": _now_iso(),
+            },
+            ConditionExpression="attribute_not_exists(turnCount) OR turnCount < :lim",
+            ReturnValues="UPDATED_NEW",
+        )
+        return True, int(resp["Attributes"]["turnCount"])
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+
+    got = _table.get_item(Key={"PK": pk, "SK": sk})
+    cur = int((got.get("Item") or {}).get("turnCount") or daily_limit)
+    return False, cur

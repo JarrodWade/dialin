@@ -335,7 +335,8 @@ function initSharedInputs(onApiChange, onUserChange) {
     window.DIALIN_CONFIG.clerkPublishableKey = savedPk.trim();
   }
 
-  apiInput.value = localStorage.getItem("dialin.apiBase") || "";
+  const cfgApi = (window.DIALIN_CONFIG.apiBase || "").trim();
+  apiInput.value = localStorage.getItem("dialin.apiBase") || cfgApi || "";
   if (userInput) {
     userInput.value = localStorage.getItem("dialin.userId") || "jarrod";
     userInput.addEventListener("input", () => localStorage.setItem("dialin.userId", userInput.value.trim()));

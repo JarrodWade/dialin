@@ -70,6 +70,7 @@ resource "aws_lambda_function" "api" {
       MAX_TOOL_ITERATIONS              = tostring(var.max_tool_iterations)
       CHAT_HISTORY_TURN_LIMIT          = tostring(var.chat_history_turn_limit)
       JOURNAL_RAG_MAX_CHUNKS           = tostring(var.journal_rag_max_chunks)
+      CHAT_DAILY_LIMIT_PER_USER        = tostring(var.chat_daily_limit_per_user)
       TAVILY_API_KEY                   = var.tavily_api_key
       WEBSEARCH_CACHE_TTL_SECONDS      = tostring(var.websearch_cache_ttl_seconds)
       WEBSEARCH_MONTHLY_LIMIT_PER_USER = tostring(var.websearch_monthly_limit_per_user)

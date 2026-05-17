@@ -5,6 +5,10 @@ max_output_tokens   = 400
 max_tool_iterations      = 12
 chat_history_turn_limit = 24
 journal_rag_max_chunks  = 2000
+# chat_daily_limit_per_user = 100   # 0 = unlimited (default)
+# api_throttle_rate_limit   = 50
+# api_throttle_burst_limit  = 100
+# cors_allowed_origins      = ["https://your-domain.example"]
 log_retention_days  = 7
 monthly_budget_usd  = 10
 budget_alert_email  = "you@example.com"
