@@ -1502,8 +1502,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "maxResults": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 8,
-                            "description": "Number of results to return (default 5).",
+                            "maximum": 10,
+                            "description": (
+                                "Number of results (default 5). For merging city café shortlists from "
+                                "multiple queries, prefer 8–10 so roaster-led names surface."
+                            ),
                         },
                     },
                 }
