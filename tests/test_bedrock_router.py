@@ -13,6 +13,9 @@ if str(LAMBDA_DIR) not in sys.path:
     sys.path.insert(0, str(LAMBDA_DIR))
 
 os.environ.setdefault("TABLE_NAME", "dialin-router-test")
+for _k in ("AWS_DEFAULT_REGION", "AWS_REGION", "BEDROCK_REGION"):
+    if not (os.environ.get(_k) or "").strip():
+        os.environ[_k] = "us-east-1"
 
 
 @pytest.fixture(scope="module")

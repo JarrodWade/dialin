@@ -396,8 +396,17 @@ def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> b
     return False
 
 
+def _aws_region() -> str:
+    """Resolve AWS region; treat empty env vars as unset (GitHub Actions often sets AWS_REGION=\"\")."""
+    for key in ("BEDROCK_REGION", "AWS_REGION", "AWS_DEFAULT_REGION"):
+        val = (os.environ.get(key) or "").strip()
+        if val:
+            return val
+    return "us-east-1"
+
+
 _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
-_REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+_REGION = _aws_region()
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "400"))
 _TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.3"))
 _MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "12"))
