@@ -1021,9 +1021,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "add_coffee",
             "description": (
                 "Add a new bag of coffee beans. "
-                "Always call list_roasters first to resolve the roasterId. "
-                "If the roaster isn't in the list, call add_roaster (after user confirms) "
-                "to get a roasterId before calling this."
+                "Always call list_roasters and list_cafes (same nameContains) first — "
+                "venues are often cafés-only in the café list until a ROASTER row exists. "
+                "If there is still no ROASTER#, call add_roaster (after user confirms) "
+                "to get a roasterId; add_roaster returns duplicatePlace if it matches "
+                "an existing café. Then call add_coffee."
             ),
             "inputSchema": {
                 "json": {

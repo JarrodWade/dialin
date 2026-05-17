@@ -94,11 +94,19 @@ def _strip_keys(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_place_name(name: str | None) -> str:
-    """Lowercase, trim, collapse whitespace for duplicate detection."""
+    """Lowercase, trim, collapse whitespace, strip punctuation for duplicate detection.
+
+    User input and saved names often differ only by typography ("Co." vs "Co",
+    commas, trademark symbols, etc.). We keep letters/digits across scripts,
+    spaces, and "&".
+    """
     if not name:
         return ""
     s = str(name).lower().strip()
     s = re.sub(r"[\s\-]+", " ", s)
+    # Drop punctuation — common café/roaster dedupe misses when the model drops "Inc." etc.
+    s = re.sub(r"[^\w\s&]+", "", s, flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
