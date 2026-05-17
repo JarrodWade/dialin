@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+from decimal import Decimal
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -452,14 +453,80 @@ def _log_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
+def _visit_rating_int(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, Decimal):
+        return int(raw) if raw % 1 == 0 else int(float(raw))
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw.strip())
+    return None
+
+
+def _visits_by_place_summary(visits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compact, model-friendly rollup so visit ratings are not re-invented from prose."""
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    meta: dict[str, dict[str, str | None]] = {}
+
+    for v in visits:
+        pid = str(v.get("placeId") or v.get("cafeId") or v.get("roasterId") or "").strip()
+        pname = str(v.get("placeName") or "").strip()
+        key = pid if pid else (f"name:{pname.lower()}" if pname else str(v.get("visitId") or ""))
+        if not key:
+            continue
+        if key not in buckets:
+            buckets[key] = []
+            meta[key] = {"placeId": pid or None, "placeName": pname or pid or "Unknown place"}
+        buckets[key].append(v)
+        if pname:
+            meta[key]["placeName"] = pname
+
+    out: list[dict[str, Any]] = []
+    for key, rows in buckets.items():
+        m = meta[key]
+        slim: list[dict[str, Any]] = []
+        for r in rows:
+            slim.append({
+                "visitId": r.get("visitId"),
+                "visitDate": r.get("visitDate"),
+                "rating": _visit_rating_int(r.get("rating")),
+                "drinks": r.get("drinks") or [],
+            })
+        out.append({
+            "placeId": m["placeId"],
+            "placeName": m["placeName"],
+            "visitCount": len(rows),
+            "visits": slim,
+        })
+
+    def _group_latest_date(g: dict[str, Any]) -> str:
+        vis = g.get("visits") or []
+        if not vis:
+            return ""
+        return str(vis[0].get("visitDate") or "")
+
+    out.sort(key=_group_latest_date, reverse=True)
+    return out
+
+
 def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
+    limit = int(args.get("limit", 40))
+    limit = max(1, min(limit, 50))
     items = ddb.list_visits(
         user_id,
         cafe_id=args.get("cafeId"),
         roaster_id=args.get("roasterId"),
-        limit=int(args.get("limit", 10)),
+        limit=limit,
     )
-    return {"count": len(items), "visits": items}
+    return {
+        "count": len(items),
+        "visits": items,
+        "byPlace": _visits_by_place_summary(items),
+    }
 
 
 def _update_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -1463,9 +1530,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_visits",
             "description": (
                 "List the user's cafe/roaster visits. Filter with **cafeId** (café visits) or **roasterId** "
-                "(visits logged against a roaster row) — same GSI underneath. After resolving a named place "
-                "the user asks about, query visits to see if they already have history there before offering "
-                "to add the place."
+                "(visits logged against a roaster row) — same GSI underneath. Result includes **byPlace** "
+                "(per-venue visitCount and each row's rating) — use these numbers for comparisons; do not "
+                "reconstruct scores from retrieve_journal. After resolving a named place the user asks about, "
+                "query visits with that id; if empty but they insist they logged, call again with "
+                "no cafeId/roasterId and limit 50, then match placeName. For multi-café comparisons or "
+                "catch-all history, prefer one unfiltered call with limit 50."
             ),
             "inputSchema": {
                 "json": {
@@ -1479,7 +1549,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "string",
                             "description": "Filter to visits logged with this roasterId.",
                         },
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50,
+                            "description": "Default 40; use 50 when comparing many cafés or older visits may be missing.",
+                        },
                     },
                 }
             },
