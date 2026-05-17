@@ -635,7 +635,7 @@
       function openVisitModal(placeId, placeType) {
         visitForm.reset();
         visitForm.elements.visitId.value = "";
-        visitForm.elements.visitDate.value = new Date().toISOString().slice(0, 10);
+        visitForm.elements.visitDate.value = todayLocalYYYYMMDD();
         const place = _placesCache.find(p => p._id === placeId);
         const placeName = place ? place.name : "";
         if (placeType === "roaster") {
@@ -658,7 +658,7 @@
         visitForm.elements.visitId.value = v.visitId || "";
         const dateStr = v.visitDate ? String(v.visitDate).slice(0, 10) : "";
         visitForm.elements.visitDate.value =
-          dateStr || new Date().toISOString().slice(0, 10);
+          dateStr || todayLocalYYYYMMDD();
         if (v.cafeId) {
           visitForm.elements.cafeId.value = v.cafeId;
           visitForm.elements.roasterId.value = "";

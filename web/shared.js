@@ -235,10 +235,41 @@ function _appendInline(parent, text) {
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
+const _DATE_ONLY_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `YYYY-MM-DD` is a calendar date; ES `Date` parses it as UTC midnight, which renders as the prior
+ * calendar day in US timezones. Full ISO timestamps parse as documented.
+ */
+function _parseCalendarOrInstant(iso) {
+  const s = String(iso ?? "").trim();
+  if (_DATE_ONLY_ISO.test(s)) {
+    const y = Number(s.slice(0, 4));
+    const mo = Number(s.slice(5, 7));
+    const d = Number(s.slice(8, 10));
+    return new Date(y, mo - 1, d);
+  }
+  return new Date(iso);
+}
+
+/** Today's date in local time as YYYY-MM-DD (for `<input type="date">`). */
+function todayLocalYYYYMMDD() {
+  const n = new Date();
+  const y = n.getFullYear();
+  const m = String(n.getMonth() + 1).padStart(2, "0");
+  const day = String(n.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function fmtDate(iso) {
   if (!iso) return "";
-  try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
-  catch { return iso.slice(0, 10); }
+  try {
+    const d = _parseCalendarOrInstant(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return String(iso).slice(0, 10);
+  }
 }
 
 function fmtTime(iso) {
@@ -250,7 +281,12 @@ function fmtTime(iso) {
 
 function daysSince(dateStr) {
   if (!dateStr) return null;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  const d = _parseCalendarOrInstant(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  const start = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((now - start) / 86400000);
 }
 
 /* Sync api-base + user-id inputs with localStorage; boot Clerk when configured. */
