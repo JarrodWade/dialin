@@ -1246,7 +1246,10 @@
           _onboardExchanges++;
           updateDots(_onboardExchanges);
 
-          // After final exchange, also refresh the prefs chip
+          // Bot may have created roasters/cafes/equipment — refresh sidebar
+          await loadRoasters();
+          await loadCoffees();
+          loadEquipment();
           if (_onboardExchanges >= ONBOARD_QUESTIONS) loadPreferences();
         } catch (err) {
           typing.remove();
@@ -1266,7 +1269,7 @@
         );
         if (visible.length) saveChat(visible);
         renderChat();
-        loadPreferences();
+        loadAll();
       }
 
       onboardDone.addEventListener("click", finishOnboarding);

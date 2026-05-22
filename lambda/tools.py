@@ -1122,7 +1122,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "add_coffee",
             "description": (
                 "Add a new bag of coffee beans. "
-                "Always call list_roasters and list_cafes (same nameContains) first — "
+                "Use roasterId from the state snapshot when available. If the roaster is not "
+                "in the snapshot, call list_roasters and list_cafes (same nameContains) — "
                 "venues are often cafés-only in the café list until a ROASTER row exists. "
                 "If there is still no ROASTER#, call add_roaster (after user confirms) "
                 "to get a roasterId; add_roaster returns duplicatePlace if it matches "
@@ -1205,7 +1206,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "delete_coffee",
             "description": (
                 "Permanently delete a coffee. Use only when the user explicitly asks to delete "
-                "(not archive). This cannot be undone. Call list_coffees first to confirm the coffeeId."
+                "(not archive). This cannot be undone. Use coffeeId from the state snapshot. "
+                "Confirm with the user before deleting."
             ),
             "inputSchema": {
                 "json": {
@@ -1251,8 +1253,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "description": (
                 "Log a brewing attempt. Decrements the coffee's gramsRemaining if "
                 "doseG is provided. Capture as much detail as the user gave. "
-                "If the user mentions equipment by name (e.g. 'Niche Zero'), call "
-                "list_equipment first to resolve the equipId; do NOT invent IDs."
+                "If the user mentions equipment by name (e.g. 'Niche Zero'), resolve the equipId "
+                "from the state snapshot or list_equipment; do NOT invent IDs."
             ),
             "inputSchema": {
                 "json": {
@@ -1342,7 +1344,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "update_equipment",
             "description": (
                 "Update saved gear (rename e.g. Hario V60 02 → 01, edit brand/model/notes, change equipType, or retire). "
-                "Call list_equipment first to get equipId. add_equipment only creates rows — it does not fix typos or sizes."
+                "Use equipId from the state snapshot or call list_equipment. "
+                "add_equipment only creates rows — it does not fix typos or sizes."
             ),
             "inputSchema": {
                 "json": {

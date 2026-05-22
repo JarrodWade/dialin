@@ -408,6 +408,56 @@ def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> b
     return False
 
 
+def _journal_snapshot_text(user_id: str) -> str:
+    """Compact current-state block so the model never needs list_* to know what exists."""
+    coffees = ddb.list_coffees(user_id)
+    roasters = ddb.list_roasters(user_id)
+    equipment = ddb.list_equipment(user_id)
+
+    lines = ["Current journal state (authoritative — do not contradict or invent beyond this):"]
+
+    if coffees:
+        lines.append(f"Coffees ({len(coffees)} active):")
+        for c in coffees:
+            parts = [f"  - {c.get('name', '?')}"]
+            if c.get("roaster"):
+                parts.append(f"by {c['roaster']}")
+            parts.append(f"[coffeeId={c['coffeeId']}]")
+            if c.get("origin"):
+                parts.append(f"origin={c['origin']}")
+            if c.get("process"):
+                parts.append(f"process={c['process']}")
+            if c.get("gramsRemaining") is not None:
+                parts.append(f"{c['gramsRemaining']}g left")
+            lines.append(" ".join(parts))
+    else:
+        lines.append("Coffees: none active.")
+
+    if roasters:
+        lines.append(f"Roasters ({len(roasters)} active):")
+        for r in roasters:
+            city = r.get("city", "")
+            city_part = f" [{city}]" if city else ""
+            lines.append(f"  - {r.get('name', '?')}{city_part} [roasterId={r['roasterId']}]")
+    else:
+        lines.append("Roasters: none saved.")
+
+    if equipment:
+        lines.append(f"Equipment ({len(equipment)} active):")
+        for e in equipment:
+            lines.append(
+                f"  - {e.get('name', '?')} ({e.get('equipType', '')}) [equipId={e['equipId']}]"
+            )
+    else:
+        lines.append("Equipment: none saved.")
+
+    lines.append(
+        "Use these IDs for tool calls. Do not invent IDs not listed here. "
+        "Call list_* tools only when you need brews, visits, or archived items."
+    )
+    return "\n".join(lines)
+
+
 def _aws_region() -> str:
     """Resolve AWS region; treat empty env vars as unset (GitHub Actions often sets AWS_REGION=\"\")."""
     for key in ("BEDROCK_REGION", "AWS_REGION", "AWS_DEFAULT_REGION"):
@@ -443,6 +493,12 @@ _SYSTEM_PROMPT_CORE = (
     "Operating rules:\n"
     "P0 Conflict tie-break — When §2d applies (logging, focusing on, or **asking about** one café the user explicitly named), "
     "stay with that café; avoid generic pivots such as unloading unrelated saved cafés unless they were vague about which spot.\n"
+    "P1 State snapshot — Each turn includes a 'Current journal state' block listing active coffees, "
+    "roasters, and equipment with their IDs. Treat this as ground truth. When the user references "
+    "a coffee by name, match it against this snapshot first. Never claim a coffee exists if it is "
+    "not in the snapshot, and never claim one doesn't exist if it is listed. Use the coffeeId / "
+    "roasterId / equipId from the snapshot directly — do not call list_coffees just to re-fetch "
+    "what you already see. Call list_* tools only for brews, visits, archived items, or filtered queries.\n"
     "0. User-facing voice — hide implementation. Never show API/tool structure in replies: "
     "no field names (hasCafe, isRoaster, roasterId, cafeId, equipId, brewId, coffeeId, etc.), "
     "no JSON/tool dumps, error codes like DUPLICATE_PLACE, or argument names like skipDuplicateCheck. "
@@ -452,12 +508,14 @@ _SYSTEM_PROMPT_CORE = (
     "\"fresh search\") — especially on city shortlists; deliver the answer directly (trip appendix voice). "
     "Confirm outcomes in plain language (e.g. 'Done — Weekenders is now marked as having a café, so you can log visits there'). "
     "Never tell the user to use an ID unless they explicitly ask how the system works.\n"
-    "1. Always resolve names to IDs via list_* tools before referencing them. "
-    "Never invent IDs (coffeeId, equipId, brewId, cafeId, roasterId).\n"
+    "1. Never invent IDs (coffeeId, equipId, brewId, cafeId, roasterId). "
+    "For coffees, roasters, and equipment, use IDs from the state snapshot. "
+    "For brews, visits, and cafes (not in the snapshot), resolve via list_* tools first.\n"
     "2. When the user describes a brew, call log_brew with whatever they gave; "
     "do not fabricate missing values. If they mention gear by name, look it up first.\n"
     "2a. Roaster resolution policy. When the user mentions a roaster name:\n"
-    "  - Call list_roasters first; use **nameContains** when the roster is large or the name is distinctive.\n"
+    "  - Check the state snapshot first. If a roaster matches (case-insensitive), use its roasterId.\n"
+    "  - If not in the snapshot, call list_roasters with nameContains (catches archived or recently added mid-turn).\n"
     "  - If one matches (case-insensitive substring on name/city), use its roasterId.\n"
     "  - If multiple match, ask the user which one.\n"
     "  - If none match, call search_known_roasters to look up canonical details, "
@@ -476,7 +534,8 @@ _SYSTEM_PROMPT_CORE = (
     "must match what they gave — never fabricate.\n"
     "2b. Equipment resolution policy. When the user mentions a grinder, machine, "
     "or brewer by name in a brew description:\n"
-    "  - Call list_equipment first.\n"
+    "  - Check the state snapshot first. If equipment matches, use its equipId.\n"
+    "  - If not in the snapshot, call list_equipment (catches archived or recently added mid-turn).\n"
     "  - If exactly one item matches, use its equipId.\n"
     "  - If multiple match, ask the user which one.\n"
     "  - If none match, ask: 'I don't see a <name> in your gear yet, want me to add it?'\n"
@@ -513,11 +572,11 @@ _SYSTEM_PROMPT_CORE = (
     "Hario V60* brewers, pick the right **equipId** or retire the stale row (**update_equipment** archived: true).\n"
     "2c. Corrections policy. When the user says they made a mistake or wants to fix "
     "something already logged:\n"
-    "  - For **saved gear** (rename, 01 vs 02 size, wrong category, retire): **list_equipment**, then **update_equipment** "
-    "with **equipId**.\n"
+    "  - For **saved gear** (rename, 01 vs 02 size, wrong category, retire): use **equipId** from the "
+    "state snapshot, or **list_equipment** if missing, then **update_equipment**.\n"
     "  - For a brew correction: call list_brews to find the brewId, then update_brew. "
     "NEVER log a new brew just to correct an old one.\n"
-    "  - For a coffee correction: call list_coffees to find the coffeeId, then update_coffee. "
+    "  - For a coffee correction: find the coffeeId in the state snapshot, then update_coffee. "
     "NEVER add a new coffee just to correct an existing one.\n"
     "  - To permanently remove a coffee: confirm with the user (destructive), then delete_coffee.\n"
     "  - To remove a duplicate brew: list_brews, confirm the brewId if ambiguous, then delete_brew.\n"
@@ -686,10 +745,13 @@ def generate_reply(
     clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
     attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
 
+    journal_snapshot = _journal_snapshot_text(user_id)
+
     base_system: list[dict[str, str]] = [{"text": _SYSTEM_PROMPT_CORE}]
     if attach_trip_appendix:
         base_system.append({"text": _APPENDIX_TRIP_PLACE_DISCOVERY})
     base_system.append({"text": clock_supplement})
+    base_system.append({"text": journal_snapshot})
 
     logger.info(
         "converse_attachments trip_place_discovery_appendix=%s blocks=%s",
