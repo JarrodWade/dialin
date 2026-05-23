@@ -9,11 +9,24 @@
       /* ── journal-specific layout ───────────────────────────────────────── */
       main {
         display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 14px; padding: 14px;
+        grid-template-columns: var(--col-left, 55%) 8px 1fr;
+        column-gap: 0; row-gap: 14px; padding: 14px;
         height: calc(100vh - 52px);
       }
       .col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+      /* ── column splitter ───────────────────────────────────────────────── */
+      .col-splitter {
+        cursor: col-resize; display: flex;
+        align-items: stretch; justify-content: center;
+        position: relative; touch-action: none;
+      }
+      .col-splitter::after {
+        content: ''; display: block; width: 2px; border-radius: 1px;
+        background: var(--line); transition: background .15s;
+      }
+      .col-splitter:hover::after,
+      .col-splitter.dragging::after { background: var(--accent); }
 
       /* chat */
       .messages {
@@ -202,6 +215,8 @@
           <button id="send" type="submit">Send</button>
         </form>
       </section>
+
+      <div class="col-splitter" id="col-splitter"></div>
 
       <div class="col">
         <section class="panel" style="flex: 1 1 0; min-height: 120px;">
@@ -1298,6 +1313,47 @@
 
       renderChat();
       loadAll();
+
+      // ── column splitter drag ───────────────────────────────────────────────
+      (function () {
+        const STORAGE_KEY = "journal-col-left";
+        const mainEl    = document.querySelector("main");
+        const splitter  = document.getElementById("col-splitter");
+
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) mainEl.style.setProperty("--col-left", saved);
+
+        splitter.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          splitter.classList.add("dragging");
+          document.body.style.cursor    = "col-resize";
+          document.body.style.userSelect = "none";
+
+          function onMove(e) {
+            const rect     = mainEl.getBoundingClientRect();
+            const pad      = 14;
+            const splitW   = 8;
+            const contentW = rect.width - pad * 2;
+            const mouseX   = e.clientX - rect.left - pad;
+            const minPx    = 260;
+            const maxPx    = contentW - splitW - 260;
+            const clamped  = Math.max(minPx, Math.min(maxPx, mouseX));
+            mainEl.style.setProperty("--col-left", (clamped / contentW * 100).toFixed(2) + "%");
+          }
+
+          function onUp() {
+            splitter.classList.remove("dragging");
+            document.body.style.cursor     = "";
+            document.body.style.userSelect = "";
+            localStorage.setItem(STORAGE_KEY, mainEl.style.getPropertyValue("--col-left") || "55%");
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup",   onUp);
+          }
+
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup",   onUp);
+        });
+      })();
     </script>
   </body>
 </html>

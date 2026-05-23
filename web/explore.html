@@ -46,11 +46,24 @@
       .explore-grid {
         flex: 1; min-height: 0;
         display: grid;
-        grid-template-columns: 1.6fr 1fr;
-        gap: 14px; padding: 14px;
+        grid-template-columns: var(--col-left, 62%) 8px 1fr;
+        column-gap: 0; row-gap: 14px; padding: 14px;
       }
       .places-panel  { grid-column: 1; }
-      .visits-panel  { grid-column: 2; }
+      .visits-panel  { grid-column: 3; }
+
+      /* ── column splitter ───────────────────────────────────────────────── */
+      .col-splitter {
+        cursor: col-resize; display: flex;
+        align-items: stretch; justify-content: center;
+        touch-action: none;
+      }
+      .col-splitter::after {
+        content: ''; display: block; width: 2px; border-radius: 1px;
+        background: var(--line); transition: background .15s;
+      }
+      .col-splitter:hover::after,
+      .col-splitter.dragging::after { background: var(--accent); }
 
       /* filter tabs inside places panel header */
       .place-filters {
@@ -64,6 +77,21 @@
       }
       .filter-btn:hover  { background: var(--bg-2); color: var(--ink); }
       .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+      /* city filter chips */
+      .city-filters {
+        display: flex; flex-wrap: wrap; gap: 4px;
+        padding: 6px 10px 2px;
+      }
+      .city-filters:empty { display: none; }
+      .city-chip {
+        background: transparent; color: var(--muted);
+        border: 1px solid var(--line); border-radius: 10px;
+        padding: 2px 9px; font-size: 11px; cursor: pointer;
+        white-space: nowrap; transition: background .1s, color .1s, border-color .1s;
+      }
+      .city-chip:hover  { background: var(--bg-2); color: var(--ink); }
+      .city-chip.active { background: var(--bg-2); color: var(--ink); border-color: var(--ink); }
 
       /* place list + rows */
       .place-list {
@@ -168,8 +196,11 @@
             <div class="grow"></div>
             <button class="tiny" id="add-place-btn">+ add</button>
           </h2>
+          <div id="city-filters" class="city-filters"></div>
           <div id="place-list" class="place-list"></div>
         </section>
+
+        <div class="col-splitter" id="col-splitter"></div>
 
         <!-- Recent visits -->
         <section class="panel visits-panel">
@@ -202,7 +233,8 @@
             </label>
           </div>
           <label>Name<input name="name" required placeholder="Peixoto, Shoebox, Moxie…" /></label>
-          <label>City<input name="city" placeholder="Chandler, AZ" /></label>
+          <label>City<input name="city" placeholder="Phoenix" /></label>
+          <label>State / Province<input name="state" placeholder="AZ, BC, …" /></label>
           <label>Country<input name="country" placeholder="US" value="US" /></label>
           <label>Website<input name="website" placeholder="https://…" /></label>
           <label class="full">Notes<textarea name="notes" placeholder="anything worth remembering…"></textarea></label>
@@ -331,6 +363,24 @@
       const prefsModal     = document.getElementById("prefs-modal");
       const placeForm   = document.getElementById("place-form");
       const visitForm   = document.getElementById("visit-form");
+
+      // Auto-split "City, State" or "City, Country" into separate fields on blur.
+      // Two-letter uppercase suffix → state (e.g. "Chandler, AZ").
+      // Anything longer → country (e.g. "Tokyo, Japan" or "Taipei, Taiwan").
+      placeForm.elements.city.addEventListener("blur", () => {
+        const raw   = placeForm.elements.city.value;
+        const comma = raw.indexOf(",");
+        if (comma === -1) return;
+        const cityPart   = raw.slice(0, comma).trim();
+        const afterPart  = raw.slice(comma + 1).trim();
+        if (!cityPart || !afterPart) return;
+        placeForm.elements.city.value = cityPart;
+        if (/^[A-Za-z]{2}$/.test(afterPart)) {
+          placeForm.elements.state.value = afterPart.toUpperCase();
+        } else {
+          placeForm.elements.country.value = afterPart;
+        }
+      });
       const prefsForm   = document.getElementById("prefs-form");
       const askInput    = document.getElementById("ask-input");
       const askSend     = document.getElementById("ask-send");
@@ -342,6 +392,7 @@
       let _cafeCache        = [];   // kept for visit name resolution
       let _roasterCache     = [];   // kept for visit name resolution
       let _activeFilter     = "all";
+      let _activeCity       = null;
       let _editingPlaceId   = null;
       let _editingPlaceType = null; // "roaster" | "cafe"
       let _askHistory       = [];
@@ -422,14 +473,46 @@
       }
 
       function filterPlaces(places) {
+        let filtered;
         switch (_activeFilter) {
-          case "roasters": return places.filter(p => placeRoles(p).actingAsRoaster);
-          case "cafes":    return places.filter(p => placeRoles(p).actingAsCafe);
-          default:         return places;
+          case "roasters": filtered = places.filter(p => placeRoles(p).actingAsRoaster); break;
+          case "cafes":    filtered = places.filter(p => placeRoles(p).actingAsCafe);    break;
+          default:         filtered = places;
         }
+        if (_activeCity) {
+          filtered = filtered.filter(p => (p.city || "").toLowerCase() === _activeCity.toLowerCase());
+        }
+        return filtered;
+      }
+
+      function renderCityFilters(places) {
+        const cityFiltersEl = document.getElementById("city-filters");
+        const cities = [...new Set(
+          places.map(p => p.city).filter(Boolean).map(c => c.trim())
+        )].sort((a, b) => a.localeCompare(b));
+
+        if (cities.length < 2) {
+          cityFiltersEl.innerHTML = "";
+          _activeCity = null;
+          return;
+        }
+
+        cityFiltersEl.innerHTML = "";
+        cities.forEach(city => {
+          const chip = document.createElement("button");
+          chip.className = "city-chip" + (_activeCity && _activeCity.toLowerCase() === city.toLowerCase() ? " active" : "");
+          chip.textContent = city;
+          chip.addEventListener("click", () => {
+            _activeCity = (_activeCity && _activeCity.toLowerCase() === city.toLowerCase()) ? null : city;
+            renderCityFilters(places);
+            renderPlaces(_placesCache);
+          });
+          cityFiltersEl.appendChild(chip);
+        });
       }
 
       function renderPlaces(all) {
+        renderCityFilters(all);
         const items = filterPlaces(all);
         if (!items.length) {
           placeListEl.innerHTML = '<div class="empty">Nothing here yet — click + add or ask the bot.</div>';
@@ -451,7 +534,7 @@
           row.className = "place-row";
           row.innerHTML = `
             <div class="pname">${escapeHtml(p.name)}${badges}</div>
-            ${p.city ? `<div class="pcity">${escapeHtml(p.city)}</div>` : ""}
+            ${p.city ? `<div class="pcity">${escapeHtml(p.city)}${p.state ? `, ${escapeHtml(p.state)}` : ""}</div>` : ""}
             <div class="actions">
               ${canVisit ? `<button data-action="visit" data-id="${p._id}" data-type="${p._type}">+ Visit</button>` : ""}
               <button data-action="edit"   data-id="${p._id}" data-type="${p._type}">Edit</button>
@@ -512,6 +595,7 @@
         _editingPlaceType = p._type;
         placeForm.elements.name.value    = p.name    || "";
         placeForm.elements.city.value    = p.city    || "";
+        placeForm.elements.state.value   = p.state   || "";
         placeForm.elements.country.value = p.country || "US";
         placeForm.elements.website.value = p.website || "";
         placeForm.elements.notes.value   = p.notes   || "";
@@ -590,6 +674,7 @@
         const base = {
           name:    (fd.get("name") || "").trim(),
           city:    (fd.get("city") || "").trim()    || undefined,
+          state:   (fd.get("state") || "").trim()   || undefined,
           country: (fd.get("country") || "").trim() || "US",
           website: (fd.get("website") || "").trim() || undefined,
           notes:   (fd.get("notes") || "").trim()   || undefined,
@@ -930,6 +1015,47 @@
         await loadPlaces();
         loadVisits(); loadPreferences();
       }
+
+      // ── column splitter drag ───────────────────────────────────────────────
+      (function () {
+        const STORAGE_KEY = "explore-col-left";
+        const gridEl   = document.querySelector(".explore-grid");
+        const splitter = document.getElementById("col-splitter");
+
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) gridEl.style.setProperty("--col-left", saved);
+
+        splitter.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          splitter.classList.add("dragging");
+          document.body.style.cursor     = "col-resize";
+          document.body.style.userSelect = "none";
+
+          function onMove(e) {
+            const rect     = gridEl.getBoundingClientRect();
+            const pad      = 14;
+            const splitW   = 8;
+            const contentW = rect.width - pad * 2;
+            const mouseX   = e.clientX - rect.left - pad;
+            const minPx    = 240;
+            const maxPx    = contentW - splitW - 200;
+            const clamped  = Math.max(minPx, Math.min(maxPx, mouseX));
+            gridEl.style.setProperty("--col-left", (clamped / contentW * 100).toFixed(2) + "%");
+          }
+
+          function onUp() {
+            splitter.classList.remove("dragging");
+            document.body.style.cursor     = "";
+            document.body.style.userSelect = "";
+            localStorage.setItem(STORAGE_KEY, gridEl.style.getPropertyValue("--col-left") || "62%");
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup",   onUp);
+          }
+
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup",   onUp);
+        });
+      })();
 
     </script>
   </body>

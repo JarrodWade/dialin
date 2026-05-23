@@ -210,6 +210,7 @@ def create_roaster(
     name: str,
     *,
     city: str | None = None,
+    state: str | None = None,
     country: str | None = None,
     website: str | None = None,
     notes: str | None = None,
@@ -225,6 +226,7 @@ def create_roaster(
         "roasterId": roaster_id,
         "name": name,
         "city": city,
+        "state": state,
         "country": country or "US",
         "website": website,
         "notes": notes,
@@ -281,7 +283,7 @@ def list_roasters(
 
 
 def update_roaster(user_id: str, roaster_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"name", "city", "country", "website", "notes", "archived", "hasCafe"}
+    allowed = {"name", "city", "state", "country", "website", "notes", "archived", "hasCafe"}
     updates = {k: v for k, v in updates.items() if k in allowed}
     if "hasCafe" in updates:
         updates["hasCafe"] = coerce_bool(updates["hasCafe"])
@@ -1113,6 +1115,7 @@ def create_cafe(
     *,
     neighborhood: str | None = None,
     city: str | None = None,
+    state: str | None = None,
     country: str | None = None,
     website: str | None = None,
     notes: str | None = None,
@@ -1129,6 +1132,7 @@ def create_cafe(
         "name": name,
         "neighborhood": neighborhood,
         "city": city,
+        "state": state,
         "country": country or "US",
         "website": website,
         "notes": notes,
@@ -1196,7 +1200,7 @@ def list_cafes(
 
 
 def update_cafe(user_id: str, cafe_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"name", "neighborhood", "city", "country", "website", "notes", "archived", "isRoaster"}
+    allowed = {"name", "neighborhood", "city", "state", "country", "website", "notes", "archived", "isRoaster"}
     updates = {k: v for k, v in updates.items() if k in allowed}
     if "isRoaster" in updates:
         updates["isRoaster"] = coerce_bool(updates["isRoaster"])
