@@ -14,11 +14,11 @@
 
       /* quick-ask strip */
       .ask-strip {
-        border-bottom: 1px solid var(--line); background: var(--bg-2);
+        background: var(--bg-2);
         padding: 10px 16px; display: flex; flex-direction: column; gap: 8px;
-        flex-shrink: 0;
+        flex-shrink: 0; overflow: hidden;
       }
-      .ask-strip .ask-row { display: flex; gap: 8px; }
+      .ask-strip .ask-row { display: flex; gap: 8px; flex-shrink: 0; }
       .ask-strip input {
         flex: 1; background: var(--paper); color: var(--ink);
         border: 1px solid var(--line); border-radius: 8px;
@@ -34,13 +34,26 @@
         font-size: 13px; line-height: 1.55; color: var(--ink);
         background: #fffaf0; border: 1px solid var(--line);
         border-radius: 8px; padding: 10px 12px;
-        display: none; max-height: 120px; overflow-y: auto;
+        display: none; flex: 1; min-height: 0; overflow-y: auto;
       }
       .ask-reply p { margin: 0 0 5px; }
       .ask-reply p:last-child { margin-bottom: 0; }
       .ask-reply code { background: var(--bg-2); border-radius: 3px; padding: 1px 4px; font-size: 11px; font-family: monospace; }
       .ask-reply.visible { display: block; }
       .ask-reply.loading { color: var(--muted); font-style: italic; }
+
+      /* ── row splitter (ask strip ↔ grid) ──────────────────────────────── */
+      .row-splitter {
+        flex-shrink: 0; cursor: row-resize;
+        display: flex; align-items: center;
+        height: 8px; touch-action: none;
+      }
+      .row-splitter::after {
+        content: ''; display: block; height: 2px; width: 100%; border-radius: 1px;
+        background: var(--line); transition: background .15s;
+      }
+      .row-splitter:hover::after,
+      .row-splitter.dragging::after { background: var(--accent); }
 
       /* main grid — places left, visits right */
       .explore-grid {
@@ -181,6 +194,8 @@
         </div>
         <div id="ask-reply" class="ask-reply"></div>
       </div>
+
+      <div class="row-splitter" id="row-splitter"></div>
 
       <!-- Main content grid -->
       <div class="explore-grid">
@@ -1015,6 +1030,47 @@
         await loadPlaces();
         loadVisits(); loadPreferences();
       }
+
+      // ── row splitter drag (ask strip height) ─────────────────────────────
+      (function () {
+        const STORAGE_KEY = "explore-strip-height";
+        const stripEl   = document.querySelector(".ask-strip");
+        const splitter  = document.getElementById("row-splitter");
+        const bodyEl    = document.querySelector(".explore-body");
+
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) stripEl.style.height = saved;
+
+        splitter.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          splitter.classList.add("dragging");
+          document.body.style.cursor     = "row-resize";
+          document.body.style.userSelect = "none";
+
+          const startY = e.clientY;
+          const startH = stripEl.getBoundingClientRect().height;
+
+          function onMove(e) {
+            const bodyH = bodyEl.getBoundingClientRect().height;
+            const minH  = 48;
+            const maxH  = Math.floor(bodyH * 0.65);
+            const newH  = Math.max(minH, Math.min(maxH, startH + (e.clientY - startY)));
+            stripEl.style.height = newH + "px";
+          }
+
+          function onUp() {
+            splitter.classList.remove("dragging");
+            document.body.style.cursor     = "";
+            document.body.style.userSelect = "";
+            localStorage.setItem(STORAGE_KEY, stripEl.style.height || "");
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup",   onUp);
+          }
+
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup",   onUp);
+        });
+      })();
 
       // ── column splitter drag ───────────────────────────────────────────────
       (function () {
