@@ -189,13 +189,6 @@ def _add_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def _archive_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
-    coffee_id = args["coffeeId"]
-    row = ddb.update_coffee(user_id, coffee_id, {"archived": True})
-    journal_rag.try_sync_coffee(user_id, row)
-    return row
-
-
 def _update_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     coffee_id = args["coffeeId"]
     row = ddb.update_coffee(user_id, coffee_id, args)
@@ -1190,19 +1183,6 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "toolSpec": {
-            "name": "archive_coffee",
-            "description": "Mark a coffee as finished (archived).",
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "required": ["coffeeId"],
-                    "properties": {"coffeeId": {"type": "string"}},
-                }
-            },
-        }
-    },
-    {
-        "toolSpec": {
             "name": "delete_coffee",
             "description": (
                 "Permanently delete a coffee. Use only when the user explicitly asks to delete "
@@ -1222,8 +1202,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "update_coffee",
             "description": (
-                "Edit a coffee's fields. Use when the user corrects info about a coffee "
-                "(name, roaster, origin, process, roastDate, notes). Preserve full specialty "
+                "Edit a coffee's fields or archive it. Use when the user corrects info about a coffee "
+                "(name, roaster, origin, process, roastDate, notes) or marks it finished. "
+                "Set archived=true to archive. Preserve full specialty "
                 "process wording on updates — do NOT strip modifiers. "
                 "Do NOT create a new coffee — call this instead."
             ),
@@ -1242,6 +1223,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         },
                         "roastDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                         "notes": {"type": "string"},
+                        "archived": {"type": "boolean", "description": "Set true to archive (mark finished)."},
                     },
                 }
             },
@@ -1924,6 +1906,19 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
+_TRIP_TOOL_NAMES = frozenset({
+    "add_cafe", "list_cafes", "update_cafe", "search_places",
+    "log_visit", "list_visits", "update_visit", "delete_visit",
+})
+
+_YOUTUBE_TOOL_NAMES = frozenset({"get_youtube_transcript"})
+
+_GATED_TOOL_NAMES = _TRIP_TOOL_NAMES | _YOUTUBE_TOOL_NAMES
+
+CORE_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] not in _GATED_TOOL_NAMES]
+TRIP_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] in _TRIP_TOOL_NAMES]
+YOUTUBE_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] in _YOUTUBE_TOOL_NAMES]
+
 
 _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "search_web": _search_web,
@@ -1934,7 +1929,6 @@ _TOOL_FUNCS: dict[str, Callable[[str, dict[str, Any]], Any]] = {
     "update_roaster": _update_roaster,
     "list_coffees": _list_coffees,
     "add_coffee": _add_coffee,
-    "archive_coffee": _archive_coffee,
     "delete_coffee": _delete_coffee,
     "update_coffee": _update_coffee,
     "log_brew": _log_brew,

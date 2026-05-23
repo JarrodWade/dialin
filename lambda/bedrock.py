@@ -408,6 +408,17 @@ def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> b
     return False
 
 
+_RE_YOUTUBE = re.compile(
+    r"youtu(?:\.be|be\.com)|youtube\s+shorts|\btranscript\b.*\bvideo\b|\bvideo\b.*\btranscript\b",
+    re.IGNORECASE,
+)
+
+
+def _wants_youtube(user_text: str) -> bool:
+    """Include the YouTube transcript tool only when the message references a video."""
+    return bool(_RE_YOUTUBE.search(user_text or ""))
+
+
 def _journal_snapshot_text(user_id: str) -> str:
     """Compact current-state block so the model never needs list_* to know what exists."""
     coffees = ddb.list_coffees(user_id)
@@ -480,7 +491,7 @@ _SYSTEM_PROMPT_CORE = (
     "You maintain a single user's brew journal and help them dial in better cups.\n\n"
     "Capabilities (via tools):\n"
     "- roasters: search_known_roasters, add_roaster, list_roasters, update_roaster\n"
-    "- coffees: add_coffee, update_coffee, delete_coffee, list_coffees, archive_coffee\n"
+    "- coffees: add_coffee, update_coffee (also archives via archived=true), delete_coffee, list_coffees\n"
     "- equipment: add_equipment, update_equipment, list_equipment (types: MACHINE, GRINDER, BREWER, KETTLE)\n"
     "- brews: log_brew, update_brew, delete_brew, list_brews, get_dialin_advice, summarize_coffee, retrieve_journal\n"
     "- drink/menu & gear glossary: lookup_coffee_term — curated drink, regional, and specialty prep/gear terms\n"
@@ -494,11 +505,18 @@ _SYSTEM_PROMPT_CORE = (
     "P0 Conflict tie-break — When §2d applies (logging, focusing on, or **asking about** one café the user explicitly named), "
     "stay with that café; avoid generic pivots such as unloading unrelated saved cafés unless they were vague about which spot.\n"
     "P1 State snapshot — Each turn includes a 'Current journal state' block listing active coffees, "
-    "roasters, and equipment with their IDs. Treat this as ground truth. When the user references "
-    "a coffee by name, match it against this snapshot first. Never claim a coffee exists if it is "
-    "not in the snapshot, and never claim one doesn't exist if it is listed. Use the coffeeId / "
-    "roasterId / equipId from the snapshot directly — do not call list_coffees just to re-fetch "
-    "what you already see. Call list_* tools only for brews, visits, archived items, or filtered queries.\n"
+    "roasters, and equipment with their IDs. This snapshot is the SOLE source of truth for what "
+    "currently exists — it OVERRIDES anything the chat history says. If the chat history mentions "
+    "a coffee that is not in the snapshot, that coffee no longer exists (it was archived or deleted). "
+    "Do not reference, offer to update, or claim it is still active. "
+    "When the user references a coffee by name, match it against this snapshot first. Never claim "
+    "a coffee exists if it is not in the snapshot, and never claim one doesn't exist if it is listed. "
+    "Use the coffeeId / roasterId / equipId from the snapshot directly — do not call list_coffees "
+    "just to re-fetch what you already see. Call list_* tools only for brews, visits, archived items, "
+    "or filtered queries. "
+    "When the user asks you to add, update, or delete a coffee (or other entity), you MUST call "
+    "the appropriate tool (add_coffee, update_coffee, delete_coffee, etc.). Never just say you did "
+    "it — the tool call is what actually persists the change.\n"
     "0. User-facing voice — hide implementation. Never show API/tool structure in replies: "
     "no field names (hasCafe, isRoaster, roasterId, cafeId, equipId, brewId, coffeeId, etc.), "
     "no JSON/tool dumps, error codes like DUPLICATE_PLACE, or argument names like skipDuplicateCheck. "
@@ -739,11 +757,16 @@ def generate_reply(
             messages.append({"role": role, "content": [{"text": text}]})
     messages.append({"role": "user", "content": [{"text": user_text}]})
 
-    tool_config = {"tools": tools.TOOL_SPECS}
-
     final_text_parts: list[str] = []
     clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
     attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
+
+    active_tools = list(tools.CORE_TOOL_SPECS)
+    if attach_trip_appendix:
+        active_tools.extend(tools.TRIP_TOOL_SPECS)
+    if _wants_youtube(user_text):
+        active_tools.extend(tools.YOUTUBE_TOOL_SPECS)
+    tool_config = {"tools": active_tools}
 
     journal_snapshot = _journal_snapshot_text(user_id)
 
@@ -754,8 +777,9 @@ def generate_reply(
     base_system.append({"text": journal_snapshot})
 
     logger.info(
-        "converse_attachments trip_place_discovery_appendix=%s blocks=%s",
+        "converse_attachments trip_place_discovery_appendix=%s tools=%d blocks=%s",
         attach_trip_appendix,
+        len(active_tools),
         len(base_system),
     )
 
@@ -781,6 +805,14 @@ def generate_reply(
             for block in content_blocks:
                 if "text" in block and block["text"]:
                     final_text_parts.append(block["text"])
+
+            logger.info(
+                "converse_round iteration=%d stop_reason=%s text_len=%d tool_blocks=%d",
+                iteration,
+                stop_reason,
+                sum(len(b.get("text", "")) for b in content_blocks),
+                sum(1 for b in content_blocks if b.get("toolUse")),
+            )
 
             if stop_reason != "tool_use":
                 break
