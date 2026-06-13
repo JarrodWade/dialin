@@ -35,6 +35,7 @@ from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 from equipment_canonical import resolve_equipment_display_name
@@ -42,8 +43,21 @@ from equipment_canonical import resolve_equipment_display_name
 _TABLE_NAME = os.environ["TABLE_NAME"]
 _dynamodb = boto3.resource("dynamodb")
 _table = _dynamodb.Table(_TABLE_NAME)
+# Standalone low-level client for TransactWriteItems: the resource's own client
+# auto-(de)serializes, which would double-transform our hand-marshalled items.
+_client = boto3.client("dynamodb")
+_SERIALIZER = TypeSerializer()
 
 EQUIP_TYPES = {"MACHINE", "GRINDER", "BREWER", "KETTLE"}
+
+# Usage counters (chat/web-search) self-expire via the table TTL so they do not
+# accumulate forever; keep a long retention so a counter never resets mid-period.
+_USAGE_COUNTER_TTL_SEC = 90 * 24 * 3600
+
+
+def _marshal(d: dict[str, Any]) -> dict[str, Any]:
+    """Low-level (client) attribute map for TransactWriteItems."""
+    return {k: _SERIALIZER.serialize(v) for k, v in d.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +105,26 @@ def coerce_bool(v: Any) -> bool:
 def _strip_keys(item: dict[str, Any]) -> dict[str, Any]:
     """Remove DynamoDB-only keys before returning items to API clients."""
     return {k: v for k, v in item.items() if k not in {"PK", "SK", "GSI1PK", "GSI1SK"}}
+
+
+def _query_all_by_sk_prefix(user_id: str, sk_prefix: str) -> list[dict[str, Any]]:
+    """All rows for a user under an SK prefix, paginating past the 1MB page cap.
+
+    Single ``query`` calls silently truncate at 1MB; entity lists (coffees, roasters,
+    cafes) feed the chat journal snapshot, so a truncated page would hide data."""
+    items: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(sk_prefix),
+    }
+    while True:
+        resp = _table.query(**kwargs)
+        items.extend(resp.get("Items", []))
+        lek = resp.get("LastEvaluatedKey")
+        if not lek:
+            break
+        kwargs["ExclusiveStartKey"] = lek
+    return items
 
 
 def _normalize_place_name(name: str | None) -> str:
@@ -266,11 +300,7 @@ def list_roasters(
     name_contains: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("ROASTER#"),
-    )
-    items = [_strip_keys(i) for i in resp.get("Items", [])]
+    items = [_strip_keys(i) for i in _query_all_by_sk_prefix(user_id, "ROASTER#")]
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
     nc = (name_contains or "").strip().lower()
@@ -393,7 +423,7 @@ def delete_coffee(user_id: str, coffee_id: str) -> list[str]:
         raise ValueError(f"coffee {coffee_id} not found")
 
     deleted_brew_ids: list[str] = []
-    for brew in _list_all_brews_for_coffee(coffee_id):
+    for brew in _list_all_brews_for_coffee(user_id, coffee_id):
         bid = str(brew.get("brewId") or "").strip()
         if not bid:
             continue
@@ -424,11 +454,7 @@ def get_coffee(user_id: str, coffee_id: str) -> dict[str, Any] | None:
 
 
 def list_coffees(user_id: str, *, include_archived: bool = False) -> list[dict[str, Any]]:
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("COFFEE#"),
-    )
-    items = [_strip_keys(i) for i in resp.get("Items", [])]
+    items = [_strip_keys(i) for i in _query_all_by_sk_prefix(user_id, "COFFEE#")]
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
     items.sort(key=lambda i: i.get("createdAt", ""), reverse=True)
@@ -548,13 +574,14 @@ def _apply_coffee_stock_delta(user_id: str, coffee_id: str, delta_g: float) -> N
         ) from e
 
 
-def _list_all_brews_for_coffee(coffee_id: str) -> list[dict[str, Any]]:
-    """All brew rows for a bag (GSI1), newest first."""
+def _list_all_brews_for_coffee(user_id: str, coffee_id: str) -> list[dict[str, Any]]:
+    """All brew rows for a bag (GSI1), newest first, scoped to the owning user."""
     items: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
         "IndexName": "GSI1",
         "KeyConditionExpression": Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
         & Key("GSI1SK").begins_with("BREW#"),
+        "FilterExpression": Attr("userId").eq(user_id),
         "ScanIndexForward": False,
     }
     while True:
@@ -592,44 +619,14 @@ def create_brew(
     if method not in VALID_METHODS:
         raise ValueError(f"unknown method {method!r}; one of {sorted(VALID_METHODS)}")
 
-    # 1) Verify coffee exists & (if we know the stock) decrement atomically.
-    # If gramsRemaining isn't tracked on the coffee, just confirm the coffee
-    # exists and skip the decrement -- we still want to log the brew.
-    if dose_g is not None and dose_g > 0:
-        try:
-            _table.update_item(
-                Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
-                UpdateExpression="SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now",
-                ConditionExpression=(
-                    "attribute_exists(PK) "
-                    "AND attribute_exists(gramsRemaining) "
-                    "AND gramsRemaining >= :dose"
-                ),
-                ExpressionAttributeValues={
-                    ":dose": Decimal(str(dose_g)),
-                    ":now": _now_iso(),
-                },
-            )
-        except ClientError as e:
-            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
-                raise
-            # Condition failed for one of three reasons: coffee missing,
-            # gramsRemaining never set, or insufficient stock. Disambiguate.
-            existing = get_coffee(user_id, coffee_id)
-            if existing is None:
-                raise ValueError(f"coffee {coffee_id} not found") from e
-            if existing.get("gramsRemaining") is None:
-                pass  # bag weight wasn't tracked; log the brew without decrement
-            else:
-                raise ValueError(
-                    f"insufficient stock on coffee {coffee_id} for {dose_g}g "
-                    f"(remaining: {existing.get('gramsRemaining')}g)"
-                ) from e
-    else:
-        if get_coffee(user_id, coffee_id) is None:
-            raise ValueError(f"coffee {coffee_id} not found")
+    # Verify the coffee exists and learn whether stock is tracked. A light raw
+    # get_item (no roaster enrichment) keeps the hot brew-logging path cheap.
+    resp = _table.get_item(Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"})
+    coffee_row = resp.get("Item")
+    if coffee_row is None:
+        raise ValueError(f"coffee {coffee_id} not found")
+    stock_tracked = coffee_row.get("gramsRemaining") is not None
 
-    # 2) Record the brew.
     brew_id = _new_id("brew")
     iso_ts = _now_iso()
     ratio = None
@@ -661,7 +658,47 @@ def create_brew(
         "notes": notes,
         "createdAt": iso_ts,
     }
-    _table.put_item(Item=item)
+
+    # When stock is tracked, decrement and record the brew in a single
+    # transaction so we can never lose grams without persisting the brew (or
+    # vice versa). When it isn't tracked, a plain put is enough.
+    if stock_tracked and dose_g is not None and dose_g > 0:
+        try:
+            _client.transact_write_items(
+                TransactItems=[
+                    {
+                        "Update": {
+                            "TableName": _TABLE_NAME,
+                            "Key": _marshal(
+                                {"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}
+                            ),
+                            "UpdateExpression": (
+                                "SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now"
+                            ),
+                            "ConditionExpression": (
+                                "attribute_exists(PK) "
+                                "AND attribute_exists(gramsRemaining) "
+                                "AND gramsRemaining >= :dose"
+                            ),
+                            "ExpressionAttributeValues": _marshal(
+                                {":dose": Decimal(str(dose_g)), ":now": iso_ts}
+                            ),
+                        }
+                    },
+                    {"Put": {"TableName": _TABLE_NAME, "Item": _marshal(item)}},
+                ]
+            )
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("TransactionCanceledException", "ConditionalCheckFailedException"):
+                existing = get_coffee(user_id, coffee_id)
+                raise ValueError(
+                    f"insufficient stock on coffee {coffee_id} for {dose_g}g "
+                    f"(remaining: {(existing or {}).get('gramsRemaining')}g)"
+                ) from e
+            raise
+    else:
+        _table.put_item(Item=item)
     return _strip_keys(item)
 
 
@@ -763,10 +800,15 @@ def update_brew(user_id: str, brew_id: str, updates: dict[str, Any]) -> dict[str
             values[vk] = v
         set_parts.append(f"{nk} = {vk}")
 
-    # Recalculate ratio if either side changed.
-    new_dose = _to_decimal(updates.get("doseG")) or current.get("doseG")
-    new_yield = _to_decimal(updates.get("yieldG") or updates.get("waterG")) or \
-                current.get("yieldG") or current.get("waterG")
+    # Recalculate ratio if either side changed. Use explicit presence checks so
+    # an updated value of 0 is not mistaken for "unchanged" (0 is falsy).
+    new_dose = _to_decimal(updates["doseG"]) if "doseG" in updates else current.get("doseG")
+    if "yieldG" in updates:
+        new_yield = _to_decimal(updates["yieldG"])
+    elif "waterG" in updates:
+        new_yield = _to_decimal(updates["waterG"])
+    else:
+        new_yield = current.get("yieldG") or current.get("waterG")
     if new_dose and new_yield:
         ratio = round(float(new_yield) / float(new_dose), 2)
         names["#ratio"] = "ratio"
@@ -1183,11 +1225,7 @@ def list_cafes(
     name_contains: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("CAFE#"),
-    )
-    items = [_strip_keys(i) for i in resp.get("Items", [])]
+    items = [_strip_keys(i) for i in _query_all_by_sk_prefix(user_id, "CAFE#")]
     if not include_archived:
         items = [i for i in items if not i.get("archived")]
     nc = (name_contains or "").strip().lower()
@@ -1474,6 +1512,7 @@ def list_visits(
             IndexName="GSI1",
             KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{place_id}")
             & Key("GSI1SK").begins_with("VISIT#"),
+            FilterExpression=Attr("userId").eq(user_id),
             ScanIndexForward=False,
             Limit=fetch_limit,
         )
@@ -1507,6 +1546,7 @@ def summarize_coffee(user_id: str, coffee_id: str) -> dict[str, Any]:
         IndexName="GSI1",
         KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
         & Key("GSI1SK").begins_with("BREW#"),
+        FilterExpression=Attr("userId").eq(user_id),
         ScanIndexForward=False,
     )
     brews = [_strip_keys(i) for i in resp.get("Items", [])]
@@ -1555,6 +1595,7 @@ def list_brews(
             IndexName="GSI1",
             KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
             & Key("GSI1SK").begins_with("BREW#"),
+            FilterExpression=Attr("userId").eq(user_id),
             ScanIndexForward=False,
             Limit=limit,
         )
@@ -1641,12 +1682,17 @@ def consume_websearch_quota(user_id: str, monthly_limit: int) -> tuple[bool, int
     try:
         resp = _table.update_item(
             Key={"PK": pk, "SK": sk},
-            UpdateExpression="ADD callCount :one SET itemType = :it, updatedAt = :now",
+            UpdateExpression=(
+                "ADD callCount :one "
+                "SET itemType = :it, updatedAt = :now, "
+                "expiresAt = if_not_exists(expiresAt, :exp)"
+            ),
             ExpressionAttributeValues={
                 ":one": 1,
                 ":lim": monthly_limit,
                 ":it": "UsageCounter",
                 ":now": _now_iso(),
+                ":exp": int(time.time()) + _USAGE_COUNTER_TTL_SEC,
             },
             ConditionExpression="attribute_not_exists(callCount) OR callCount < :lim",
             ReturnValues="UPDATED_NEW",
@@ -1676,12 +1722,17 @@ def consume_chat_quota(user_id: str, daily_limit: int) -> tuple[bool, int]:
     try:
         resp = _table.update_item(
             Key={"PK": pk, "SK": sk},
-            UpdateExpression="ADD turnCount :one SET itemType = :it, updatedAt = :now",
+            UpdateExpression=(
+                "ADD turnCount :one "
+                "SET itemType = :it, updatedAt = :now, "
+                "expiresAt = if_not_exists(expiresAt, :exp)"
+            ),
             ExpressionAttributeValues={
                 ":one": 1,
                 ":lim": daily_limit,
                 ":it": "UsageCounter",
                 ":now": _now_iso(),
+                ":exp": int(time.time()) + _USAGE_COUNTER_TTL_SEC,
             },
             ConditionExpression="attribute_not_exists(turnCount) OR turnCount < :lim",
             ReturnValues="UPDATED_NEW",
@@ -1694,3 +1745,24 @@ def consume_chat_quota(user_id: str, daily_limit: int) -> tuple[bool, int]:
     got = _table.get_item(Key={"PK": pk, "SK": sk})
     cur = int((got.get("Item") or {}).get("turnCount") or daily_limit)
     return False, cur
+
+
+def refund_chat_quota(user_id: str, daily_limit: int) -> None:
+    """Best-effort release of a reserved ``/chat`` turn when the turn ultimately failed.
+
+    ``consume_chat_quota`` reserves before doing model work; if that work raises we
+    give the reservation back so a failed turn does not burn the user's daily budget."""
+    if daily_limit <= 0:
+        return
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        _table.update_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"USAGE#CHAT#{day}"},
+            UpdateExpression="ADD turnCount :neg SET updatedAt = :now",
+            ConditionExpression="attribute_exists(turnCount) AND turnCount > :zero",
+            ExpressionAttributeValues={":neg": -1, ":zero": 0, ":now": _now_iso()},
+        )
+    except ClientError:
+        # Best-effort: counter already at 0 / absent, or a transient error. The
+        # daily window resets anyway, so never fail the request over a refund.
+        pass

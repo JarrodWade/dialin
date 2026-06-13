@@ -186,6 +186,9 @@ _HISTORY_TURN_LIMIT = int(
     os.environ.get("CHAT_HISTORY_TURN_LIMIT", "24")
 )  # last N messages from the client (rolling window; keep in sync with web UI)
 
+# Reject oversized single messages before they reach Bedrock (cost/abuse guard).
+_CHAT_MESSAGE_MAX_CHARS = int(os.environ.get("CHAT_MESSAGE_MAX_CHARS", "8000"))
+
 
 def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     body = _parse_body(event)
@@ -202,6 +205,18 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
     err = _require({"message": message}, "message")
     if err:
         return _response(400, {"error": err})
+
+    if _CHAT_MESSAGE_MAX_CHARS > 0 and len(message) > _CHAT_MESSAGE_MAX_CHARS:
+        return _response(
+            413,
+            {
+                "error": (
+                    f"Message too long ({len(message)} chars; max {_CHAT_MESSAGE_MAX_CHARS}). "
+                    "Trim it and try again."
+                ),
+                "code": "MESSAGE_TOO_LONG",
+            },
+        )
 
     try:
         chat_daily_limit = int(os.environ.get("CHAT_DAILY_LIMIT_PER_USER", "0"))
@@ -234,6 +249,10 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
         )
     except Exception:  # noqa: BLE001
         logger.exception("bedrock failed")
+        # Quota was reserved before the model call; give it back on failure so a
+        # failed turn does not count against the user's daily budget.
+        if chat_daily_limit > 0:
+            ddb.refund_chat_quota(user_id, chat_daily_limit)
         return _response(502, {"error": "model invocation failed"})
 
     new_history = trimmed + [
@@ -689,7 +708,10 @@ def _handle_list_visits(event: dict[str, Any]) -> dict[str, Any]:
     qs = _qs(event)
     cafe_id = qs.get("cafeId")
     roaster_id = qs.get("roasterId")
-    limit = int(qs.get("limit", "20"))
+    try:
+        limit = int(qs.get("limit", "20"))
+    except ValueError:
+        return _response(400, {"error": "limit must be an integer"})
     items = ddb.list_visits(
         user_id,
         cafe_id=cafe_id,

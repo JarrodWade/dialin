@@ -43,6 +43,18 @@ variable "chat_history_turn_limit" {
   default     = 24
 }
 
+variable "chat_message_max_chars" {
+  description = "Reject a single /chat message longer than this many characters (cost/abuse guard). 0 disables the check."
+  type        = number
+  default     = 8000
+}
+
+variable "bedrock_prompt_caching" {
+  description = "Enable Bedrock prompt caching (cachePoint) for the static system prompt + tool specs. Disable only for models that do not support cachePoint blocks."
+  type        = bool
+  default     = true
+}
+
 variable "journal_rag_max_chunks" {
   description = "Max journal RAG chunks scanned per retrieve_journal query (pagination cap for latency)."
   type        = number

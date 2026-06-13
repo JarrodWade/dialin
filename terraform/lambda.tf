@@ -69,6 +69,8 @@ resource "aws_lambda_function" "api" {
       MAX_OUTPUT_TOKENS                = tostring(var.max_output_tokens)
       MAX_TOOL_ITERATIONS              = tostring(var.max_tool_iterations)
       CHAT_HISTORY_TURN_LIMIT          = tostring(var.chat_history_turn_limit)
+      CHAT_MESSAGE_MAX_CHARS           = tostring(var.chat_message_max_chars)
+      BEDROCK_PROMPT_CACHING           = var.bedrock_prompt_caching ? "true" : "false"
       JOURNAL_RAG_MAX_CHUNKS           = tostring(var.journal_rag_max_chunks)
       CHAT_DAILY_LIMIT_PER_USER        = tostring(var.chat_daily_limit_per_user)
       TAVILY_API_KEY                   = var.tavily_api_key

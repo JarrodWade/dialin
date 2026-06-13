@@ -13,11 +13,13 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from zoneinfo import ZoneInfo
 
 import chat_context
@@ -480,11 +482,27 @@ def _aws_region() -> str:
 
 _MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 _REGION = _aws_region()
-_MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "400"))
+# Keep the code default aligned with Terraform's max_output_tokens default.
+_MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "600"))
 _TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.3"))
 _MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "12"))
 
-_client = boto3.client("bedrock-runtime", region_name=_REGION)
+# Prompt caching reuses the large static system prompt + tool specs across the
+# in-turn tool loop (and warm turns), cutting input-token cost and latency.
+# Disable for any model that does not support Bedrock cachePoint blocks.
+_PROMPT_CACHING = os.environ.get("BEDROCK_PROMPT_CACHING", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+# Adaptive retries smooth transient Bedrock throttling; read timeout stays under
+# the Lambda/API Gateway 30s ceiling so we fail fast rather than hang.
+_client = boto3.client(
+    "bedrock-runtime",
+    region_name=_REGION,
+    config=Config(retries={"max_attempts": 4, "mode": "adaptive"}, read_timeout=25),
+)
 
 _SYSTEM_PROMPT_CORE = (
     "You are dialin, a precise and friendly specialty-coffee coach. "
@@ -515,7 +533,9 @@ _SYSTEM_PROMPT_CORE = (
     "just to re-fetch what you already see. Call list_* tools only for brews, visits, archived items, "
     "or filtered queries. "
     "When the user asks you to add, update, or delete a coffee (or other entity), you MUST call "
-    "the appropriate tool (add_coffee, update_coffee, delete_coffee, etc.). Never just say you did "
+    "the appropriate tool (add_coffee, update_coffee, delete_coffee, etc.) — **except** permanent "
+    "deletes (**delete_coffee**, **delete_brew**, **delete_visit**): those follow §2d confirmation "
+    "first; do not call the delete tool until the user confirms. Never just say you did "
     "it — the tool call is what actually persists the change.\n"
     "0. User-facing voice — hide implementation. Never show API/tool structure in replies: "
     "no field names (hasCafe, isRoaster, roasterId, cafeId, equipId, brewId, coffeeId, etc.), "
@@ -606,7 +626,13 @@ _SYSTEM_PROMPT_CORE = (
     "NEVER log a new brew just to correct an old one.\n"
     "  - For a coffee correction: find the coffeeId in the state snapshot, then update_coffee. "
     "NEVER add a new coffee just to correct an existing one.\n"
-    "  - To permanently remove a coffee: confirm with the user (destructive), then delete_coffee.\n"
+    "  - **Permanent deletes (hard rule):** **delete_coffee**, **delete_brew**, and **delete_visit** "
+    "are irreversible. On the **first** user request to delete/remove something (e.g. \"delete my "
+    "Geometry Blend\"), **do not call any delete_* tool in that turn** — ask one short confirmation "
+    "that names the item and warns it cannot be undone. Only call the delete tool after the user "
+    "clearly confirms (yes / go ahead / delete it) in the same turn or a follow-up. "
+    "Use the coffeeId from the state snapshot when ready; list_brews or list_visits first if the "
+    "target brew or visit is ambiguous.\n"
     "  - To remove a duplicate brew: list_brews, confirm the brewId if ambiguous, then delete_brew.\n"
     "  - For a visit correction (rating, notes, drinks, date): call list_visits to find the visitId, "
     "then update_visit. NEVER log_visit again for the same outing — that creates duplicate rows.\n"
@@ -751,14 +777,49 @@ def _to_jsonable(obj: Any) -> Any:
     return json.loads(json.dumps(obj, cls=_DecimalEncoder))
 
 
-def generate_reply(
+@dataclass
+class ToolCall:
+    """One model-issued tool invocation and the dispatched result."""
+
+    name: str
+    input: dict[str, Any]
+    output: dict[str, Any]
+
+
+@dataclass
+class TurnResult:
+    """Full trace of one chat turn — text plus everything the eval harness asserts on."""
+
+    text: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    iterations: int = 0
+    hit_iteration_cap: bool = False
+    attachments: dict[str, bool] = field(default_factory=dict)
+    usage: dict[str, int] = field(default_factory=dict)
+
+    def names(self) -> list[str]:
+        return [c.name for c in self.tool_calls]
+
+
+def _accumulate_usage(total: dict[str, int], response: dict[str, Any]) -> None:
+    """Sum token usage (incl. cache read/write) across converse rounds."""
+    u = response.get("usage") or {}
+    for key in ("inputTokens", "outputTokens", "cacheReadInputTokens", "cacheWriteInputTokens"):
+        if key in u and isinstance(u[key], int):
+            total[key] = total.get(key, 0) + u[key]
+
+
+def _run_turn(
     user_id: str,
     history: list[dict],
     user_text: str,
     *,
     client_timezone: str | None = None,
-) -> str:
-    """Run a chat turn through Bedrock with tool-use enabled."""
+) -> TurnResult:
+    """Run a chat turn through Bedrock with tool-use enabled, returning a full trace.
+
+    ``generate_reply`` wraps this and returns only ``.text``. The eval harness calls
+    ``_run_turn`` directly to assert on tool calls, attachments, and token usage."""
     messages: list[dict[str, Any]] = []
     for h in history:
         role = "user" if h.get("role") == "USER" else "assistant"
@@ -768,23 +829,34 @@ def generate_reply(
     messages.append({"role": "user", "content": [{"text": user_text}]})
 
     final_text_parts: list[str] = []
+    tool_calls: list[ToolCall] = []
+    usage_total: dict[str, int] = {}
     clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
     attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
+    attach_youtube = _wants_youtube(user_text)
 
     active_tools = list(tools.CORE_TOOL_SPECS)
     if attach_trip_appendix:
         active_tools.extend(tools.TRIP_TOOL_SPECS)
-    if _wants_youtube(user_text):
+    if attach_youtube:
         active_tools.extend(tools.YOUTUBE_TOOL_SPECS)
-    tool_config = {"tools": active_tools}
+    tool_list: list[dict[str, Any]] = list(active_tools)
+    if _PROMPT_CACHING:
+        # Tool specs are large and stable across iterations/turns — cache them.
+        tool_list.append({"cachePoint": {"type": "default"}})
+    tool_config = {"tools": tool_list}
 
     journal_snapshot = _journal_snapshot_text(user_id)
 
-    base_system: list[dict[str, str]] = [{"text": _SYSTEM_PROMPT_CORE}]
+    base_system: list[dict[str, Any]] = [{"text": _SYSTEM_PROMPT_CORE}]
     if attach_trip_appendix:
         base_system.append({"text": _APPENDIX_TRIP_PLACE_DISCOVERY})
     base_system.append({"text": clock_supplement})
     base_system.append({"text": journal_snapshot})
+    if _PROMPT_CACHING:
+        # Identical system content is replayed on every tool-loop iteration within
+        # a turn; a trailing cache point lets Bedrock reuse the whole prefix.
+        base_system.append({"cachePoint": {"type": "default"}})
 
     logger.info(
         "converse_attachments trip_place_discovery_appendix=%s tools=%d blocks=%s",
@@ -793,9 +865,12 @@ def generate_reply(
         len(base_system),
     )
 
+    iterations = 0
+    hit_cap = False
     trip_ctx_token = chat_context.trip_place_discovery_active.set(attach_trip_appendix)
     try:
         for iteration in range(_MAX_TOOL_ITERATIONS):
+            iterations = iteration + 1
             response = _client.converse(
                 modelId=_MODEL_ID,
                 system=base_system,
@@ -806,6 +881,7 @@ def generate_reply(
                     "temperature": _TEMPERATURE,
                 },
             )
+            _accumulate_usage(usage_total, response)
 
             stop_reason = response.get("stopReason")
             output_message = response["output"]["message"]
@@ -839,8 +915,17 @@ def generate_reply(
                 tool_name = tu["name"]
                 tool_input = tu.get("input", {})
                 tool_use_id = tu["toolUseId"]
-                logger.info("tool_use name=%s input=%s", tool_name, tool_input)
+                # Log argument keys only — values can contain user content (PII).
+                arg_keys = sorted(tool_input.keys()) if isinstance(tool_input, dict) else None
+                logger.info("tool_use name=%s arg_keys=%s", tool_name, arg_keys)
                 result = tools.dispatch(tool_name, user_id, tool_input)
+                tool_calls.append(
+                    ToolCall(
+                        name=tool_name,
+                        input=tool_input if isinstance(tool_input, dict) else {},
+                        output=result,
+                    )
+                )
                 tool_results.append({
                     "toolResult": {
                         "toolUseId": tool_use_id,
@@ -854,6 +939,7 @@ def generate_reply(
 
             messages.append({"role": "user", "content": tool_results})
         else:
+            hit_cap = True
             final_text_parts.append(
                 "(Stopped after maximum tool iterations. Try rephrasing.)"
             )
@@ -861,4 +947,27 @@ def generate_reply(
         chat_context.trip_place_discovery_active.reset(trip_ctx_token)
 
     text = "\n".join(_strip_meta(p) for p in final_text_parts if p.strip())
-    return text.strip() or "(no reply)"
+    return TurnResult(
+        text=text.strip() or "(no reply)",
+        tool_calls=tool_calls,
+        iterations=iterations,
+        hit_iteration_cap=hit_cap,
+        attachments={"trip_appendix": attach_trip_appendix, "youtube": attach_youtube},
+        usage=usage_total,
+    )
+
+
+def generate_reply(
+    user_id: str,
+    history: list[dict],
+    user_text: str,
+    *,
+    client_timezone: str | None = None,
+) -> str:
+    """Run a chat turn through Bedrock with tool-use enabled; return the reply text."""
+    return _run_turn(
+        user_id,
+        history,
+        user_text,
+        client_timezone=client_timezone,
+    ).text
