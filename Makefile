@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate web-config
+.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate web-config eval eval-list
 
 ARGS ?=
 
@@ -29,6 +29,21 @@ test:
 web-config:
 	@chmod +x "$(CURDIR)/scripts/write-dialin-config.sh"
 	@"$(CURDIR)/scripts/write-dialin-config.sh"
+
+# Live prompt-quality evals: real Bedrock model + seeded scratch DynamoDB table +
+# canned external-IO. Needs local AWS creds with Bedrock + DynamoDB access and
+# model access enabled for the eval model. Costs cents per full run.
+# Examples: make eval
+#           make eval ARGS='--suite trips --reps 5'
+#           make eval ARGS='--save-baseline'
+eval:
+	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
+	@"$(VENV)/bin/pip" install -q -r "$(CURDIR)/requirements-dev.txt"
+	@cd "$(CURDIR)" && "$(VENV)/bin/python" -m evals.run_evals $(ARGS)
+
+# List scenarios without touching AWS or the model.
+eval-list:
+	@cd "$(CURDIR)" && python3 -m evals.run_evals --list $(ARGS)
 
 plan:
 	$(TF) plan

@@ -1,0 +1,21 @@
+{
+  "snapshot_known_coffee": 1.0,
+  "snapshot_absent_coffee": 1.0,
+  "add_coffee_preserves_process": 1.0,
+  "roaster_confirm_before_add": 1.0,
+  "catalog_gear_adds_grinder": 1.0,
+  "gear_rename_uses_update": 1.0,
+  "brew_drip_resolves_brewer": 1.0,
+  "cafe_roaster_badge": 1.0,
+  "already_tracked_no_readd": 1.0,
+  "named_visit_one_log": 1.0,
+  "visit_correction_uses_update": 1.0,
+  "brew_correction_uses_update": 1.0,
+  "delete_needs_confirm": 1.0,
+  "city_scout_grounded": 1.0,
+  "city_anchoring_search": 1.0,
+  "named_visit_not_derailed": 1.0,
+  "theme_recall_uses_rag": 1.0,
+  "dialin_advice_for_method": 1.0,
+  "best_pick_uses_summarize": 1.0
+}
