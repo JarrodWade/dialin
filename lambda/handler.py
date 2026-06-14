@@ -14,6 +14,10 @@ Routes (representative):
       body: {message, history?, clientTimezone?: IANA TZ from browser}  (+ legacy userId)
       -> calls Bedrock with tools, returns {reply, history}
 
+  POST /chat/feedback
+      body: {userMessage, botMessage, comment?}
+      -> stores "not quite right" signal, returns {feedback}
+
   GET  /coffees?includeArchived=   (legacy: ?userId=)
   POST /coffees                    body: full coffee fields
   PATCH /coffees/{coffeeId}        body: patch fields
@@ -260,6 +264,34 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
         {"role": "BOT", "text": reply},
     ]
     return _response(200, {"reply": reply, "history": new_history})
+
+
+# ---------------------------------------------------------------------------
+# Chat feedback
+# ---------------------------------------------------------------------------
+
+
+def _handle_chat_feedback(event: dict[str, Any]) -> dict[str, Any]:
+    body = _parse_body(event)
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    user_message = (body.get("userMessage") or "").strip()
+    bot_message = (body.get("botMessage") or "").strip()
+    if not bot_message:
+        return _response(400, {"error": "botMessage is required"})
+    comment = body.get("comment")
+    try:
+        item = ddb.create_chat_feedback(
+            user_id,
+            user_message=user_message,
+            bot_message=bot_message,
+            comment=comment,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("create_chat_feedback failed")
+        return _response(500, {"error": "could not save feedback"})
+    return _response(201, {"feedback": item})
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +822,7 @@ def _handle_delete_visit(event: dict[str, Any]) -> dict[str, Any]:
 _ROUTES = {
     "GET /glossary": _handle_get_glossary,
     "POST /chat": _handle_chat,
+    "POST /chat/feedback": _handle_chat_feedback,
     "GET /roasters": _handle_list_roasters,
     "POST /roasters": _handle_create_roaster,
     "PATCH /roasters/{roasterId}": _handle_update_roaster,

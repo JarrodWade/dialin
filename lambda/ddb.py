@@ -13,6 +13,7 @@ Single-table design.
   USER#<id> / RAGCHUNK#COFFEE#<coffeeId>    JournalRAGChunk  bag notes + embedding
   USER#<id> / RAGCHUNK#VISIT#<visitId>      JournalRAGChunk  visit prose + embedding
   USER#<id> / USAGE#WEBSEARCH#YYYY-MM       UsageCounter     monthly live-search quota
+  USER#<id> / FEEDBACK#<isoTs>#<fbId>     ChatFeedback     "not quite right" signal on a bot reply
 
 GSI1 (brews by coffee, time-ordered):
   GSI1PK = COFFEE#<coffeeId>
@@ -1789,3 +1790,44 @@ def refund_chat_quota(user_id: str, daily_limit: int) -> None:
         # Best-effort: counter already at 0 / absent, or a transient error. The
         # daily window resets anyway, so never fail the request over a refund.
         pass
+
+
+# ---------------------------------------------------------------------------
+# Chat feedback
+# ---------------------------------------------------------------------------
+
+
+def create_chat_feedback(
+    user_id: str,
+    *,
+    user_message: str,
+    bot_message: str,
+    comment: str | None = None,
+) -> dict[str, Any]:
+    """Persist a "that wasn't quite right" signal on a bot response."""
+    feedback_id = _new_id("fb")
+    created_at = _now_iso()
+    item = {
+        "PK": f"USER#{user_id}",
+        "SK": f"FEEDBACK#{created_at}#{feedback_id}",
+        "itemType": "ChatFeedback",
+        "userId": user_id,
+        "feedbackId": feedback_id,
+        "userMessage": user_message[:8000],
+        "botMessage": bot_message[:8000],
+        "comment": (comment or "").strip()[:2000] or None,
+        "createdAt": created_at,
+    }
+    _table.put_item(Item=item)
+    return _strip_keys(item)
+
+
+def list_chat_feedback(user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    """Return recent feedback items for a user, newest first."""
+    resp = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with("FEEDBACK#"),
+        ScanIndexForward=False,
+        Limit=min(max(1, limit), 200),
+    )
+    return [_strip_keys(i) for i in resp.get("Items", [])]

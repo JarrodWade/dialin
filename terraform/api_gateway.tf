@@ -22,6 +22,7 @@ locals {
   api_routes = [
     "GET /glossary",
     "POST /chat",
+    "POST /chat/feedback",
     "GET /roasters",
     "POST /roasters",
     "PATCH /roasters/{roasterId}",

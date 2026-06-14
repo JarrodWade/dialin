@@ -45,6 +45,27 @@
       .bubble.bot code { background: var(--bg-2); border-radius: 3px; padding: 1px 4px; font-size: 12px; font-family: monospace; }
       .bubble small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
       .bubble.bot strong { font-weight: 600; }
+      .feedback-controls { margin-top: 6px; }
+      .feedback-btn {
+        background: none; border: none; color: var(--muted); font-size: 11px;
+        cursor: pointer; padding: 2px 0; opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .bubble.bot:hover .feedback-btn { opacity: 1; }
+      .feedback-btn:hover { color: var(--accent); text-decoration: underline; }
+      .feedback-form { margin-top: 6px; }
+      .feedback-comment {
+        width: 100%; font-size: 12px; border: 1px solid var(--line); border-radius: 6px;
+        padding: 6px 8px; resize: vertical; font-family: inherit;
+      }
+      .feedback-actions { display: flex; gap: 6px; margin-top: 4px; }
+      .feedback-actions button {
+        font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--line);
+      }
+      .feedback-submit { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+      .feedback-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+      .feedback-cancel { background: var(--paper); }
+      .feedback-thanks { font-size: 11px; color: var(--muted); font-style: italic; }
       .composer {
         display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
       }
@@ -524,17 +545,25 @@
         localStorage.setItem(chatStorageKey(), JSON.stringify(trimChatHistory(history)));
       }
 
+      let _lastUserText = "";
+
       function addBubble(role, text) {
         const div = document.createElement("div");
         div.className = "bubble " + (role === "USER" ? "user" : "bot");
-        if (role === "BOT") renderMarkdown(div, text);
-        else div.textContent = text;
+        if (role === "BOT") {
+          renderMarkdown(div, text);
+          attachFeedbackControls(div, _lastUserText, text);
+        } else {
+          div.textContent = text;
+          _lastUserText = text;
+        }
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
       function renderChat() {
         messagesEl.innerHTML = "";
+        _lastUserText = "";
         const hist = loadChat();
         if (!hist.length) {
           messagesEl.innerHTML =

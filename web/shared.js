@@ -644,3 +644,74 @@ function initCoffeeGlossary(buttonId) {
   if (!btn) return;
   btn.addEventListener("click", () => { openCoffeeGlossary().catch((e) => toast(e.message, true)); });
 }
+
+// ---------------------------------------------------------------------------
+// Chat feedback ("that wasn't quite right")
+// ---------------------------------------------------------------------------
+
+/**
+ * Submit negative feedback for a bot response. Returns the created feedback object.
+ * @param {string} userMessage - The user's message that prompted the response
+ * @param {string} botMessage - The bot's response text
+ * @param {string|null} comment - Optional freeform comment explaining what was wrong
+ */
+async function submitChatFeedback(userMessage, botMessage, comment) {
+  return api("/chat/feedback", {
+    method: "POST",
+    body: authedJsonBody({ userMessage, botMessage, comment: comment || null }),
+  });
+}
+
+/**
+ * Attach feedback controls to a bot bubble element.
+ * @param {HTMLElement} bubbleEl - The .bubble.bot element
+ * @param {string} userMessage - The preceding user message text
+ * @param {string} botMessage - The bot reply text
+ */
+function attachFeedbackControls(bubbleEl, userMessage, botMessage) {
+  const wrap = document.createElement("div");
+  wrap.className = "feedback-controls";
+  const btn = document.createElement("button");
+  btn.className = "feedback-btn";
+  btn.textContent = "That wasn\u2019t quite right";
+  btn.type = "button";
+  wrap.appendChild(btn);
+
+  btn.addEventListener("click", () => {
+    if (wrap.querySelector(".feedback-form")) return;
+    btn.style.display = "none";
+    const form = document.createElement("div");
+    form.className = "feedback-form";
+    form.innerHTML =
+      '<textarea class="feedback-comment" placeholder="What was off? (optional)" rows="2"></textarea>' +
+      '<div class="feedback-actions">' +
+      '<button type="button" class="feedback-submit">Submit</button>' +
+      '<button type="button" class="feedback-cancel">Cancel</button>' +
+      "</div>";
+    wrap.appendChild(form);
+    const textarea = form.querySelector(".feedback-comment");
+    const submitBtn = form.querySelector(".feedback-submit");
+    const cancelBtn = form.querySelector(".feedback-cancel");
+
+    cancelBtn.addEventListener("click", () => { form.remove(); btn.style.display = ""; });
+    submitBtn.addEventListener("click", async () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+      try {
+        await submitChatFeedback(userMessage, botMessage, textarea.value.trim());
+        form.remove();
+        btn.remove();
+        const thanks = document.createElement("span");
+        thanks.className = "feedback-thanks";
+        thanks.textContent = "Thanks for the feedback";
+        wrap.appendChild(thanks);
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit";
+        toast("Could not send feedback: " + err.message, true);
+      }
+    });
+  });
+
+  bubbleEl.appendChild(wrap);
+}
