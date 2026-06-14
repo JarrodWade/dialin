@@ -73,6 +73,19 @@ def not_called(name: str, where: Callable[[dict[str, Any]], bool] | None = None,
     return _check
 
 
+def called_any(names: list[str], *, label: str | None = None) -> Check:
+    """Pass if at least one tool in ``names`` was called."""
+    lbl = label or f"called_any({','.join(names)})"
+
+    def _check(tr: Any) -> CheckResult:
+        for c in tr.tool_calls:
+            if c.name in names:
+                return CheckResult(lbl, True, f"saw {c.name}")
+        return CheckResult(lbl, False, f"none of {names} called; calls={tr.names()}")
+
+    return _check
+
+
 def called_before(first: str, second: str, *, label: str | None = None) -> Check:
     """Both tools must be called and ``first`` must precede ``second``."""
     lbl = label or f"called_before({first},{second})"
