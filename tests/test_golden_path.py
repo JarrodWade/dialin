@@ -176,3 +176,16 @@ def test_get_brew_paginates_past_first_query_page(dynamodb_env):
     assert found["brewId"] == target_id
     ddb.update_brew(USER, target_id, {"notes": "edited after deep scan"})
     assert ddb.get_brew(USER, target_id)["notes"] == "edited after deep scan"
+
+
+def test_list_brews_includes_coffee_labels(dynamodb_env):
+    ddb = dynamodb_env["ddb"]
+
+    coffee = ddb.create_coffee(user_id=USER, roaster="Onibus", name="Kenya AA")
+    ddb.create_brew(user_id=USER, coffee_id=coffee["coffeeId"], method="V60")
+
+    brews = ddb.list_brews(USER, limit=5)
+    assert len(brews) >= 1
+    hit = next(b for b in brews if b["coffeeId"] == coffee["coffeeId"])
+    assert hit["coffeeName"] == "Kenya AA"
+    assert hit["coffeeRoaster"] == "Onibus"

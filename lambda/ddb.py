@@ -1578,6 +1578,27 @@ def summarize_coffee(user_id: str, coffee_id: str) -> dict[str, Any]:
     }
 
 
+def enrich_brew_rows_coffee_denorm(user_id: str, rows: list[dict[str, Any]]) -> None:
+    """Attach ``coffeeName`` / ``coffeeRoaster`` to brew rows for API clients."""
+    by_cid: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        cid = str(row.get("coffeeId") or "").strip()
+        if not cid:
+            continue
+        by_cid.setdefault(cid, []).append(row)
+    for cid, group in by_cid.items():
+        coffee = get_coffee(user_id, cid)
+        if not coffee:
+            continue
+        name = str(coffee.get("name") or "").strip()
+        roaster = str(coffee.get("roaster") or "").strip()
+        for row in group:
+            if name:
+                row["coffeeName"] = name
+            if roaster:
+                row["coffeeRoaster"] = roaster
+
+
 def list_brews(
     user_id: str,
     *,
@@ -1611,7 +1632,9 @@ def list_brews(
         if method:
             items = [i for i in items if i.get("method") == method][:limit]
 
-    return [_strip_keys(i) for i in items]
+    rows = [_strip_keys(i) for i in items]
+    enrich_brew_rows_coffee_denorm(user_id, rows)
+    return rows
 
 
 # ---------------------------------------------------------------------------
