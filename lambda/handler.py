@@ -353,6 +353,7 @@ def _handle_create_coffee(event: dict[str, Any]) -> dict[str, Any]:
             roaster_id=rid_str,
             origin=body.get("origin"),
             process=body.get("process"),
+            roast_level=body.get("roastLevel"),
             roast_date=body.get("roastDate"),
             weight_g=body.get("weightG"),
             notes=body.get("notes"),

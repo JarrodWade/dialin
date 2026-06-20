@@ -275,6 +275,17 @@
           <label>Coffee name<input name="name" required placeholder="Wote Ethiopia" /></label>
           <label>Origin<input name="origin" placeholder="Ethiopia" /></label>
           <label>Process<input name="process" placeholder="washed" /></label>
+          <label>Roast level
+            <select name="roastLevel">
+              <option value="">—</option>
+              <option value="ultralight">ultralight</option>
+              <option value="light">light</option>
+              <option value="medium-light">medium-light</option>
+              <option value="medium">medium</option>
+              <option value="medium-dark">medium-dark</option>
+              <option value="dark">dark</option>
+            </select>
+          </label>
           <label>Roast date<input name="roastDate" type="date" /></label>
           <label>Bag weight (g)<input name="weightG" type="number" step="1" min="0" /></label>
           <label class="full">Notes<textarea name="notes" placeholder="flavor notes from the bag…"></textarea></label>
@@ -650,6 +661,7 @@
             <div class="meta">
               ${c.origin ? `<span>${escapeHtml(c.origin)}</span>` : ""}
               ${c.process ? `<span>${escapeHtml(c.process)}</span>` : ""}
+              ${c.roastLevel ? `<span>${escapeHtml(c.roastLevel)} roast</span>` : ""}
               ${ds != null ? `<span>${ds}d since roast</span>` : ""}
             </div>
             <div class="actions">

@@ -353,6 +353,50 @@ def update_roaster(user_id: str, roaster_id: str, updates: dict[str, Any]) -> di
 # ---------------------------------------------------------------------------
 
 
+# Canonical roast-level vocabulary (light → dark). Stored on coffees so taste
+# recommendations can be guard-railed against how a user actually brews
+# (e.g. don't push a dark Italian roast to a light-only brewer).
+ROAST_LEVELS = ("ultralight", "light", "medium-light", "medium", "medium-dark", "dark")
+
+_ROAST_LEVEL_ALIASES = {
+    "ultra light": "ultralight",
+    "ultra-light": "ultralight",
+    "blonde": "light",
+    "cinnamon": "light",
+    "med-light": "medium-light",
+    "med light": "medium-light",
+    "medium light": "medium-light",
+    "med": "medium",
+    "med-dark": "medium-dark",
+    "med dark": "medium-dark",
+    "medium dark": "medium-dark",
+    "full city": "medium-dark",
+    "french": "dark",
+    "italian": "dark",
+    "espresso roast": "dark",
+}
+
+
+def _normalize_roast_level(v: Any) -> str | None:
+    """Map free-text roast descriptions to the canonical vocabulary.
+
+    Lenient like origin/process: an unrecognized value is kept as-is (lowercased)
+    rather than rejected, so we never lose what the user actually said."""
+    if v is None:
+        return None
+    s = re.sub(r"\s+", " ", str(v).strip().lower())
+    if not s:
+        return None
+    if s in ROAST_LEVELS:
+        return s
+    if s in _ROAST_LEVEL_ALIASES:
+        return _ROAST_LEVEL_ALIASES[s]
+    hyphenated = s.replace(" ", "-")
+    if hyphenated in ROAST_LEVELS:
+        return hyphenated
+    return s
+
+
 def enrich_coffee_rows_roaster_denorm(user_id: str, rows: list[dict[str, Any]]) -> None:
     """Ensure API clients see `roaster` whenever `roasterId` resolves to a ROASTER# row."""
     by_rid: dict[str, list[dict[str, Any]]] = {}
@@ -379,6 +423,7 @@ def create_coffee(
     roaster_id: str | None = None,
     origin: str | None = None,
     process: str | None = None,
+    roast_level: str | None = None,
     roast_date: str | None = None,
     weight_g: float | None = None,
     notes: str | None = None,
@@ -397,6 +442,7 @@ def create_coffee(
         "name": name,
         "origin": origin,
         "process": process,
+        "roastLevel": _normalize_roast_level(roast_level),
         "roastDate": roast_date,
         "weightG": grams,
         "gramsRemaining": grams,
@@ -469,10 +515,12 @@ def update_coffee(
     updates: dict[str, Any],
 ) -> dict[str, Any]:
     """Patch a coffee. Whitelist of editable fields."""
-    allowed = {"roasterId", "roaster", "name", "origin", "process", "roastDate", "notes", "archived"}
+    allowed = {"roasterId", "roaster", "name", "origin", "process", "roastLevel", "roastDate", "notes", "archived"}
     updates = {k: v for k, v in updates.items() if k in allowed}
     if not updates:
         raise ValueError("no allowed fields to update")
+    if "roastLevel" in updates:
+        updates["roastLevel"] = _normalize_roast_level(updates["roastLevel"])
 
     set_parts = ["updatedAt = :now"]
     values: dict[str, Any] = {":now": _now_iso()}

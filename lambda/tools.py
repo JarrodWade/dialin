@@ -182,6 +182,7 @@ def _add_coffee(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
         roaster_id=roaster_id,
         origin=args.get("origin"),
         process=args.get("process"),
+        roast_level=args.get("roastLevel"),
         roast_date=args.get("roastDate"),
         weight_g=args.get("weightG"),
         notes=args.get("notes"),
@@ -1125,7 +1126,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "If there is still no ROASTER#, call add_roaster (after user confirms) "
                 "to get a roasterId; add_roaster returns duplicatePlace if it matches "
                 "an existing café. Then call add_coffee. Split what the user said across "
-                "name, origin, process, roastDate, weightG, notes with reasoning — do "
+                "name, origin, process, roastLevel, roastDate, weightG, notes with reasoning — do "
                 "not oversimplify specialty process wording."
             ),
             "inputSchema": {
@@ -1152,6 +1153,14 @@ TOOL_SPECS: list[dict[str, Any]] = [
                                 "Full process phrase from the label or user (e.g. 'thermal shock washed', "
                                 "'double anaerobic natural'). Preserve modifiers — do not reduce to coarse "
                                 "washed/natural/honey-only unless that's all they said."
+                            ),
+                        },
+                        "roastLevel": {
+                            "type": "string",
+                            "enum": ["ultralight", "light", "medium-light", "medium", "medium-dark", "dark"],
+                            "description": (
+                                "Roast level if stated or clear from the bag. Powers taste recommendations "
+                                "(e.g. matching a light-roast home brewer). Omit if genuinely unknown."
                             ),
                         },
                         "roastDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
@@ -1207,7 +1216,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "update_coffee",
             "description": (
                 "Edit a coffee's fields or archive it. Use when the user corrects info about a coffee "
-                "(name, roaster, origin, process, roastDate, notes) or marks it finished. "
+                "(name, roaster, origin, process, roastLevel, roastDate, notes) or marks it finished. "
                 "Set archived=true to archive. Preserve full specialty "
                 "process wording on updates — do NOT strip modifiers. "
                 "Do NOT create a new coffee — call this instead."
@@ -1224,6 +1233,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "process": {
                             "type": "string",
                             "description": "Full specialty process phrase incl. modifiers; do not shorten",
+                        },
+                        "roastLevel": {
+                            "type": "string",
+                            "enum": ["ultralight", "light", "medium-light", "medium", "medium-dark", "dark"],
+                            "description": "Roast level (light → dark)",
                         },
                         "roastDate": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                         "notes": {"type": "string"},

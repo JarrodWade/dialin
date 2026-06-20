@@ -440,6 +440,8 @@ def _journal_snapshot_text(user_id: str) -> str:
                 parts.append(f"origin={c['origin']}")
             if c.get("process"):
                 parts.append(f"process={c['process']}")
+            if c.get("roastLevel"):
+                parts.append(f"roast={c['roastLevel']}")
             if c.get("gramsRemaining") is not None:
                 parts.append(f"{c['gramsRemaining']}g left")
             lines.append(" ".join(parts))
