@@ -976,3 +976,31 @@ def generate_reply(
         user_text,
         client_timezone=client_timezone,
     ).text
+
+
+# The "For You" beans instruction. Runs through the normal grounded agent
+# (same tools + journal snapshot + preferences), but with a single, tightly
+# scoped ask so the model produces a directional bean shortlist rather than a
+# conversational reply. Kept as a constant so the eval harness can target it.
+_FOR_YOU_BEANS_INSTRUCTION = (
+    "Give me a 'For You' shortlist of 3–5 specific coffees I'd likely love right now. "
+    "Ground every pick in MY taste, not generic popularity: first call get_preferences, "
+    "and use the coffees in my journal and how I rate my brews to infer what I actually enjoy. "
+    "Lead each pick with a concrete roaster + coffee or style "
+    "(e.g. 'Onyx Coffee Lab — a washed Ethiopian like their Geometry'), preferring roasters from "
+    "search_known_roasters and my favoriteRoasters so the picks are real and buyable. "
+    "Give exactly one short sentence per pick on why it fits my palate. "
+    "Respect my brewing guardrail: stay within the roast levels I actually brew "
+    "(my preferredRoastLevel and the roast levels of coffees I've logged) and avoid my dislikedNotes. "
+    "Do not recommend coffees already active in my journal. "
+    "Respond as a short markdown list with no preamble, then close with one italic line noting these "
+    "are directional starting points based on your taste — not a live inventory."
+)
+
+
+def recommend_beans(user_id: str) -> str:
+    """Directional 'For You' bean recommendations grounded in the user's taste graph.
+
+    Reuses the full grounded agent (tools, journal snapshot, preferences) with a
+    single recommendation-scoped instruction and no prior history."""
+    return _run_turn(user_id, [], _FOR_YOU_BEANS_INSTRUCTION).text

@@ -14,6 +14,10 @@ Routes (representative):
       body: {message, history?, clientTimezone?: IANA TZ from browser}  (+ legacy userId)
       -> calls Bedrock with tools, returns {reply, history}
 
+  POST /recommendations/beans
+      body: {} (legacy userId only)
+      -> directional 'For You' bean shortlist grounded in the user's taste graph; returns {recommendations}
+
   POST /chat/feedback
       body: {userMessage, botMessage, comment?}
       -> stores "not quite right" signal, returns {feedback}
@@ -266,6 +270,24 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
         {"role": "BOT", "text": reply},
     ]
     return _response(200, {"reply": reply, "history": new_history})
+
+
+def _handle_recommend_beans(event: dict[str, Any]) -> dict[str, Any]:
+    """POST /recommendations/beans — directional 'For You' bean shortlist.
+
+    Stateless and body-less; the recommendation is derived entirely from the
+    user's stored taste graph (preferences + logged coffees/brews)."""
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+
+    try:
+        recommendations = bedrock.recommend_beans(user_id=user_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("bean recommendation failed")
+        return _response(502, {"error": "model invocation failed"})
+
+    return _response(200, {"recommendations": recommendations})
 
 
 # ---------------------------------------------------------------------------
@@ -840,6 +862,7 @@ _ROUTES = {
     "POST /chat": _handle_chat,
     "POST /chat/feedback": _handle_chat_feedback,
     "GET /chat/feedback": _handle_list_chat_feedback,
+    "POST /recommendations/beans": _handle_recommend_beans,
     "GET /roasters": _handle_list_roasters,
     "POST /roasters": _handle_create_roaster,
     "PATCH /roasters/{roasterId}": _handle_update_roaster,

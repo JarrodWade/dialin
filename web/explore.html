@@ -30,6 +30,11 @@
         white-space: nowrap;
       }
       .ask-strip button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .ask-strip .foryou-btn {
+        background: var(--paper); color: var(--accent);
+        border: 1px solid var(--accent); padding: 0 14px; font-weight: 600;
+      }
+      .ask-strip .foryou-btn:hover:not(:disabled) { background: var(--bg-2); }
       .ask-reply {
         font-size: 13px; line-height: 1.55; color: var(--ink);
         background: #fffaf0; border: 1px solid var(--line);
@@ -209,6 +214,7 @@
       <div class="ask-strip">
         <div class="ask-row">
           <input id="ask-input" placeholder="What should I check out in New York? Log my visit to Devoción today…" autocomplete="off" />
+          <button id="for-you-send" class="foryou-btn" title="Bean recommendations based on your taste">★ For You</button>
           <button id="ask-send">Ask</button>
         </div>
         <div id="ask-reply" class="ask-reply"></div>
@@ -480,6 +486,34 @@
       }
       askSend.addEventListener("click", doAsk);
       askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doAsk(); } });
+
+      // ── "For You" bean recommendations ────────────────────────────────────
+      const forYouSend = document.getElementById("for-you-send");
+      async function doForYou() {
+        if (!apiInput.value.trim()) { toast("Set the API URL above first.", true); return; }
+        forYouSend.disabled = true;
+        askSend.disabled = true;
+        askReply.textContent = "finding beans you'll love…";
+        askReply.className = "ask-reply visible loading";
+        try {
+          const data = await api("/recommendations/beans", {
+            method: "POST",
+            body: authedJsonBody({}),
+          });
+          const recs = data.recommendations || "(no recommendations)";
+          askReply.innerHTML = "";
+          renderMarkdown(askReply, recs);
+          attachFeedbackControls(askReply, "For You: bean recommendations", recs);
+          askReply.className = "ask-reply visible";
+        } catch (err) {
+          askReply.textContent = "Error: " + err.message;
+          askReply.className = "ask-reply visible loading";
+        } finally {
+          forYouSend.disabled = false;
+          askSend.disabled = false;
+        }
+      }
+      forYouSend.addEventListener("click", doForYou);
 
       // ── places ────────────────────────────────────────────────────────────
       async function loadPlaces() {
