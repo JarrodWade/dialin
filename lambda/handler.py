@@ -17,6 +17,8 @@ Routes (representative):
   POST /chat/feedback
       body: {userMessage, botMessage, comment?}
       -> stores "not quite right" signal, returns {feedback}
+  GET  /chat/feedback?limit=   (legacy: ?userId=)
+      -> returns the caller's recent feedback rows, newest first
 
   GET  /coffees?includeArchived=   (legacy: ?userId=)
   POST /coffees                    body: full coffee fields
@@ -292,6 +294,19 @@ def _handle_chat_feedback(event: dict[str, Any]) -> dict[str, Any]:
         logger.exception("create_chat_feedback failed")
         return _response(500, {"error": "could not save feedback"})
     return _response(201, {"feedback": item})
+
+
+def _handle_list_chat_feedback(event: dict[str, Any]) -> dict[str, Any]:
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+    qs = _qs(event)
+    try:
+        limit = int(qs.get("limit", "50"))
+    except ValueError:
+        return _response(400, {"error": "limit must be an integer"})
+    items = ddb.list_chat_feedback(user_id, limit=limit)
+    return _response(200, {"count": len(items), "feedback": items})
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +838,7 @@ _ROUTES = {
     "GET /glossary": _handle_get_glossary,
     "POST /chat": _handle_chat,
     "POST /chat/feedback": _handle_chat_feedback,
+    "GET /chat/feedback": _handle_list_chat_feedback,
     "GET /roasters": _handle_list_roasters,
     "POST /roasters": _handle_create_roaster,
     "PATCH /roasters/{roasterId}": _handle_update_roaster,

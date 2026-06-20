@@ -23,6 +23,7 @@ locals {
     "GET /glossary",
     "POST /chat",
     "POST /chat/feedback",
+    "GET /chat/feedback",
     "GET /roasters",
     "POST /roasters",
     "PATCH /roasters/{roasterId}",
