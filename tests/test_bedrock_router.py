@@ -58,12 +58,22 @@ def test_tool_tiers_partition_correctly():
 
     total = len(tools.TOOL_SPECS)
     core = len(tools.CORE_TOOL_SPECS)
-    trip = len(tools.TRIP_TOOL_SPECS)
     yt = len(tools.YOUTUBE_TOOL_SPECS)
-    assert core + trip + yt == total
-    assert core == 22
-    assert trip == 8
+    # Only YouTube is gated now; everything else (incl. cafe/visit) is core.
+    assert core + yt == total
+    assert core == 30
     assert yt == 1
+
+
+def test_place_tools_are_always_available():
+    """Regression: cafe/visit tools were gated behind the trip-discovery router,
+    so a plain 'log my visit to X' mounted no log_visit tool. They must be core."""
+    import tools
+
+    core_names = {t["toolSpec"]["name"] for t in tools.CORE_TOOL_SPECS}
+    place_names = {t["toolSpec"]["name"] for t in tools.PLACE_TOOL_SPECS}
+    assert {"log_visit", "list_visits", "add_cafe", "search_places"} <= place_names
+    assert place_names <= core_names
 
 
 def test_archive_coffee_removed_from_specs():

@@ -1912,17 +1912,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
-_TRIP_TOOL_NAMES = frozenset({
+# Cafe/visit CRUD tools. These are part of the always-available core set: a user
+# can log a visit or add a cafe on any turn, not only when the trip-discovery
+# prompt appendix fires. (The heavy trip-discovery *prompt* stays conditional;
+# tool availability must not depend on it — gating these broke plain
+# "log my visit to X" because the model had no tool to call.) Kept as a named
+# group for reference and tests.
+_PLACE_TOOL_NAMES = frozenset({
     "add_cafe", "list_cafes", "update_cafe", "search_places",
     "log_visit", "list_visits", "update_visit", "delete_visit",
 })
 
 _YOUTUBE_TOOL_NAMES = frozenset({"get_youtube_transcript"})
 
-_GATED_TOOL_NAMES = _TRIP_TOOL_NAMES | _YOUTUBE_TOOL_NAMES
+# Only YouTube is gated (it routinely fails from Lambda IPs and is rarely needed).
+_GATED_TOOL_NAMES = _YOUTUBE_TOOL_NAMES
 
 CORE_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] not in _GATED_TOOL_NAMES]
-TRIP_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] in _TRIP_TOOL_NAMES]
+# Subset of core, exposed for tests/telemetry that reason about place tooling.
+PLACE_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] in _PLACE_TOOL_NAMES]
 YOUTUBE_TOOL_SPECS = [t for t in TOOL_SPECS if t["toolSpec"]["name"] in _YOUTUBE_TOOL_NAMES]
 
 

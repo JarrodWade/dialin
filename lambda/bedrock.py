@@ -838,9 +838,9 @@ def _run_turn(
     attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
     attach_youtube = _wants_youtube(user_text)
 
+    # Cafe/visit tools live in the core set (always available). Only the
+    # trip-discovery *prompt* appendix is conditional — tool availability is not.
     active_tools = list(tools.CORE_TOOL_SPECS)
-    if attach_trip_appendix:
-        active_tools.extend(tools.TRIP_TOOL_SPECS)
     if attach_youtube:
         active_tools.extend(tools.YOUTUBE_TOOL_SPECS)
     tool_list: list[dict[str, Any]] = list(active_tools)
