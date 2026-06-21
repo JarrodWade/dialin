@@ -1066,8 +1066,13 @@ _FOR_YOU_BEANS_INSTRUCTION = (
     "isn't in them. You may add a typical style as brief color. "
     "Respect my brewing guardrail: stay within the roast levels I actually brew "
     "(my preferredRoastLevel and the roast levels of coffees I've logged) and avoid my dislikedNotes. "
-    "Respond as a short markdown list with no preamble, then close with one italic line noting these "
-    "are directional starting points based on your taste — confirm availability with each roaster."
+    "Organize the picks by geography to match how I shop: a '**North America**' group first (US/Canada — "
+    "easiest for me to buy), then a short '**International**' group (e.g. Nordic / European icons) for "
+    "aspirational orders, and briefly flag international picks as an overseas order. Use those two bold "
+    "labels as lightweight section headers — NOT markdown '#' headings — and include the International "
+    "group only if you have genuinely on-class picks for it. "
+    "Respond with no preamble — just the grouped markdown list — then close with one italic line noting "
+    "these are directional starting points based on your taste; confirm availability with each roaster."
 )
 
 
