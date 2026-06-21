@@ -4,38 +4,93 @@ from __future__ import annotations
 
 import importlib
 import json
-import types
 
 USER = "rec-user-1"
 
 
-def test_recommend_beans_runs_scoped_turn(dynamodb_env, monkeypatch):
+def test_recommend_beans_runs_deterministic_pipeline(dynamodb_env, monkeypatch):
+    """The deterministic pipeline: server seeds the peer search from MY roasters,
+    runs a capped number of searches, then a single tool-less, temperature-0
+    model call ranks/formats strictly from those candidates."""
     import bedrock
 
     importlib.reload(bedrock)
 
+    # Favorites lead; logged roasters follow. "Sey" appears in both and must
+    # dedupe to a single seed.
+    monkeypatch.setattr(
+        bedrock.ddb,
+        "get_profile",
+        lambda uid: {
+            "favoriteRoasters": ["Sey", "Futuro"],
+            "preferredRoastLevel": "light",
+            "dislikedNotes": ["ashy"],
+            "experimentalPreference": "seek",
+        },
+    )
+    monkeypatch.setattr(
+        bedrock.ddb,
+        "list_roasters",
+        lambda uid, **kw: [{"name": "Moxie"}, {"name": "Sey"}],
+    )
+
+    searches: list[dict] = []
+
+    def fake_dispatch(name, uid, args):
+        assert name == "search_web"
+        searches.append(args)
+        # tools.dispatch wraps a successful payload as {"ok": True, "result": {...}}.
+        return {
+            "ok": True,
+            "result": {
+                "answer": "Try Hydrangea and Prodigal.",
+                "results": [
+                    {"title": "Hydrangea Coffee", "snippet": "ultra-light clarity"},
+                    {"title": "Prodigal", "snippet": "Scott Rao precision"},
+                ],
+            },
+        }
+
+    monkeypatch.setattr(bedrock.tools, "dispatch", fake_dispatch)
+
     captured = {}
 
-    def fake_run_turn(user_id, history, user_text, **kwargs):
-        captured["user_id"] = user_id
-        captured["history"] = history
-        captured["user_text"] = user_text
-        captured["kwargs"] = kwargs
-        return types.SimpleNamespace(text="1. Onyx — washed Ethiopian")
+    class FakeClient:
+        def converse(self, **kwargs):
+            captured.update(kwargs)
+            return {
+                "output": {
+                    "message": {"content": [{"text": "**North America**\n- Hydrangea — clarity"}]}
+                }
+            }
 
-    monkeypatch.setattr(bedrock, "_run_turn", fake_run_turn)
+    monkeypatch.setattr(bedrock, "_client", FakeClient())
 
     out = bedrock.recommend_beans(USER)
-    assert out == "1. Onyx — washed Ethiopian"
-    assert captured["user_id"] == USER
-    assert captured["history"] == []
-    # The instruction must steer toward a grounded, guardrailed shortlist.
-    assert "For You" in captured["user_text"]
-    assert "get_preferences" in captured["user_text"]
-    # Must NOT inherit trip-scouting behavior, and must cap web searches so the
-    # turn cannot blow past the 30s API timeout.
-    assert captured["kwargs"]["force_trip_appendix"] is False
-    assert captured["kwargs"]["max_web_searches"] == 2
+    assert "Hydrangea" in out
+
+    # Server ran the capped peer search, seeded with my roaster names (deduped).
+    assert len(searches) == bedrock._FOR_YOU_MAX_SEARCHES
+    q0 = searches[0]["query"]
+    assert q0.startswith("roasters like ")
+    for name in ("Sey", "Futuro", "Moxie"):
+        assert name in q0
+    assert q0.count("Sey") == 1
+    # Reddit-scoped retrieval is the key quality lever — every search must restrict
+    # to the community domain rather than open-web SEO listicles.
+    for s in searches:
+        assert s["includeDomains"] == ["reddit.com"]
+
+    # Ranking call is deterministic (temperature 0), tool-less, closed candidate pool.
+    assert captured["inferenceConfig"]["temperature"] == 0.0
+    assert "toolConfig" not in captured
+    system_text = captured["system"][0]["text"]
+    assert "CANDIDATE POOL IS CLOSED" in system_text
+    user_block = captured["messages"][0]["content"][0]["text"]
+    assert "PEER-SEARCH RESULTS" in user_block
+    assert "Hydrangea Coffee" in user_block  # live search results fed to the ranker
+    assert "DO NOT recommend these back" in user_block
+    assert "Sey" in user_block  # known roasters are the exclusion list
 
 
 def test_run_turn_caps_web_searches(dynamodb_env, monkeypatch):

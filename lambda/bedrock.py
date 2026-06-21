@@ -1021,83 +1021,215 @@ def generate_reply(
     ).text
 
 
-# The "For You" beans instruction. Runs through the normal grounded agent
-# (same tools + journal snapshot + preferences), but with a single, tightly
-# scoped ask so the model produces a directional bean shortlist rather than a
-# conversational reply. Kept as a constant so the eval harness can target it.
-_FOR_YOU_BEANS_INSTRUCTION = (
-    "Give me a 'For You' shortlist of ROASTERS to explore next — aim for about 3 in EACH geographic "
-    "group below (~6 total). The goal is DISCOVERY — point me to roasters I'd love but have NOT tried "
-    "yet, not the ones I already buy. "
-    "First call get_preferences, then read the roasters and cafés in my journal and how I rate my brews. "
-    "THE PRIMARY DRIVER IS ROASTER CLASS, NOT THE BEANS — and the single best move is a similarity "
-    "search seeded with the names of roasters I ALREADY LOVE. Collect those concrete names: the roasters "
-    "in my journal, my favoriteRoasters, and any cafés I've logged that also roast. Then call search_web "
-    "with a query of the form 'roasters like {about 5 of my most representative roaster names}', "
-    "combining my journal roasters AND favoriteRoasters (e.g. 'roasters like Sey, Mythical, Moxie, "
-    "Shoebox, Rufous'). Those real names ARE my class; a 'roasters like X, Y, Z' search surfaces "
-    "genuine, well-regarded peers far better than abstract attribute searches do. "
-    "GROUND YOUR PICKS IN THE SEARCH RESULTS — this is the most important rule. Recommend the peer "
-    "roasters that actually appear in those results; community threads, Reddit, and 'roasters like X' "
-    "roundups naming specific peers are gold, USE those names. Do NOT fall back to roasters you merely "
-    "know from memory — especially the big, obvious ones — when the search surfaced better-matched, "
-    "of-the-moment peers. Those community-sourced names are exactly what I want. If the first search is "
-    "thin on specific peer names, do ONE more targeted search (e.g. add 'reddit' or 'best light roast "
-    "roasters 2026') within your 2-search budget. "
-    "In short my class is world-class, modern, LIGHT-ROAST-forward, experimental third-wave specialty — "
-    "but let my real roaster names and the search results define it, not generic descriptors. "
-    "DEMOTE origin and process. Every roaster at this tier rotates excellent lots across all origins and "
-    "processes at any given time, so a roaster 'having good Kenyans' is NOT a reason to pick them and a "
-    "specific origin or process is NOT a filter. Match the roaster's class and reputation, not their "
-    "current menu. Mention a likely style only as light color, NEVER as the rationale. "
-    "search_known_roasters is a small, mostly-mainstream floor — not the universe; lean on the "
-    "'roasters like {my roasters}' web search instead. Favor fresh, of-the-moment micro-roasters that "
-    "the specialty community is currently buzzing about over bigger, more established names — even "
-    "well-regarded ones (Onyx, Counter Culture) and legacy names (Verve, Ritual, Blue Bottle, "
-    "Intelligentsia) — unless one is a genuine, frequently-cited peer of my roasters. "
-    "Only recommend ACTUAL ROASTERS of comparable prestige and modernity. Do NOT recommend subscription "
-    "clubs or curation services, mainstream/commercial roasters, or espresso-forward / dark-leaning "
-    "roasters. "
-    "ACCURACY OVER COMPLETENESS — do not hallucinate. Only name entities you are confident are real, "
-    "currently-operating coffee ROASTERS. Many celebrated coffee names are PRODUCERS or farms (e.g. "
-    "Monteblanco, La Palma y El Tucán), green importers, or varietals (Geisha, SL28) — NEVER present any "
-    "of those as a roaster. Do NOT invent awards, competition placements, or credentials. Prefer "
-    "roasters you can ground in your web-search results; if you cannot confidently confirm a name is a "
-    "real roaster, leave it out. A shorter, correct list is better than a padded one with a fabricated "
-    "or misclassified name. "
-    "Be FAST and decisive: make at most TWO web searches total, then choose from what you have — "
-    "do NOT keep researching or run search after search. "
-    "Do NOT recommend a roaster that already appears in my journal or favoriteRoasters, with at most "
-    "ONE exception — and only if it clearly belongs to the same class. "
-    "For each pick, lead with the roaster, then ONE short sentence on WHY IT FITS MY CLASS — its tier, "
-    "ethos, and reputation, comparing it to the roasters I ACTUALLY log (e.g. 'a cult modern light-roast "
-    "roaster in the same class as your Sey and Futuro, obsessive about clarity'). Describe my taste and "
-    "favorites ONLY from my real journal/preferences — never imply I have logged or favor a roaster that "
-    "isn't in them. You may add a typical style as brief color. "
-    "Respect my brewing guardrail: stay within the roast levels I actually brew "
-    "(my preferredRoastLevel and the roast levels of coffees I've logged) and avoid my dislikedNotes. "
-    "Organize the picks by geography to match how I shop: a '**North America**' group first (US/Canada — "
-    "easiest for me to buy), then a short '**International**' group (e.g. Nordic / European icons) for "
-    "aspirational orders, and briefly flag international picks as an overseas order. Use those two bold "
-    "labels as lightweight section headers — NOT markdown '#' headings — and include the International "
-    "group only if you have genuinely on-class picks for it. Aim for about 3 picks per group, but NEVER "
-    "pad to hit a number: a confident on-class pick beats a filler or unverified one, so fewer is fine. "
-    "Respond with no preamble — just the grouped markdown list — then close with one italic line noting "
-    "these are directional starting points based on your taste; confirm availability with each roaster."
+# ---------------------------------------------------------------------------
+# "For You" bean recommendations — deterministic pipeline
+# ---------------------------------------------------------------------------
+#
+# Prompt-only recommendations had a variance floor: the same taste graph
+# produced different shortlists run to run, and the free agent could wander
+# into parametric memory (re-recommending known names, inventing roasters,
+# naming producers/farms as roasters). The deterministic pipeline removes that
+# freedom by splitting the work into fixed server-side steps:
+#
+#   1. The SERVER gathers seed roaster names from the taste graph
+#      (favoriteRoasters first, then logged journal roasters).
+#   2. The SERVER runs the "roasters like {seeds}" peer search itself — the
+#      exact move that produced the best hand-tested results — plus one
+#      community-biased follow-up. A fixed, capped number of searches.
+#   3. A single tool-less model call RANKS and FORMATS strictly from the
+#      candidate names those searches surfaced. It cannot search and is told to
+#      only use names present in the provided results.
+#
+# Output is now a stable function of (taste graph -> search results); the model
+# only does selection + prose, which is what it's reliably good at.
+
+_SEED_ROASTER_LIMIT = 5
+_FOR_YOU_MAX_SEARCHES = 2
+# Community threads ("roasters like Sey?") name the actual cutting-edge peers
+# (Prodigal, Tim Wendelboe, Coffee Collective, …); general web search returns
+# the roasters' own shop pages and big-name SEO listicles instead. Restricting
+# the peer search to Reddit is the single biggest quality lever we found.
+_PEER_SEARCH_DOMAINS = ["reddit.com"]
+_PEER_SEARCH_MAX_RESULTS = 8
+
+
+def _gather_seed_roasters(user_id: str) -> tuple[list[str], list[str]]:
+    """Return ``(seed_names, known_names)`` from the user's taste graph.
+
+    ``known_names`` is every roaster the user already follows (favoriteRoasters
+    + logged journal roasters, deduped case-insensitively, original casing) and
+    becomes the exclusion list. ``seed_names`` is the leading slice of those —
+    favorites first, since they're the user's stated north star — used to seed
+    the ``roasters like {…}`` peer search."""
+    profile = ddb.get_profile(user_id) or {}
+    favorites = [
+        str(x).strip() for x in (profile.get("favoriteRoasters") or []) if str(x).strip()
+    ]
+    logged = [
+        str(r.get("name", "")).strip()
+        for r in ddb.list_roasters(user_id)
+        if str(r.get("name", "")).strip()
+    ]
+
+    known: list[str] = []
+    seen: set[str] = set()
+    for name in [*favorites, *logged]:
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            known.append(name)
+    return known[:_SEED_ROASTER_LIMIT], known
+
+
+def _peer_search_queries(seeds: list[str]) -> list[str]:
+    """Deterministic query set, capped to ``_FOR_YOU_MAX_SEARCHES``.
+
+    Query 1 is the proven ``roasters like {my roasters}`` similarity search for
+    personalized peers (tends to skew toward the user's region). Query 2 is a
+    seed-independent international sweep (Europe / Nordic / Japan / Australia) so
+    the International group is reliably populated even when the user's seeds skew
+    local. Both run against Reddit (see ``_PEER_SEARCH_DOMAINS``)."""
+    world = "best light roast coffee roasters Europe Nordic Japan Australia"
+    if seeds:
+        primary = "roasters like " + ", ".join(seeds)
+    else:
+        primary = "best modern light-roast specialty coffee roasters in the world"
+    return [primary, world][:_FOR_YOU_MAX_SEARCHES]
+
+
+def _run_peer_searches(user_id: str, seeds: list[str]) -> str:
+    """Run the capped Reddit-scoped peer searches server-side and flatten them
+    into a single text block of candidate roasters. This block is the ONLY pool
+    of names the ranking model is allowed to draw from."""
+    blocks: list[str] = []
+    for query in _peer_search_queries(seeds):
+        res = tools.dispatch(
+            "search_web",
+            user_id,
+            {
+                "query": query,
+                "maxResults": _PEER_SEARCH_MAX_RESULTS,
+                "includeDomains": _PEER_SEARCH_DOMAINS,
+            },
+        )
+        if not res.get("ok"):
+            blocks.append(f"Search: {query}\n(search unavailable: {res.get('error')})")
+            continue
+        # tools.dispatch wraps a successful payload as {"ok": True, "result": {...}}.
+        payload = res.get("result") or {}
+        lines = [f"Search: {query}"]
+        answer = (payload.get("answer") or "").strip()
+        if answer:
+            lines.append(f"Summary: {answer}")
+        for r in payload.get("results", []) or []:
+            title = (r.get("title") or "").strip()
+            snippet = (r.get("snippet") or "").strip()
+            if title or snippet:
+                lines.append(f"- {title}: {snippet}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks).strip()
+
+
+# System prompt for the deterministic ranking step. The model receives the
+# user's taste graph plus a closed pool of peer-search results and may ONLY
+# select/format from that pool — no searching, no parametric recall.
+_FOR_YOU_RANKER_SYSTEM = (
+    "You are dialin's 'For You' roaster recommender. You are given MY TASTE GRAPH and a set of "
+    "PEER-SEARCH RESULTS produced by searching 'roasters like {my favorite roasters}'. Your job is to "
+    "pick and present the best NEW roasters for me to explore next.\n\n"
+    "HARD RULES:\n"
+    "- CANDIDATE POOL IS CLOSED. Only recommend roasters whose names actually appear in the PEER-SEARCH "
+    "RESULTS. Never add a roaster from your own memory, no matter how famous — if a name is not in the "
+    "results, it does not exist for this task.\n"
+    "- NEVER recommend a roaster on my 'DO NOT recommend these back' list (the ones already in my "
+    "journal/favorites).\n"
+    "- ONLY recommend entities that ROAST THEIR OWN COFFEE. The acid test for every pick: 'is this a "
+    "roaster that roasts its own beans?' If not, drop it. Threads mention many adjacent things that are "
+    "NOT roasters: PRODUCERS/farms (e.g. Monteblanco, La Palma y El Tucán), green importers, varietals "
+    "(Geisha, SL28), and — critically — curated multi-roaster shops / online bean selections / "
+    "marketplaces / resellers / subscription boxes (e.g. Lucienne, Yes Plz, Trade, Bottomless) that "
+    "sell OTHER roasters' coffee. Never present any of those as a roaster. If a result is ambiguous "
+    "about whether something roasts its own coffee, leave it out.\n"
+    "- Do NOT invent awards, competition placements, or credentials. State only what is grounded in the "
+    "results or my taste graph.\n"
+    "- Exclude mainstream/commercial roasters and espresso-forward / dark-leaning roasters. I want "
+    "modern, light-roast-forward, experimental third-wave peers of my anchor roasters.\n\n"
+    "SELECTION:\n"
+    "- Match ROASTER CLASS, not beans — tier, ethos, reputation aligned with my anchor roasters. DEMOTE "
+    "origin and process: every roaster at this tier rotates excellent lots, so a specific origin or "
+    "process is never the reason to pick one. Mention a likely style only as brief color, never as the "
+    "rationale.\n"
+    "- Favor fresh, of-the-moment micro-roasters the community is buzzing about over big, obvious, or "
+    "legacy names — unless a bigger name is clearly a frequently-cited peer in the results.\n\n"
+    "OUTPUT:\n"
+    "- Organize STRICTLY by the roaster's HOME country/city: a '**North America**' group first (roasters "
+    "based in the US/Canada), then an '**International**' group (everyone based elsewhere — e.g. a "
+    "Paris, Oslo, Melbourne, or Tokyo roaster ALWAYS goes here, never in North America regardless of "
+    "how easy it is to order). Use those two bold labels as lightweight section headers — NOT markdown "
+    "'#' headings.\n"
+    "- Aim for about 3 picks per group, but NEVER pad: a confident, on-class, results-grounded pick "
+    "beats a filler one, so fewer is fine. Include the International group only if the results give you "
+    "genuinely on-class picks for it.\n"
+    "- For each pick: lead with the roaster name, then ONE short sentence on why it fits my class, "
+    "comparing it to the roasters I ACTUALLY log (e.g. 'a cult modern light-roast roaster in the same "
+    "class as your Sey and Futuro').\n"
+    "- No preamble — just the grouped markdown list — then close with one italic line noting these are "
+    "directional starting points based on my taste; confirm current availability with each roaster.\n"
+    "- If the results contain no suitable on-class roasters, say so briefly instead of inventing picks."
 )
 
 
-def recommend_beans(user_id: str) -> str:
-    """Directional 'For You' bean recommendations grounded in the user's taste graph.
+def _format_recommendations(
+    user_id: str, seeds: list[str], known: list[str], results_text: str
+) -> str:
+    """Single tool-less model call: rank + format strictly from ``results_text``."""
+    profile = ddb.get_profile(user_id) or {}
+    ctx: list[str] = []
+    if seeds:
+        ctx.append("Roasters I already love (my class anchors): " + ", ".join(seeds) + ".")
+    if known:
+        ctx.append(
+            "Roasters already in my journal/favorites — DO NOT recommend these back: "
+            + ", ".join(known)
+            + "."
+        )
+    roast = str(profile.get("preferredRoastLevel") or "").strip()
+    if roast:
+        ctx.append(f"My preferred roast level: {roast}.")
+    disliked = [str(x).strip() for x in (profile.get("dislikedNotes") or []) if str(x).strip()]
+    if disliked:
+        ctx.append("Notes I dislike (avoid): " + ", ".join(disliked) + ".")
+    exp = str(profile.get("experimentalPreference") or "").strip()
+    if exp:
+        ctx.append(f"Experimental-processing appetite: {exp}.")
+    taste = "\n".join(ctx) or "No saved preferences; infer my class from the anchor roasters above."
 
-    Reuses the full grounded agent (tools, journal snapshot, preferences) with a
-    single recommendation-scoped instruction and no prior history. The trip-discovery
-    appendix is force-disabled: it would otherwise fire on this 'recommend roasters'
-    prompt and push multi-search city-scouting that blows past the 30s API timeout."""
-    return _run_turn(
-        user_id,
-        [],
-        _FOR_YOU_BEANS_INSTRUCTION,
-        force_trip_appendix=False,
-        max_web_searches=2,
-    ).text
+    user_block = (
+        "MY TASTE GRAPH\n"
+        + taste
+        + "\n\nPEER-SEARCH RESULTS (your only candidate pool)\n"
+        + (results_text or "(no results returned)")
+    )
+
+    response = _client.converse(
+        modelId=_MODEL_ID,
+        system=[{"text": _FOR_YOU_RANKER_SYSTEM}],
+        messages=[{"role": "user", "content": [{"text": user_block}]}],
+        inferenceConfig={"maxTokens": _MAX_OUTPUT_TOKENS, "temperature": 0.0},
+    )
+    output_message = response["output"]["message"]
+    parts = [b["text"] for b in output_message.get("content", []) if b.get("text")]
+    text = "\n".join(_strip_meta(p) for p in parts if p.strip()).strip()
+    return text or "(no reply)"
+
+
+def recommend_beans(user_id: str) -> str:
+    """Directional 'For You' roaster recommendations via the deterministic pipeline.
+
+    Server gathers seed roasters from the taste graph, runs the capped peer
+    searches itself, then asks the model to rank + format strictly from those
+    candidates. No agent loop, so it stays well under the 30s API timeout and is
+    a stable function of the user's taste graph and the live search results."""
+    seeds, known = _gather_seed_roasters(user_id)
+    results_text = _run_peer_searches(user_id, seeds)
+    return _format_recommendations(user_id, seeds, known, results_text)
