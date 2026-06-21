@@ -1026,8 +1026,9 @@ def generate_reply(
 # scoped ask so the model produces a directional bean shortlist rather than a
 # conversational reply. Kept as a constant so the eval harness can target it.
 _FOR_YOU_BEANS_INSTRUCTION = (
-    "Give me a 'For You' shortlist of 3–5 ROASTERS to explore next. The goal is DISCOVERY — point me to "
-    "roasters I'd love but have NOT tried yet, not the ones I already buy. "
+    "Give me a 'For You' shortlist of ROASTERS to explore next — aim for about 3 in EACH geographic "
+    "group below (~6 total). The goal is DISCOVERY — point me to roasters I'd love but have NOT tried "
+    "yet, not the ones I already buy. "
     "First call get_preferences, then read the roasters and cafés in my journal and how I rate my brews. "
     "THE PRIMARY DRIVER IS ROASTER CLASS, NOT THE BEANS — and the single best move is a similarity "
     "search seeded with the names of roasters I ALREADY LOVE. Collect those concrete names: the roasters "
@@ -1070,7 +1071,8 @@ _FOR_YOU_BEANS_INSTRUCTION = (
     "easiest for me to buy), then a short '**International**' group (e.g. Nordic / European icons) for "
     "aspirational orders, and briefly flag international picks as an overseas order. Use those two bold "
     "labels as lightweight section headers — NOT markdown '#' headings — and include the International "
-    "group only if you have genuinely on-class picks for it. "
+    "group only if you have genuinely on-class picks for it. Aim for about 3 picks per group, but NEVER "
+    "pad to hit a number: a confident on-class pick beats a filler or unverified one, so fewer is fine. "
     "Respond with no preamble — just the grouped markdown list — then close with one italic line noting "
     "these are directional starting points based on your taste; confirm availability with each roaster."
 )
