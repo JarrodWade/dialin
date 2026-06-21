@@ -983,18 +983,23 @@ def generate_reply(
 # scoped ask so the model produces a directional bean shortlist rather than a
 # conversational reply. Kept as a constant so the eval harness can target it.
 _FOR_YOU_BEANS_INSTRUCTION = (
-    "Give me a 'For You' shortlist of 3–5 specific coffees I'd likely love right now. "
-    "Ground every pick in MY taste, not generic popularity: first call get_preferences, "
-    "and use the coffees in my journal and how I rate my brews to infer what I actually enjoy. "
-    "Lead each pick with a concrete roaster + coffee or style "
-    "(e.g. 'Onyx Coffee Lab — a washed Ethiopian like their Geometry'), preferring roasters from "
-    "search_known_roasters and my favoriteRoasters so the picks are real and buyable. "
-    "Give exactly one short sentence per pick on why it fits my palate. "
+    "Give me a 'For You' shortlist of 3–5 specific coffees to try NEXT. The goal is DISCOVERY — "
+    "point me to roasters and beans I'd love but have NOT tried yet, not the ones I already buy. "
+    "First call get_preferences, then read the roasters and coffees already in my journal and how I "
+    "rate my brews to infer my palate. Use that palate to find NEW roasters that match it, drawn from "
+    "search_known_roasters (favor my home region and roasters stylistically similar to my favorites, "
+    "but pick ones I have NOT logged). "
+    "Do NOT recommend a roaster that already appears in my journal or favoriteRoasters, with at most "
+    "ONE exception — and only if it is a clearly different style of coffee than anything I've logged. "
+    "For each pick, lead with the roaster + a coffee or style, then ONE short sentence tying it to my "
+    "taste by palate match (e.g. 'you rate washed Colombians 8+ and they're known for exactly that'). "
+    "For a roaster I haven't logged, recommend a typical style or flagship rather than inventing a "
+    "specific current lot, since you can't see live menus. "
     "Respect my brewing guardrail: stay within the roast levels I actually brew "
     "(my preferredRoastLevel and the roast levels of coffees I've logged) and avoid my dislikedNotes. "
     "Do not recommend coffees already active in my journal. "
     "Respond as a short markdown list with no preamble, then close with one italic line noting these "
-    "are directional starting points based on your taste — not a live inventory."
+    "are directional starting points based on your taste — confirm availability with each roaster."
 )
 
 
