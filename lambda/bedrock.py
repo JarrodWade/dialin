@@ -820,11 +820,17 @@ def _run_turn(
     user_text: str,
     *,
     client_timezone: str | None = None,
+    force_trip_appendix: bool | None = None,
+    max_web_searches: int | None = None,
 ) -> TurnResult:
     """Run a chat turn through Bedrock with tool-use enabled, returning a full trace.
 
     ``generate_reply`` wraps this and returns only ``.text``. The eval harness calls
-    ``_run_turn`` directly to assert on tool calls, attachments, and token usage."""
+    ``_run_turn`` directly to assert on tool calls, attachments, and token usage.
+
+    ``force_trip_appendix`` overrides the heuristic router: pass ``False`` for
+    self-contained flows (e.g. bean recommendations) that mention discovery/roasters
+    but must NOT inherit the trip-scouting prompt's multi-search behavior."""
     messages: list[dict[str, Any]] = []
     for h in history:
         role = "user" if h.get("role") == "USER" else "assistant"
@@ -837,7 +843,11 @@ def _run_turn(
     tool_calls: list[ToolCall] = []
     usage_total: dict[str, int] = {}
     clock_supplement = chat_clock_system_text(user_id, client_timezone=client_timezone)
-    attach_trip_appendix = want_trip_place_discovery_appendix(history, user_text)
+    attach_trip_appendix = (
+        force_trip_appendix
+        if force_trip_appendix is not None
+        else want_trip_place_discovery_appendix(history, user_text)
+    )
     attach_youtube = _wants_youtube(user_text)
 
     # Cafe/visit tools live in the core set (always available). Only the
@@ -872,6 +882,7 @@ def _run_turn(
 
     iterations = 0
     hit_cap = False
+    web_search_count = 0
     trip_ctx_token = chat_context.trip_place_discovery_active.set(attach_trip_appendix)
     try:
         for iteration in range(_MAX_TOOL_ITERATIONS):
@@ -923,6 +934,38 @@ def _run_turn(
                 # Log argument keys only — values can contain user content (PII).
                 arg_keys = sorted(tool_input.keys()) if isinstance(tool_input, dict) else None
                 logger.info("tool_use name=%s arg_keys=%s", tool_name, arg_keys)
+
+                # Deterministic web-search budget: each Tavily call costs several
+                # seconds, so an over-eager model can blow past the 30s API timeout.
+                # Once the budget is spent, short-circuit further searches with a
+                # synthetic result telling the model to answer with what it has.
+                if tool_name == "search_web" and max_web_searches is not None:
+                    if web_search_count >= max_web_searches:
+                        result = {
+                            "ok": False,
+                            "error": "web_search_budget_exhausted",
+                            "message": (
+                                "Web-search budget reached for this request. Do not search again; "
+                                "answer now using the results you already have."
+                            ),
+                        }
+                        tool_calls.append(
+                            ToolCall(
+                                name=tool_name,
+                                input=tool_input if isinstance(tool_input, dict) else {},
+                                output=result,
+                            )
+                        )
+                        tool_results.append({
+                            "toolResult": {
+                                "toolUseId": tool_use_id,
+                                "content": [{"json": _to_jsonable(result)}],
+                                "status": "error",
+                            }
+                        })
+                        continue
+                    web_search_count += 1
+
                 result = tools.dispatch(tool_name, user_id, tool_input)
                 tool_calls.append(
                     ToolCall(
@@ -993,6 +1036,8 @@ _FOR_YOU_BEANS_INSTRUCTION = (
     "international roasters celebrated for my specific style (e.g. 'best light-roast washed Kenya "
     "roasters', 'boutique roasters known for experimental honey lots'). Favor non-obvious roasters over "
     "big names I've surely heard of (Verve, Ritual, Blue Bottle, Intelligentsia and the like). "
+    "Be FAST and decisive: make at most TWO web searches total, then choose from what you have — "
+    "do NOT keep researching or run search after search. "
     "Do NOT recommend a roaster that already appears in my journal or favoriteRoasters, with at most "
     "ONE exception — and only if it is a clearly different style of coffee than anything I've logged. "
     "EVERY pick must be justified by how its COFFEE matches my palate. Do NOT recommend a roaster for "
@@ -1014,5 +1059,13 @@ def recommend_beans(user_id: str) -> str:
     """Directional 'For You' bean recommendations grounded in the user's taste graph.
 
     Reuses the full grounded agent (tools, journal snapshot, preferences) with a
-    single recommendation-scoped instruction and no prior history."""
-    return _run_turn(user_id, [], _FOR_YOU_BEANS_INSTRUCTION).text
+    single recommendation-scoped instruction and no prior history. The trip-discovery
+    appendix is force-disabled: it would otherwise fire on this 'recommend roasters'
+    prompt and push multi-search city-scouting that blows past the 30s API timeout."""
+    return _run_turn(
+        user_id,
+        [],
+        _FOR_YOU_BEANS_INSTRUCTION,
+        force_trip_appendix=False,
+        max_web_searches=2,
+    ).text
