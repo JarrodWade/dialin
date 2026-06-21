@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # avoid importing the harness (and lambda deps) at module import
     from evals.harness import Scenario
 
-_MODULES = ("coffees", "equipment", "cafes_visits", "corrections", "trips", "recall")
+_MODULES = ("coffees", "equipment", "cafes_visits", "corrections", "trips", "recall", "recommendations")
 
 
 def suites() -> dict[str, list["Scenario"]]:

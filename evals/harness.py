@@ -176,13 +176,21 @@ def reply_max_sentences(n: int, *, label: str | None = None) -> Check:
 @dataclass
 class Scenario:
     id: str
-    message: str
+    message: str = ""
     rule: str = ""
     seed: Callable[[Any, str], None] | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
     client_timezone: str | None = None
     user_id: str = "eval-user"
+    # Resolve the message at run time from the (already-imported) bedrock module —
+    # lets a scenario target a prompt constant (e.g. the For You instruction)
+    # without importing lambda deps at scenario-build time.
+    message_factory: Callable[[Any], str] | None = None
+    # Overrides for non-chat entrypoints (e.g. recommend_beans). None = use the
+    # turn's normal heuristic / no cap, matching the default chat path.
+    force_trip_appendix: bool | None = None
+    max_web_searches: int | None = None
 
 
 @dataclass
@@ -214,6 +222,8 @@ def run_scenario(scenario: Scenario, *, model_client: Any | None = None) -> Scen
     if scenario.seed is not None:
         scenario.seed(ddb, scenario.user_id)
 
+    message = scenario.message_factory(bedrock) if scenario.message_factory else scenario.message
+
     prev_client = bedrock._client
     if model_client is not None:
         bedrock._client = model_client
@@ -221,8 +231,10 @@ def run_scenario(scenario: Scenario, *, model_client: Any | None = None) -> Scen
         tr = bedrock._run_turn(
             scenario.user_id,
             scenario.history,
-            scenario.message,
+            message,
             client_timezone=scenario.client_timezone,
+            force_trip_appendix=scenario.force_trip_appendix,
+            max_web_searches=scenario.max_web_searches,
         )
     finally:
         if model_client is not None:
