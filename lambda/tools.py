@@ -716,6 +716,8 @@ _KNOWN_ROASTERS: list[dict[str, str]] = [
     {"name": "Broadsheet Coffee Roasters", "city": "Cambridge", "state": "MA"},
     # Indianapolis
     {"name": "Tinker Coffee Co.", "city": "Indianapolis", "state": "IN"},
+    # Europe (select anchors)
+    {"name": "Dak Coffee Roasters", "city": "Amsterdam", "state": "Netherlands"},
     # Japan (select anchors — search_known_roasters is US-heavy; use search_web for full JP lists)
     {"name": "Weekenders Coffee", "city": "Kyoto", "state": "Japan"},
     {"name": "Kurasu", "city": "Kyoto", "state": "Japan"},
@@ -745,14 +747,39 @@ def _search_known_roasters(user_id: str, args: dict[str, Any]) -> dict[str, Any]
         if name_match and city_match and state_match:
             results.append(r)
 
-    return {
+    note = (
+        "Curated US specialty roasters plus a few international anchors (e.g. Weekenders, Kurasu in Kyoto). "
+        "Absence does not mean the roaster is not real."
+    )
+    out: dict[str, Any] = {
         "count": len(results),
         "results": results[:10],
-        "note": (
-            "Curated US specialty roasters plus a few international anchors (e.g. Weekenders, Kurasu in Kyoto). "
-            "Absence does not mean the roaster is not real."
-        ),
+        "source": "curated",
+        "note": note,
     }
+
+    if results or not query:
+        return out
+
+    raw_query = (args.get("query") or "").strip()
+    web_query = f"{raw_query} specialty coffee roaster"
+    web = _search_web(user_id, {"query": web_query, "maxResults": 4})
+    if web.get("ok") is False or web.get("error"):
+        out["webLookup"] = {"ok": False, "error": web.get("error", "search failed")}
+        return out
+
+    out["source"] = "curated_then_web"
+    out["webLookup"] = {
+        "query": web_query,
+        "answer": web.get("answer"),
+        "results": (web.get("results") or [])[:4],
+    }
+    out["note"] = (
+        "Not in the curated list; included live web snippets in webLookup. "
+        "Use them to propose canonical name, city, and website — then ask whether to add the roaster. "
+        "Do not ask the user to manually describe a well-known roaster when webLookup has usable snippets."
+    )
+    return out
 
 
 # --- Coffee summary ----------------------------------------------------------
@@ -1179,8 +1206,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "search_known_roasters",
             "description": (
                 "Search a curated reference list of ~70 well-known US specialty roasters. "
-                "Call before add_roaster to verify the canonical name and city. "
-                "Absence from this list does NOT mean the roaster is not real."
+                "When nothing matches, automatically runs a live web lookup and returns snippets in webLookup. "
+                "Call before add_roaster to verify the canonical name and city."
             ),
             "inputSchema": {
                 "json": {

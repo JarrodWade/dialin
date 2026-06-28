@@ -25,6 +25,7 @@ locals {
     "POST /chat/feedback",
     "GET /chat/feedback",
     "POST /recommendations/beans",
+    "POST /recommendations/cafes",
     "GET /roasters",
     "POST /roasters",
     "PATCH /roasters/{roasterId}",

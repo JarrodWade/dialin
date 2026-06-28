@@ -18,6 +18,10 @@ Routes (representative):
       body: {} (legacy userId only)
       -> directional 'For You' bean shortlist grounded in the user's taste graph; returns {recommendations}
 
+  POST /recommendations/cafes
+      body: {city} (legacy userId only)
+      -> directional 'For You' café shortlist for a destination city; returns {recommendations}
+
   POST /chat/feedback
       body: {userMessage, botMessage, comment?}
       -> stores "not quite right" signal, returns {feedback}
@@ -285,6 +289,31 @@ def _handle_recommend_beans(event: dict[str, Any]) -> dict[str, Any]:
         recommendations = bedrock.recommend_beans(user_id=user_id)
     except Exception:  # noqa: BLE001
         logger.exception("bean recommendation failed")
+        return _response(502, {"error": "model invocation failed"})
+
+    return _response(200, {"recommendations": recommendations})
+
+
+def _handle_recommend_cafes(event: dict[str, Any]) -> dict[str, Any]:
+    """POST /recommendations/cafes — directional 'For You' café shortlist for a city.
+
+    Requires ``city`` in the body; recommendation is derived from the user's
+    taste graph plus Reddit-scoped city search results."""
+    user_id = _user_id(event)
+    if not user_id:
+        return _response(401, {"error": "Unauthorized"})
+
+    body = _parse_body(event)
+    city = (body.get("city") or "").strip()
+    if not city:
+        return _response(400, {"error": "city is required"})
+
+    try:
+        recommendations = bedrock.recommend_cafes(user_id=user_id, city=city)
+    except ValueError as e:
+        return _response(400, {"error": str(e)})
+    except Exception:  # noqa: BLE001
+        logger.exception("cafe recommendation failed")
         return _response(502, {"error": "model invocation failed"})
 
     return _response(200, {"recommendations": recommendations})
@@ -863,6 +892,7 @@ _ROUTES = {
     "POST /chat/feedback": _handle_chat_feedback,
     "GET /chat/feedback": _handle_list_chat_feedback,
     "POST /recommendations/beans": _handle_recommend_beans,
+    "POST /recommendations/cafes": _handle_recommend_cafes,
     "GET /roasters": _handle_list_roasters,
     "POST /roasters": _handle_create_roaster,
     "PATCH /roasters/{roasterId}": _handle_update_roaster,

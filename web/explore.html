@@ -16,7 +16,7 @@
       .ask-strip {
         background: var(--bg-2);
         padding: 10px 16px; display: flex; flex-direction: column; gap: 8px;
-        flex-shrink: 0; overflow: hidden;
+        flex-shrink: 0; overflow: visible;
       }
       .ask-strip .ask-row { display: flex; gap: 8px; flex-shrink: 0; }
       .ask-strip input {
@@ -35,6 +35,54 @@
         border: 1px solid var(--accent); padding: 0 14px; font-weight: 600;
       }
       .ask-strip .foryou-btn:hover:not(:disabled) { background: var(--bg-2); }
+      .ask-strip .cafes-btn {
+        background: var(--paper); color: var(--accent);
+        border: 1px solid var(--accent); padding: 0 12px; font-weight: 600;
+      }
+      .ask-strip .cafes-btn:hover:not(:disabled) { background: var(--bg-2); }
+      .ask-strip button[data-tip] { position: relative; }
+      .ask-strip button[data-tip]::after {
+        content: attr(data-tip);
+        position: absolute; z-index: 20;
+        left: 50%; bottom: calc(100% + 10px);
+        transform: translateX(-50%);
+        width: max-content; max-width: 240px;
+        padding: 8px 10px; border-radius: 8px;
+        background: var(--ink); color: var(--paper);
+        font-size: 12px; font-weight: 400; line-height: 1.45;
+        text-align: left; white-space: normal;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.12s ease;
+      }
+      .ask-strip button[data-tip]:hover::after,
+      .ask-strip button[data-tip]:focus-visible::after {
+        opacity: 1;
+      }
+      .ask-guide {
+        margin: 0; padding: 0; list-style: none;
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      }
+      @media (max-width: 720px) {
+        .ask-guide { grid-template-columns: 1fr; }
+      }
+      .ask-guide li {
+        margin: 0; padding: 8px 10px;
+        background: var(--paper); border: 1px solid var(--line);
+        border-radius: 8px; font-size: 12px; line-height: 1.45; color: var(--ink);
+      }
+      .ask-guide-label {
+        display: block; font-size: 12px; font-weight: 600;
+        color: var(--accent); margin-bottom: 2px;
+      }
+      .ask-guide kbd {
+        font: inherit; font-size: 11px; padding: 1px 5px;
+        border: 1px solid var(--line); border-radius: 4px; background: var(--bg-2);
+      }
+      .ask-guide code {
+        font-size: 11px; background: var(--bg-2);
+        padding: 0 4px; border-radius: 3px;
+      }
       .ask-reply {
         font-size: 13px; line-height: 1.55; color: var(--ink);
         background: #fffaf0; border: 1px solid var(--line);
@@ -210,13 +258,45 @@
     </header>
 
     <div class="explore-body">
-      <!-- Quick-ask bar -->
+      <!-- Quick-ask bar: three explicit actions (see guide below) -->
       <div class="ask-strip">
         <div class="ask-row">
-          <input id="ask-input" placeholder="What should I check out in New York? Log my visit to Devoción today…" autocomplete="off" />
-          <button id="for-you-send" class="foryou-btn" title="Bean recommendations based on your taste">★ For You</button>
-          <button id="ask-send">Ask</button>
+          <input id="ask-input" placeholder="Type a city, shop name, or question…" autocomplete="off" />
+          <button
+            id="for-you-send"
+            type="button"
+            class="foryou-btn"
+            data-tip="Bean &amp; roaster picks from your taste graph and journal. Does not read the text box."
+            aria-label="For You — bean recommendations from your taste profile"
+          >★ For You</button>
+          <button
+            id="cafes-send"
+            type="button"
+            class="cafes-btn"
+            data-tip="City café scout: Reddit-backed list for one destination. Type the city in the box first (e.g. Tokyo, Japan)."
+            aria-label="Cafés in — scout cafés in the destination typed above"
+          >📍 Cafés in…</button>
+          <button
+            id="ask-send"
+            type="button"
+            data-tip="Chat with tools: look up a specific shop, follow up on a list, log visits, brew help. Enter submits Ask."
+            aria-label="Ask — chat about shops, follow-ups, and journal"
+          >Ask</button>
         </div>
+        <ul class="ask-guide" aria-label="How the explore bar works">
+          <li>
+            <span class="ask-guide-label">★ For You</span>
+            Roasters &amp; beans matched to your taste. Ignores the text box — click anytime.
+          </li>
+          <li>
+            <span class="ask-guide-label">📍 Cafés in…</span>
+            Where to drink in a <strong>city</strong>. Type the destination first (<code>Tokyo, Japan</code>, <code>Seattle, WA</code>), then click.
+          </li>
+          <li>
+            <span class="ask-guide-label">Ask</span>
+            Chat for a <strong>specific shop</strong> (<code>Sey Coffee</code>), follow-ups, journal, brew tips. <kbd>Enter</kbd> = Ask.
+          </li>
+        </ul>
         <div id="ask-reply" class="ask-reply"></div>
       </div>
 
@@ -452,6 +532,8 @@
       });
 
       // ── quick-ask bar ─────────────────────────────────────────────────────
+      // Three explicit actions — no Enter heuristics. 📍 is the only café-scout path.
+
       async function doAsk() {
         const text = askInput.value.trim();
         if (!text || !apiInput.value.trim()) return;
@@ -485,7 +567,6 @@
         }
       }
       askSend.addEventListener("click", doAsk);
-      askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doAsk(); } });
 
       // ── "For You" bean recommendations ────────────────────────────────────
       const forYouSend = document.getElementById("for-you-send");
@@ -514,6 +595,52 @@
         }
       }
       forYouSend.addEventListener("click", doForYou);
+
+      // ── "Cafés in {city}" recommendations ───────────────────────────────
+      const cafesSend = document.getElementById("cafes-send");
+      async function doCafes() {
+        if (!apiInput.value.trim()) { toast("Set the API URL above first.", true); return; }
+        const city = askInput.value.trim();
+        if (!city) {
+          toast("Type a destination first (e.g. Tokyo, Japan or Seattle, WA).", true);
+          return;
+        }
+        cafesSend.disabled = true;
+        forYouSend.disabled = true;
+        askSend.disabled = true;
+        askReply.textContent = "scouting cafés in " + city + "…";
+        askReply.className = "ask-reply visible loading";
+        try {
+          const data = await api("/recommendations/cafes", {
+            method: "POST",
+            body: authedJsonBody({ city }),
+          });
+          const recs = data.recommendations || "(no recommendations)";
+          askReply.innerHTML = "";
+          renderMarkdown(askReply, recs);
+          attachFeedbackControls(askReply, "For You: cafés in " + city, recs);
+          askReply.className = "ask-reply visible";
+          _askHistory = trimChatHistory([
+            ..._askHistory,
+            { role: "USER", text: `Cafés in ${city}` },
+            { role: "BOT", text: recs },
+          ]);
+        } catch (err) {
+          askReply.textContent = "Error: " + err.message;
+          askReply.className = "ask-reply visible loading";
+        } finally {
+          cafesSend.disabled = false;
+          forYouSend.disabled = false;
+          askSend.disabled = false;
+        }
+      }
+      cafesSend.addEventListener("click", doCafes);
+      askInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          doAsk();
+        }
+      });
 
       // ── places ────────────────────────────────────────────────────────────
       async function loadPlaces() {

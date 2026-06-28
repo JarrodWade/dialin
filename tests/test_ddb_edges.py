@@ -57,6 +57,53 @@ def test_search_known_roasters_weekenders_kyoto(dynamodb_env):
     names = [r["name"] for r in out["result"]["results"]]
     assert any("Weekenders" in n for n in names)
     assert not any("Indianapolis" in str(r) for r in out["result"]["results"])
+    assert "webLookup" not in out["result"]
+
+
+def test_search_known_roasters_falls_back_to_web(dynamodb_env, monkeypatch):
+    tools = dynamodb_env["tools"]
+
+    def fake_web(_user_id, args):
+        assert "Foxtail" in args["query"]
+        return {
+            "query": args["query"],
+            "answer": "Foxtail Coffee is a specialty roaster based in Orlando, Florida.",
+            "results": [
+                {
+                    "title": "Foxtail Coffee",
+                    "url": "https://foxtailcoffee.com",
+                    "snippet": "Orlando specialty coffee roaster.",
+                    "score": 0.9,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(tools, "_search_web", fake_web)
+    out = tools.dispatch("search_known_roasters", USER, {"query": "Foxtail"})
+    assert out["ok"] is True
+    body = out["result"]
+    assert body["count"] == 0
+    assert body["source"] == "curated_then_web"
+    assert "Orlando" in body["webLookup"]["answer"]
+    assert body["webLookup"]["results"][0]["title"] == "Foxtail Coffee"
+
+
+def test_search_known_roasters_dak_curated(dynamodb_env, monkeypatch):
+    tools = dynamodb_env["tools"]
+    web_called: list[str] = []
+
+    def spy_web(_user_id, args):
+        web_called.append(args.get("query", ""))
+        return {"query": args["query"], "answer": "should not run", "results": []}
+
+    monkeypatch.setattr(tools, "_search_web", spy_web)
+    out = tools.dispatch("search_known_roasters", USER, {"query": "DAK"})
+    assert out["ok"] is True
+    names = [r["name"] for r in out["result"]["results"]]
+    assert any("Dak" in n for n in names)
+    assert out["result"]["results"][0]["city"] == "Amsterdam"
+    assert "webLookup" not in out["result"]
+    assert not web_called
 
 
 def test_chat_daily_quota(dynamodb_env):
