@@ -134,7 +134,7 @@ def no_iteration_cap(*, label: str | None = None) -> Check:
 
 
 def reply_excludes(substrings: list[str], *, label: str | None = None) -> Check:
-    """§0: no implementation plumbing (field names, codes) leaks into the reply."""
+    """CORE-0: no implementation plumbing (field names, codes) leaks into the reply."""
     lbl = label or "reply_excludes"
 
     def _check(tr: Any) -> CheckResult:
@@ -157,7 +157,7 @@ def reply_matches(pattern: str, *, label: str | None = None) -> Check:
 
 
 def reply_max_sentences(n: int, *, label: str | None = None) -> Check:
-    """§7: keep replies short. Rough sentence count via terminal punctuation."""
+    """CORE-7: keep replies short. Rough sentence count via terminal punctuation."""
     lbl = label or f"reply_max_sentences({n})"
 
     def _check(tr: Any) -> CheckResult:

@@ -4,8 +4,13 @@ A test harness for the chat assistant's **behavior**, not just its plumbing. The
 model is the variable — we can't assert on exact reply wording, but we *can*
 deterministically assert on **tool-call behavior** (which tools, what args, what
 order) and apply light checks to the reply text. Every assertion maps back to a
-specific system-prompt rule (e.g. `§2e`, `P1`), so when you slim the prompt you
-can see exactly which rule's pass-rate moves.
+specific system-prompt rule (e.g. `CORE-2e`, `CORE-P1`), so when you slim the
+prompt you can see exactly which rule's pass-rate moves.
+
+Rule taxonomy: `CORE-*` labels a rule in the always-on system prompt
+(`lambda/prompts/core.md`); `TRIP-*` labels a step inside the trip-place-
+discovery appendix (`lambda/prompts/trip_appendix.md`), which is only attached
+when the router fires (see `bedrock.want_trip_place_discovery_appendix`).
 
 ---
 
@@ -70,12 +75,12 @@ evals/
   fixtures.py         # canned search_web / youtube / retrieve_journal stubs
   run_evals.py        # live CLI runner (reps, scoring, report, baseline diff)
   scenarios/
-    coffees.py        # P1 snapshot, §2a roaster resolution, add_coffee parsing
-    equipment.py      # §2b-add cataloging, §2d edits, §2b brew gear resolution
-    cafes_visits.py   # §2e badge / no re-add / one-log / visit correction
-    corrections.py    # §2d edit-not-recreate, confirm-before-delete
-    trips.py          # appendix routing, §5c, city anchoring, §0 voice, P0
-    recall.py         # §2f RAG, §3 dial-in advice, §4 summarize
+    coffees.py        # CORE-P1 snapshot, CORE-2a roaster resolution, add_coffee parsing
+    equipment.py      # CORE-2b-add cataloging, CORE-2d edits, CORE-2b brew gear resolution
+    cafes_visits.py   # CORE-2e badge / no re-add / one-log / visit correction
+    corrections.py    # CORE-2d edit-not-recreate, confirm-before-delete
+    trips.py          # TRIP routing, CORE-5c, city anchoring, CORE-0 voice, CORE-P0
+    recall.py         # CORE-2f RAG, CORE-3 dial-in advice, CORE-4 summarize
   baselines/          # committed pass-rate snapshots (regression gate)
 reports/              # generated md+json reports (gitignored)
 ```
@@ -153,7 +158,7 @@ def _cafe_roaster_badge() -> H.Scenario:
 
     return H.Scenario(
         id="cafe_roaster_badge",
-        rule="§2e",
+        rule="CORE-2e",
         seed=seed,
         message="Anchorhead actually roasts their own beans now",
         checks=[
@@ -175,7 +180,7 @@ def _build():
         c = ddb.create_coffee(u, roaster="Onyx", name="Guji", origin="Ethiopia")
         state["coffeeId"] = c["coffeeId"]
     return H.Scenario(
-        id="...", rule="§3", seed=seed, message="dial in my Guji on espresso",
+        id="...", rule="CORE-3", seed=seed, message="dial in my Guji on espresso",
         checks=[H.called("get_dialin_advice",
                          where=lambda a: a.get("coffeeId") == state.get("coffeeId"))],
     )

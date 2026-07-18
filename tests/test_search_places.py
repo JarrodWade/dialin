@@ -36,3 +36,33 @@ def test_search_places_finds_roaster_primary_and_visits(dynamodb_env):
     by_name = ddb.list_visits(USER, place_name_contains="anchor", limit=10)
     assert len(by_name) == 1
     assert by_name[0]["roasterId"] == rid
+
+
+def test_search_places_finds_visit_place_name_when_cafe_renamed(dynamodb_env):
+    """Visit placeName can still match after the café display name diverges."""
+    ddb = dynamodb_env["ddb"]
+    tools = dynamodb_env["tools"]
+
+    cafe = ddb.create_cafe(user_id=USER, name="Some Other Label", city="Seattle, WA")
+    cid = cafe["cafeId"]
+    ddb.log_visit(
+        user_id=USER,
+        cafe_id=cid,
+        place_name="Foyer",
+        visit_date="2026-06-01",
+        drinks=["espresso"],
+        rating=8,
+    )
+
+    assert ddb.list_cafes(USER, name_contains="Foyer") == []
+
+    places = ddb.search_places(USER, name_contains="Foyer")
+    assert len(places) == 1
+    assert places[0]["placeType"] == "cafe"
+    assert places[0]["cafeId"] == cid
+    assert places[0].get("matchedVia") == "visitPlaceName"
+
+    via_tool = tools.dispatch("search_places", USER, {"nameContains": "Foyer"})
+    assert via_tool["ok"] is True
+    assert via_tool["result"]["count"] == 1
+    assert via_tool["result"]["places"][0]["visitCount"] >= 1

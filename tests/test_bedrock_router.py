@@ -41,6 +41,13 @@ def test_trip_router_best_coffee_in(router):
     assert router([], "best coffee in Portland") is True
 
 
+def test_trip_router_best_shop_in_city(router):
+    """Shorthand \"best shop in X\" must city-scout, not fall through to personal visit ranking."""
+    assert router([], "what is the best shop in Tokyo") is True
+    assert router([], "best shops in Tokyo") is True
+    assert router([], "best spot in Lisbon") is True
+
+
 def test_trip_router_log_visit_only(router):
     assert router([], "log my visit to Heart Coffee today") is False
 

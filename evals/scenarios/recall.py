@@ -1,4 +1,4 @@
-"""Recall scenarios: §2f thematic RAG, §3 dial-in advice, §4 coffee summary."""
+"""Recall scenarios: CORE-2f thematic RAG, CORE-3 dial-in advice, CORE-4 coffee summary."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from evals import harness as H
 def _theme_recall_uses_rag() -> H.Scenario:
     return H.Scenario(
         id="theme_recall_uses_rag",
-        rule="§2f",
+        rule="CORE-2f",
         message="what patterns keep showing up in my tasting notes lately?",
         checks=[
             H.called("retrieve_journal"),
@@ -35,7 +35,7 @@ def _dialin_advice_for_method() -> H.Scenario:
 
     return H.Scenario(
         id="dialin_advice_for_method",
-        rule="§3",
+        rule="CORE-3",
         seed=seed,
         message="help me dial in my El Paraiso on espresso",
         checks=[
@@ -66,7 +66,7 @@ def _best_pick_uses_summarize() -> H.Scenario:
 
     return H.Scenario(
         id="best_pick_uses_summarize",
-        rule="§4",
+        rule="CORE-4",
         seed=seed,
         message="what's worked best for my Ethiopia Guji?",
         checks=[
@@ -81,12 +81,12 @@ def _best_pick_uses_summarize() -> H.Scenario:
 
 
 def _specific_brew_recall_uses_brew_tool() -> H.Scenario:
-    """§2f: asking about a specific past brew must call at least one brew-read tool.
+    """CORE-2f: asking about a specific past brew must call at least one brew-read tool.
 
     The check is intentionally broad (any of the three structured brew tools)
     to avoid being brittle about which one the model picks. If this fails
     consistently it means the model is answering from context alone — the
-    signal to tighten §2f.
+    signal to tighten CORE-2f.
     """
     state: dict[str, Any] = {}
 
@@ -104,7 +104,7 @@ def _specific_brew_recall_uses_brew_tool() -> H.Scenario:
 
     return H.Scenario(
         id="specific_brew_recall_uses_brew_tool",
-        rule="§2f",
+        rule="CORE-2f",
         seed=seed,
         message="tell me about my lemon cake OXO brew",
         checks=[

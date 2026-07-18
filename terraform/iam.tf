@@ -39,8 +39,13 @@ data "aws_iam_policy_document" "lambda_inline" {
   }
 
   statement {
-    sid       = "BedrockInvoke"
-    actions   = ["bedrock:InvokeModel", "bedrock:Converse"]
+    sid = "BedrockInvoke"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+      "bedrock:Converse",
+      "bedrock:ConverseStream",
+    ]
     resources = ["*"]
   }
 }

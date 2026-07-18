@@ -200,15 +200,31 @@ def search_places(
     city: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    """Match saved cafés and roasters by name substring (one call for the assistant)."""
+    """Match saved cafés, roasters, and visit placeNames by name substring.
+
+    One call for the assistant: name hits on café/roaster rows, plus any linked
+    places discovered only via visit ``placeName`` (common when the model or
+    user used a short display name on the visit that still points at a saved id).
+    """
     nc = (name_contains or "").strip()
     if not nc:
         return []
     out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _add(row: dict[str, Any]) -> None:
+        ptype = str(row.get("placeType") or "")
+        pid = str(row.get("placeId") or row.get("cafeId") or row.get("roasterId") or "")
+        key = (ptype, pid or str(row.get("name") or "").lower())
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(row)
+
     for c in list_cafes(
         user_id, city=city, name_contains=nc, include_archived=include_archived
     ):
-        out.append(
+        _add(
             {
                 "placeType": "cafe",
                 "placeId": c.get("cafeId"),
@@ -221,7 +237,7 @@ def search_places(
     for r in list_roasters(
         user_id, city=city, name_contains=nc, include_archived=include_archived
     ):
-        out.append(
+        _add(
             {
                 "placeType": "roaster",
                 "placeId": r.get("roasterId"),
@@ -231,6 +247,68 @@ def search_places(
                 "hasCafe": r.get("hasCafe"),
             }
         )
+
+    # Visit placeName may match even when the linked café/roaster display name
+    # doesn't (short labels, typos fixed later, orphan visits).
+    needle = nc.lower()
+    for v in list_visits(user_id, place_name_contains=nc, limit=50):
+        if city and city.strip():
+            # Visits don't store city; skip city filter for visit-derived rows —
+            # the linked place row is filtered below when present.
+            pass
+        cid = str(v.get("cafeId") or "").strip()
+        rid = str(v.get("roasterId") or "").strip()
+        if cid:
+            cafe = get_cafe(user_id, cid)
+            if cafe and (include_archived or not cafe.get("archived")):
+                if city and city.strip() and not _city_matches_user_filter(
+                    cafe.get("city"), city
+                ):
+                    continue
+                _add(
+                    {
+                        "placeType": "cafe",
+                        "placeId": cafe.get("cafeId"),
+                        "cafeId": cafe.get("cafeId"),
+                        "name": cafe.get("name"),
+                        "city": cafe.get("city"),
+                        "isRoaster": cafe.get("isRoaster"),
+                        "matchedVia": "visitPlaceName",
+                    }
+                )
+                continue
+        if rid:
+            roaster = get_roaster(user_id, rid)
+            if roaster and (include_archived or not roaster.get("archived")):
+                if city and city.strip() and not _city_matches_user_filter(
+                    roaster.get("city"), city
+                ):
+                    continue
+                _add(
+                    {
+                        "placeType": "roaster",
+                        "placeId": roaster.get("roasterId"),
+                        "roasterId": roaster.get("roasterId"),
+                        "name": roaster.get("name"),
+                        "city": roaster.get("city"),
+                        "hasCafe": roaster.get("hasCafe"),
+                        "matchedVia": "visitPlaceName",
+                    }
+                )
+                continue
+        pname = str(v.get("placeName") or "").strip()
+        if pname and needle in pname.lower():
+            _add(
+                {
+                    "placeType": "visit",
+                    "placeId": None,
+                    "name": pname,
+                    "city": None,
+                    "visitId": v.get("visitId"),
+                    "matchedVia": "visitPlaceName",
+                }
+            )
+
     out.sort(key=lambda p: (p.get("name") or "").lower())
     return out
 

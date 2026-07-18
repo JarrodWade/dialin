@@ -1,4 +1,4 @@
-"""Equipment scenarios: §2b-add cataloging, §2d gear edits, §2b brew gear resolution."""
+"""Equipment scenarios: CORE-2b-add cataloging, CORE-2d gear edits, CORE-2b brew gear resolution."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ def _catalog_gear_lists_all_first() -> H.Scenario:
 
     return H.Scenario(
         id="catalog_gear_adds_grinder",
-        rule="§2b-add",
+        rule="CORE-2b-add",
         message="add my Niche Zero to my gear",
         checks=[
-            # The §2b-add "list_equipment first" step is belt-and-suspenders: the
+            # The CORE-2b-add "list_equipment first" step is belt-and-suspenders: the
             # backend dedups by normalized name on add_equipment, so we assert the
             # outcome (saved as a GRINDER) rather than the redundant pre-list.
             H.called("add_equipment", where=is_grinder_niche, label="add_equipment(GRINDER Niche Zero)"),
@@ -32,7 +32,7 @@ def _gear_rename_uses_update() -> H.Scenario:
 
     return H.Scenario(
         id="gear_rename_uses_update",
-        rule="§2d",
+        rule="CORE-2d",
         seed=seed,
         message="my V60 is actually the 01 size, can you fix that?",
         checks=[
@@ -60,7 +60,7 @@ def _brew_drip_resolves_brewer() -> H.Scenario:
 
     return H.Scenario(
         id="brew_drip_resolves_brewer",
-        rule="§2b",
+        rule="CORE-2b",
         seed=seed,
         message="log a V60 of my Kenya Karatina this morning — 15g in, 250 out, Ode 4, tasted bright",
         checks=[

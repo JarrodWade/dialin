@@ -69,7 +69,9 @@ lambda-bundle:
 	    --only-binary=:all: \
 	    && rm -rf "$$ROOT/build/youtube_transcript_api/test" \
 	    && cp "$$ROOT"/*.py "$$ROOT/build/" \
-	    && cp "$$ROOT/coffee_glossary.json" "$$ROOT/gear_canonical.json" "$$ROOT/build/"
+	    && cp "$$ROOT/coffee_glossary.json" "$$ROOT/gear_canonical.json" "$$ROOT/build/" \
+	    && mkdir -p "$$ROOT/build/prompts" \
+	    && cp "$$ROOT"/prompts/*.md "$$ROOT/build/prompts/"
 
 deploy-lambda: lambda-bundle
 	@FUNC=$$($(TF) output -raw lambda_function_name); \

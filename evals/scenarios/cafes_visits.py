@@ -1,4 +1,4 @@
-"""Cafe & visit scenarios (§2e): roaster badge, no re-add of tracked places,
+"""Cafe & visit scenarios (CORE-2e): roaster badge, no re-add of tracked places,
 one-log-per-outing, visit corrections via update."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ def _cafe_roaster_badge() -> H.Scenario:
 
     return H.Scenario(
         id="cafe_roaster_badge",
-        rule="§2e",
+        rule="CORE-2e",
         seed=seed,
         message="Anchorhead actually roasts their own beans now",
         checks=[
@@ -33,7 +33,7 @@ def _already_tracked_no_readd() -> H.Scenario:
 
     return H.Scenario(
         id="already_tracked_no_readd",
-        rule="§2e",
+        rule="CORE-2e",
         seed=seed,
         message="I want to start tracking Coava Coffee",
         checks=[
@@ -53,7 +53,7 @@ def _named_visit_one_log() -> H.Scenario:
 
     return H.Scenario(
         id="named_visit_one_log",
-        rule="§2e",
+        rule="CORE-2e",
         seed=seed,
         client_timezone="America/Los_Angeles",
         message="log a visit to Coava yesterday — had a cortado, 9/10",
@@ -80,7 +80,7 @@ def _visit_correction_uses_update() -> H.Scenario:
 
     return H.Scenario(
         id="visit_correction_uses_update",
-        rule="§2d",
+        rule="CORE-2d",
         seed=seed,
         message="actually my recent Coava visit was an 8, not a 9 — fix it",
         checks=[

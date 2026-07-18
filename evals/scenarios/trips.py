@@ -1,5 +1,5 @@
-"""Trip discovery scenarios: appendix routing, §5/§5c preferences-before-search,
-city anchoring, §0 voice, and the §2e-wins-over-trip guard."""
+"""Trip discovery scenarios: TRIP routing, CORE-5/CORE-5c preferences-before-search,
+city anchoring, CORE-0 voice, and the CORE-P0/CORE-2e-wins-over-trip guard."""
 
 from __future__ import annotations
 
@@ -7,20 +7,23 @@ from typing import Any
 
 from evals import harness as H
 
-# Phrases the model should NOT narrate (§0 / trip-appendix voice rule).
+# Phrases the model should NOT narrate (CORE-0 / trip-appendix voice rule).
 _SEARCH_NARRATION = ["i'll search", "let me search", "i'll run a search", "searching for", "fresh search"]
 
 
 def _city_scout_grounded() -> H.Scenario:
+    # Self-contained "best coffee/cafes in X" asks route through the
+    # deterministic For You café pipeline (recommend_cafes.py) instead of the
+    # open agent + trip appendix — see prompt_router.extract_open_city_scout.
+    # No tool_calls are recorded on the TurnResult for this path (the
+    # pipeline dispatches search_web itself, outside the model tool loop),
+    # so this asserts the routing flag and reply shape instead of tool calls.
     return H.Scenario(
         id="city_scout_grounded",
-        rule="§5c/appendix",
+        rule="CORE-5c/TRIP/P2-deterministic-city-scout",
         message="what are the best specialty coffee spots in Osaka?",
         checks=[
-            H.attachment(trip_appendix=True),
-            H.called("get_preferences"),
-            H.called("search_web"),
-            H.called_before("get_preferences", "search_web"),
+            H.attachment(trip_appendix=False, deterministic_city_scout=True),
             H.reply_excludes(_SEARCH_NARRATION),
             H.no_iteration_cap(),
         ],
@@ -33,7 +36,7 @@ def _city_anchoring_search() -> H.Scenario:
 
     return H.Scenario(
         id="city_anchoring_search",
-        rule="appendix (city anchoring)",
+        rule="TRIP (city anchoring)",
         message="heading to Kyoto next week — where should I drink?",
         checks=[
             H.attachment(trip_appendix=True),
@@ -50,7 +53,7 @@ def _named_visit_not_derailed() -> H.Scenario:
 
     return H.Scenario(
         id="named_visit_not_derailed",
-        rule="P0/§2e",
+        rule="CORE-P0/CORE-2e",
         seed=seed,
         client_timezone="America/Los_Angeles",
         message="log my visit to Blue Bottle yesterday, flat white, 8/10",

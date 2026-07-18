@@ -1,4 +1,4 @@
-"""Correction scenarios (§2d): edit-not-recreate, confirm before destructive delete."""
+"""Correction scenarios (CORE-2d): edit-not-recreate, confirm before destructive delete."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _brew_correction_uses_update() -> H.Scenario:
 
     return H.Scenario(
         id="brew_correction_uses_update",
-        rule="§2d",
+        rule="CORE-2d",
         seed=seed,
         message="I put the wrong grind on my last El Paraiso espresso — it was Ode 6, not 4",
         checks=[
@@ -43,7 +43,7 @@ def _delete_needs_confirm() -> H.Scenario:
 
     return H.Scenario(
         id="delete_needs_confirm",
-        rule="§2d",
+        rule="CORE-2d",
         seed=seed,
         message="delete my Geometry Blend coffee",
         checks=[

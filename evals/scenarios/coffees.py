@@ -1,4 +1,4 @@
-"""Coffee + roaster scenarios: P1 snapshot authority, §2a roaster resolution,
+"""Coffee + roaster scenarios: CORE-P1 snapshot authority, CORE-2a roaster resolution,
 add_coffee field parsing."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def _snapshot_known_coffee() -> H.Scenario:
 
     return H.Scenario(
         id="snapshot_known_coffee",
-        rule="P1",
+        rule="CORE-P1",
         seed=seed,
         message="what's the process on my Ethiopia Guji?",
         checks=[
@@ -48,7 +48,7 @@ def _snapshot_absent_coffee() -> H.Scenario:
 
     return H.Scenario(
         id="snapshot_absent_coffee",
-        rule="P1",
+        rule="CORE-P1",
         seed=seed,
         message="how many grams are left on my Kenya Nyeri?",
         checks=[
@@ -71,7 +71,7 @@ def _add_coffee_preserves_process() -> H.Scenario:
 
     return H.Scenario(
         id="add_coffee_preserves_process",
-        rule="§2a",
+        rule="CORE-2a",
         seed=seed,
         message=(
             "Add a new bag from Sey: Ethiopia Gedeb, double anaerobic natural, "
@@ -90,7 +90,7 @@ def _roaster_confirm_before_add() -> H.Scenario:
     # No roasters seeded: an unknown roaster must be confirmed before add_roaster/add_coffee.
     return H.Scenario(
         id="roaster_confirm_before_add",
-        rule="§2a",
+        rule="CORE-2a",
         message="add a coffee from Foxtail Coffee — Ethiopia Worka, washed",
         checks=[
             H.not_called("add_roaster"),

@@ -1,10 +1,12 @@
 project_name        = "dialin"
 region              = "us-east-1"
-bedrock_model_id    = "amazon.nova-lite-v1:0"
+bedrock_model_id    = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 max_output_tokens   = 400
 max_tool_iterations      = 12
+chat_max_web_searches   = 4
 chat_history_turn_limit = 24
 journal_rag_max_chunks  = 2000
+journal_snapshot_max_items = 20
 # chat_daily_limit_per_user = 100   # 0 = unlimited (default)
 # api_throttle_rate_limit   = 50
 # api_throttle_burst_limit  = 100
@@ -19,5 +21,15 @@ bedrock_embedding_model_id = "amazon.titan-embed-text-v2:0"
 # Optional — live cafe discovery via Tavily (see variables.tf). Keep real keys in terraform.tfvars (gitignored).
 # tavily_api_key = "tvly-..."
 
+# Personal prod: restrict CORS + Clerk azp validation (see CLERK.md). Dev default is ["*"].
+# cors_allowed_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
+# cors_allowed_origins = ["https://your-domain.example"]
+
 # Optional — Clerk: Lambda verifies JWT via JWKS (see CLERK.md). Frontend API URL = JWT ``iss``.
 # clerk_jwt_issuer = "https://your-instance.clerk.accounts.dev"
+
+# Optional — SSE streaming chat endpoint (POST /chat/stream) via a second Lambda
+# behind a Function URL + the AWS Lambda Web Adapter layer (see lambda_stream.tf).
+# After apply, set the `chat_stream_url` output as streamApiBase in web/dialin-config.js.
+# enable_chat_streaming = true
+# lambda_web_adapter_layer_arn = ""  # override to pin a version or use arm64

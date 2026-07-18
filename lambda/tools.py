@@ -500,10 +500,18 @@ def _search_places(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     enriched: list[dict[str, Any]] = []
     for p in places:
         row = dict(p)
-        if p.get("placeType") == "cafe":
+        ptype = p.get("placeType")
+        if ptype == "cafe":
             visits = ddb.list_visits(user_id, cafe_id=p.get("cafeId"), limit=10)
-        else:
+        elif ptype == "roaster":
             visits = ddb.list_visits(user_id, roaster_id=p.get("roasterId"), limit=10)
+        else:
+            # Orphan visit hit (placeName match, no linked cafe/roaster row).
+            visits = ddb.list_visits(
+                user_id,
+                place_name_contains=str(p.get("name") or ""),
+                limit=10,
+            )
         row["visitCount"] = len(visits)
         if visits:
             latest = visits[0]
@@ -1048,9 +1056,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_roasters",
             "description": (
                 "List the user's saved roasters, optionally filtered by city and/or name substring. "
-                "For trip / city scouting: call with the **destination city** (e.g. Kyoto) plus once "
-                "with **no** city filter to see favorites elsewhere. Roaster-cafés (hasCafe) live here, "
-                "not list_cafes. Before offering add_roaster, resolve the name here first."
+                "Roaster-cafés (hasCafe) live here, not list_cafes. Before offering add_roaster, "
+                "resolve the name here first."
             ),
             "inputSchema": {
                 "json": {
@@ -1636,10 +1643,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "search_places",
             "description": (
-                "Search **both** saved cafés and roasters by name substring in one call. "
-                "Prefer this (or list_cafes **and** list_roasters together) whenever the user names a "
-                "venue — e.g. Anchorhead, Devoción — before saying it is not tracked. "
-                "Returns placeType (cafe|roaster), ids, visitCount, and latestVisit when logged. "
+                "Search saved cafés, roasters, **and visit placeNames** by name substring in one call. "
+                "Prefer this whenever the user names a venue — e.g. Anchorhead, Foyer, Devoción — "
+                "before saying it is not tracked. Do **not** pass a city filter unless the user "
+                "named a city; a wrong city filter hides valid hits. "
+                "Returns placeType (cafe|roaster|visit), ids, visitCount, and latestVisit when logged. "
+                "placeType visit means a logged outing matched by placeName with no linked café/roaster row. "
                 "Roaster-primary shops (hasCafe) are **not** in list_cafes alone."
             ),
             "inputSchema": {

@@ -55,8 +55,8 @@ import os
 from decimal import Decimal
 from typing import Any
 
+import auth
 import bedrock
-import clerk_jwt
 import ddb
 import journal_rag
 
@@ -132,10 +132,7 @@ def _bearer_token(event: dict[str, Any]) -> str:
         raw = h.get("authorization") or h.get("Authorization") or ""
     if not isinstance(raw, str):
         return ""
-    raw = raw.strip()
-    if raw.lower().startswith("bearer "):
-        return raw[7:].strip()
-    return ""
+    return auth.extract_bearer(raw)
 
 
 def _user_id(event: dict[str, Any]) -> str:
@@ -143,35 +140,20 @@ def _user_id(event: dict[str, Any]) -> str:
     verify ``Authorization`` against Clerk JWKS when ``CLERK_JWT_ISSUER``
     is set, else legacy ``userId`` when ``ALLOW_CLIENT_USER_ID`` is true."""
     req = event.get("requestContext") or {}
-    auth = req.get("authorizer") or {}
-    jwt_blob = auth.get("jwt") or {}
+    authorizer = req.get("authorizer") or {}
+    jwt_blob = authorizer.get("jwt") or {}
     claims = jwt_blob.get("claims") or {}
     sub = (claims.get("sub") or "").strip()
     if sub:
         return sub
 
-    clerk_issuer = (os.environ.get("CLERK_JWT_ISSUER") or "").strip()
-    allow_client = os.environ.get("ALLOW_CLIENT_USER_ID", "").lower() in (
-        "1",
-        "true",
-        "yes",
+    body = _parse_body(event)
+    qs = _qs(event)
+    return auth.resolve_user_id(
+        bearer_token=_bearer_token(event),
+        body_user_id=body.get("userId"),
+        query_user_id=qs.get("userId"),
     )
-
-    if clerk_issuer and not allow_client:
-        bearer = _bearer_token(event)
-        if bearer:
-            verified = clerk_jwt.verify_session_token(bearer, clerk_issuer)
-            if verified:
-                return verified
-        return ""
-
-    if allow_client:
-        body = _parse_body(event)
-        qs = _qs(event)
-        legacy = (body.get("userId") or qs.get("userId") or "").strip()
-        if legacy:
-            return legacy
-    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +184,32 @@ _HISTORY_TURN_LIMIT = int(
 
 # Reject oversized single messages before they reach Bedrock (cost/abuse guard).
 _CHAT_MESSAGE_MAX_CHARS = int(os.environ.get("CHAT_MESSAGE_MAX_CHARS", "8000"))
+
+# Belt-and-suspenders on top of _HISTORY_TURN_LIMIT: the turn limit bounds message
+# *count*, but at up to CHAT_MESSAGE_MAX_CHARS per message that window can still be
+# huge (e.g. 24 x 8000 chars). This bounds total input characters sent to Bedrock.
+# 0 disables the check.
+_CHAT_HISTORY_MAX_CHARS = int(os.environ.get("CHAT_HISTORY_MAX_CHARS", "40000"))
+
+
+def _trim_history_by_chars(history: list[dict], max_chars: int) -> list[dict]:
+    """Drop oldest messages once total text length exceeds ``max_chars``.
+
+    Walks from the most recent message backwards so on-topic recent context always
+    survives; the single most recent message is always kept even if it alone
+    exceeds the budget.
+    """
+    if max_chars <= 0:
+        return history
+    kept: list[dict] = []
+    total = 0
+    for msg in reversed(history):
+        total += len(msg.get("text") or "")
+        if kept and total > max_chars:
+            break
+        kept.append(msg)
+    kept.reverse()
+    return kept
 
 
 def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
@@ -253,11 +261,14 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
             )
 
     trimmed = history[-_HISTORY_TURN_LIMIT:]
+    # Client-visible history keeps the full message-count window; only the copy
+    # sent to the model gets the extra char-budget trim.
+    model_history = _trim_history_by_chars(trimmed, _CHAT_HISTORY_MAX_CHARS)
 
     try:
         reply = bedrock.generate_reply(
             user_id=user_id,
-            history=trimmed,
+            history=model_history,
             user_text=message,
             client_timezone=client_tz,
         )
