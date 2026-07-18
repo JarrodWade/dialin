@@ -1,7 +1,7 @@
 # Production Readiness Notes
 
 Notes on what needs to change to ship dialin as a multi-user product.
-Current state is a personal-use tool with no auth and a manually-entered user ID.
+Current state is a personal-use tool. Clerk auth (Lambda-side JWT verification) is implemented but optional — leave `clerk_jwt_issuer` unset and it falls back to a manually-entered user ID.
 
 ---
 
@@ -71,10 +71,21 @@ Bedrock is the dominant cost. At 1k+ MAU you need either a paywall, usage caps, 
 
 ---
 
+## Explicitly deferred until multi-user ship
+
+Do not prioritize these for personal/solo use:
+
+- Extract `web/shared.js` into importable modules + Playwright golden-path E2E
+- API Gateway usage plans / edge rate limiting beyond CORS lock-down
+- Splitting `ddb.py` or `tools.py` without a concrete schema change forcing it
+- S3 + CloudFront static hosting (local `make ui` is fine until you have a domain)
+
+---
+
 ## Suggested ship order
 
-1. Set up Clerk (or Cognito) + add JWT authorizer to API Gateway
-2. Derive `userId` from JWT in Lambda; remove it from all client payloads
+1. Set `clerk_jwt_issuer` in Terraform and set `ALLOW_CLIENT_USER_ID=false` — Lambda already verifies session JWTs against Clerk's JWKS on every request, so this just makes it mandatory instead of optional (no API Gateway authorizer needed; Clerk's default tokens lack `aud`, which is why verification lives in Lambda, not at the edge)
+2. Remove the manual user id field and `userId` from all client payloads now that it's unauthenticated dead weight
 3. Lock CORS to your domain
 4. Add S3 + CloudFront hosting via Terraform
 5. Upgrade Tavily; add query cache

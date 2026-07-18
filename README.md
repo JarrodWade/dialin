@@ -82,6 +82,15 @@ This checks JSON syntax and duplicate normalized aliases (same rules as the look
 | DELETE | `/visits/{visitId}` | Permanently delete a visit |
 | GET / PATCH | `/profile` | Get / update taste preferences |
 
+`POST /chat` is fully buffered — the client waits for the whole tool loop plus
+the final answer. An optional streaming variant, `POST /chat/stream`, is
+available behind its own Lambda Function URL (SSE: `status` events per tool
+call, `delta` events for the final answer's tokens, then `done`). It's off by
+default; enable with `enable_chat_streaming = true` in Terraform and set
+`streamApiBase` in `web/dialin-config.js` to the resulting `chat_stream_url`
+output — see [`terraform/lambda_stream.tf`](terraform/lambda_stream.tf) for
+why Python needs the AWS Lambda Web Adapter layer for this.
+
 ---
 
 ## LLM tools
@@ -160,7 +169,7 @@ make web-config   # fills apiBase from terraform output
 
 ### Authentication (Clerk, optional)
 
-For multi-user–safe auth, use **Clerk** in the UI and set **`clerk_jwt_issuer`** in Terraform so API Gateway validates session JWTs before Lambda runs. Step-by-step (Dashboard URLs, issuer, audience, local redirects) is in **[CLERK.md](./CLERK.md)**. Quick pieces:
+For multi-user–safe auth, use **Clerk** in the UI and set **`clerk_jwt_issuer`** in Terraform so Lambda verifies session JWTs against Clerk's JWKS on every request (API Gateway itself has no JWT authorizer attached — Clerk's default tokens lack an `aud` claim, so verification happens in-Lambda instead). Step-by-step (Dashboard URLs, issuer, audience, local redirects) is in **[CLERK.md](./CLERK.md)**. Quick pieces:
 
 - **Frontend:** `web/dialin-config.js` — set `clerkPublishableKey`, or `localStorage.dialin.clerkPk`.
 - **Backend:** `clerk_jwt_issuer` in `terraform.tfvars` — Lambda verifies the Bearer token against Clerk JWKS (see [`CLERK.md`](./CLERK.md)).

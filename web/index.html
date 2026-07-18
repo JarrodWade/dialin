@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>dialin · journal</title>
-    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="shared.css?v=16" />
     <style>
       /* ── journal-specific layout ───────────────────────────────────────── */
       main {
@@ -66,6 +66,11 @@
       .feedback-submit:disabled { opacity: 0.5; cursor: not-allowed; }
       .feedback-cancel { background: var(--paper); }
       .feedback-thanks { font-size: 11px; color: var(--muted); font-style: italic; }
+      .bubble.thinking {
+        color: var(--muted); font-size: 13px; font-style: italic;
+      }
+      .bubble.streaming { color: var(--ink); font-size: 14px; font-style: normal; }
+      .bubble.streaming .streaming-body p:last-child { margin-bottom: 0; }
       .composer {
         display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
       }
@@ -212,9 +217,13 @@
         <a href="index.html" class="active">journal</a>
         <a href="explore.html">explore</a>
       </nav>
-      <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
-      <span id="legacy-user-row" class="legacy-user-row">
-        <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      <button type="button" id="dev-chrome-toggle" class="ghost header-gear" title="Developer settings" hidden aria-expanded="false" aria-controls="dev-chrome">⚙</button>
+      <span id="dev-chrome" class="dev-chrome">
+        <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
+        <span id="legacy-user-row" class="legacy-user-row">
+          <label>User <input id="user-id" class="user" value="jarrod" /></label>
+        </span>
+        <button id="refresh">Refresh</button>
       </span>
       <div class="grow"></div>
       <div id="clerk-auth-root" class="clerk-auth-root" style="display: none;"></div>
@@ -223,10 +232,19 @@
         <span class="text" id="prefs-chip-text">Set your taste preferences →</span>
         <span class="edit">edit</span>
       </button>
-      <button id="refresh">Refresh</button>
-      <button type="button" id="glossary-btn" class="ghost">Terms</button>
-      <button id="reset" class="ghost">Clear chat</button>
+      <div class="header-more">
+        <button type="button" id="header-more-btn" class="ghost header-more-btn" aria-expanded="false" aria-haspopup="true" aria-controls="header-more-menu" title="More">⋯</button>
+        <div id="header-more-menu" class="header-more-menu" hidden role="menu">
+          <button type="button" id="glossary-btn" role="menuitem">Terms</button>
+          <button type="button" id="reset" role="menuitem">Clear chat</button>
+        </div>
+      </div>
     </header>
+
+    <div id="signed-out-banner" class="signed-out-banner" hidden>
+      <p>Your specialty coffee journal — sign in to load coffees, dial-ins, and chat.</p>
+      <button type="button" class="signed-out-signin" data-open-signin>Sign in</button>
+    </div>
 
     <main>
       <section class="panel">
@@ -505,8 +523,8 @@
 
     <div id="toast" class="toast"></div>
 
-    <script src="dialin-config.js"></script>
-    <script src="shared.js?v=8"></script>
+    <script src="dialin-config.js?v=16"></script>
+    <script src="shared.js?v=16"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
       const apiInput    = document.getElementById("api-base");
@@ -584,6 +602,33 @@
         hist.forEach((m) => addBubble(m.role, m.text));
       }
 
+      // Rotating copy while a chat turn is in flight — shared helper in shared.js
+      // (also used on explore). Streaming can override the label / swap to live text.
+      function showChatThinking() {
+        const div = document.createElement("div");
+        div.className = "bubble bot thinking";
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        const status = startThinkingStatus(div);
+        return {
+          el: div,
+          stop: status.stop,
+          setLabel: status.setLabel,
+          setStreamingText(text) {
+            status.stop();
+            if (!div.classList.contains("streaming")) {
+              div.classList.remove("thinking");
+              div.classList.add("streaming");
+              div.innerHTML = '<div class="streaming-body"></div>';
+            }
+            const body = div.querySelector(".streaming-body");
+            body.innerHTML = "";
+            renderMarkdown(body, text);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          },
+        };
+      }
+
       composer.addEventListener("submit", async (e) => {
         e.preventDefault();
         const text = msgInput.value.trim();
@@ -592,18 +637,65 @@
         addBubble("USER", text);
         msgInput.value = "";
         sendBtn.disabled = true;
+        const thinking = showChatThinking();
+        let streamedText = "";
         try {
-          const data = await api("/chat", {
-            method: "POST",
-            body: authedJsonBody(withClientTimezone({ message: text, history })),
-          });
+          const payload = authedJsonPayload(withClientTimezone({ message: text, history }));
+
+          let data = null;
+          let streamed = false;
+          try {
+            streamed = await streamChat(payload, {
+              onStatus: (s) => thinking.setLabel(s.label || "working…"),
+              onDelta: (chunk) => {
+                streamedText += chunk;
+                thinking.setStreamingText(streamedText);
+              },
+              onDone: (d) => { data = d; },
+              onError: (d) => { throw new Error(d?.error || "stream failed"); },
+            });
+          } catch (streamErr) {
+            console.warn("[dialin] stream failed, falling back to /chat:", streamErr);
+            if (streamedText) throw streamErr;
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (streamed && !data) {
+            if (streamedText) throw new Error("stream ended unexpectedly");
+            console.warn("[dialin] stream ended without done event — falling back");
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (!streamed) {
+            data = await api("/chat", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+          }
+
           if (data.history) saveChat(data.history);
           else saveChat([...history, { role: "USER", text }, { role: "BOT", text: data.reply }]);
-          addBubble("BOT", data.reply || "(no reply)");
+          thinking.stop();
+          // If we already streamed the reply into this bubble, keep it (attach feedback)
+          // instead of tearing it down and re-adding — that's the visible "live" path.
+          if (streamed && streamedText) {
+            thinking.el.classList.remove("thinking", "streaming");
+            thinking.el.classList.add("bot");
+            thinking.el.innerHTML = "";
+            renderMarkdown(thinking.el, streamedText || data.reply || "(no reply)");
+            attachFeedbackControls(thinking.el, text, streamedText || data.reply || "");
+          } else {
+            thinking.el.remove();
+            addBubble("BOT", data.reply || "(no reply)");
+          }
           await loadRoasters();
           await loadCoffees();
           loadEquipment(); loadBrews();
         } catch (err) {
+          thinking.stop();
+          thinking.el.remove();
           addBubble("BOT", "[error] " + err.message);
         } finally {
           sendBtn.disabled = false;
@@ -631,12 +723,16 @@
 
       async function loadCoffees() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          renderSignedOutEmpty(coffeeListEl, "coffees");
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/coffees"));
           renderCoffees(data.coffees || []);
           fillCoffeeSelect(data.coffees || []);
         } catch (err) {
-          coffeeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          renderJournalLoadError(coffeeListEl, err, "coffees");
         }
       }
 
@@ -718,11 +814,15 @@
 
       async function loadBrews() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          renderSignedOutEmpty(brewsEl, "brews");
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/brews", "limit=20"));
           renderBrews(data.brews || []);
         } catch (err) {
-          brewsEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          renderJournalLoadError(brewsEl, err, "brews");
         }
       }
 
@@ -817,7 +917,7 @@
 
       // ── roasters (silent — only for coffee form dropdown) ─────────────────
       async function loadRoasters() {
-        if (!apiInput.value.trim()) return;
+        if (!apiInput.value.trim() || needsSignIn()) return;
         try {
           const data = await api(withLegacyUserQuery("/roasters"));
           _roasterCache = data.roasters || [];
@@ -868,13 +968,17 @@
 
       async function loadEquipment() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          renderSignedOutEmpty(equipListEl, "gear");
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/equipment"));
           _equipmentCache = data.equipment || [];
           renderEquipment(_equipmentCache);
           fillEquipSelects(_equipmentCache);
         } catch (err) {
-          equipListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          renderJournalLoadError(equipListEl, err, "gear");
         }
       }
 
@@ -990,6 +1094,10 @@
 
       async function loadPreferences() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          document.getElementById("prefs-chip-text").textContent = "Sign in to set preferences →";
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/profile"));
           renderPrefsChip(data.profile || {});
@@ -1015,7 +1123,7 @@
       }
 
       document.getElementById("prefs-chip").addEventListener("click", async () => {
-        if (!apiInput.value.trim()) return;
+        if (!apiInput.value.trim() || needsSignIn()) return;
         try {
           const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
@@ -1352,6 +1460,12 @@
           brewsEl.innerHTML      = '<div class="empty">Set the API URL above to load brews.</div>';
           return;
         }
+        if (needsSignIn()) {
+          renderSignedOutEmpty(coffeeListEl, "coffees");
+          renderSignedOutEmpty(equipListEl, "gear");
+          renderSignedOutEmpty(brewsEl, "brews");
+          return;
+        }
         (async () => {
           await loadRoasters();
           await loadCoffees();
@@ -1363,6 +1477,7 @@
       }
 
       renderChat();
+      // Auth-aware first paint: show Sign-in empties immediately; real loads come from initSharedInputs.
       loadAll();
 
       // ── column splitter drag ───────────────────────────────────────────────

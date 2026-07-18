@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>dialin · explore</title>
-    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="shared.css?v=16" />
     <style>
       /* ── explore layout ────────────────────────────────────────────────── */
       .explore-body {
@@ -94,6 +94,7 @@
       .ask-reply code { background: var(--bg-2); border-radius: 3px; padding: 1px 4px; font-size: 11px; font-family: monospace; }
       .ask-reply.visible { display: block; }
       .ask-reply.loading { color: var(--muted); font-style: italic; }
+      .ask-reply.loading .thinking-status-row { font-size: 13px; }
       .ask-reply .feedback-controls { margin-top: 8px; }
       .ask-reply .feedback-btn {
         background: none; border: none; color: var(--muted); font-size: 11px;
@@ -242,9 +243,13 @@
         <a href="index.html">journal</a>
         <a href="explore.html" class="active">explore</a>
       </nav>
-      <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
-      <span id="legacy-user-row" class="legacy-user-row">
-        <label>User <input id="user-id" class="user" value="jarrod" /></label>
+      <button type="button" id="dev-chrome-toggle" class="ghost header-gear" title="Developer settings" hidden aria-expanded="false" aria-controls="dev-chrome">⚙</button>
+      <span id="dev-chrome" class="dev-chrome">
+        <label>API <input id="api-base" placeholder="https://…execute-api.amazonaws.com" /></label>
+        <span id="legacy-user-row" class="legacy-user-row">
+          <label>User <input id="user-id" class="user" value="jarrod" /></label>
+        </span>
+        <button id="refresh">Refresh</button>
       </span>
       <div class="grow"></div>
       <div id="clerk-auth-root" class="clerk-auth-root" style="display: none;"></div>
@@ -253,9 +258,18 @@
         <span class="text" id="prefs-chip-text">Set your taste preferences →</span>
         <span class="edit">edit</span>
       </button>
-      <button id="refresh">Refresh</button>
-      <button type="button" id="glossary-btn" class="ghost">Terms</button>
+      <div class="header-more">
+        <button type="button" id="header-more-btn" class="ghost header-more-btn" aria-expanded="false" aria-haspopup="true" aria-controls="header-more-menu" title="More">⋯</button>
+        <div id="header-more-menu" class="header-more-menu" hidden role="menu">
+          <button type="button" id="glossary-btn" role="menuitem">Terms</button>
+        </div>
+      </div>
     </header>
+
+    <div id="signed-out-banner" class="signed-out-banner" hidden>
+      <p>Sign in to scout cafés, get For You picks, and see places you’ve tracked.</p>
+      <button type="button" class="signed-out-signin" data-open-signin>Sign in</button>
+    </div>
 
     <div class="explore-body">
       <!-- Quick-ask bar: three explicit actions (see guide below) -->
@@ -470,8 +484,8 @@
 
     <div id="toast" class="toast"></div>
 
-    <script src="dialin-config.js"></script>
-    <script src="shared.js?v=8"></script>
+    <script src="dialin-config.js?v=16"></script>
+    <script src="shared.js?v=16"></script>
     <script>
       // ── DOM refs ──────────────────────────────────────────────────────────
       const apiInput    = document.getElementById("api-base");
@@ -539,13 +553,49 @@
         if (!text || !apiInput.value.trim()) return;
         askInput.value = "";
         askSend.disabled = true;
-        askReply.textContent = "thinking…";
         askReply.className = "ask-reply visible loading";
+        const thinking = startThinkingStatus(askReply);
+        let streamedText = "";
         try {
-          const data = await api("/chat", {
-            method: "POST",
-            body: authedJsonBody(withClientTimezone({ message: text, history: trimChatHistory(_askHistory) })),
-          });
+          const payload = authedJsonPayload(
+            withClientTimezone({ message: text, history: trimChatHistory(_askHistory) })
+          );
+
+          let data = null;
+          let streamed = false;
+          try {
+            streamed = await streamChat(payload, {
+              onStatus: (s) => thinking.setLabel(s.label || "working…"),
+              onDelta: (chunk) => {
+                streamedText += chunk;
+                thinking.stop();
+                askReply.className = "ask-reply visible";
+                askReply.innerHTML = "";
+                renderMarkdown(askReply, streamedText);
+              },
+              onDone: (d) => { data = d; },
+              onError: (d) => { throw new Error(d?.error || "stream failed"); },
+            });
+          } catch (streamErr) {
+            console.warn("[dialin] stream failed, falling back to /chat:", streamErr);
+            if (streamedText) throw streamErr;
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (streamed && !data) {
+            if (streamedText) throw new Error("stream ended unexpectedly");
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (!streamed) {
+            data = await api("/chat", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+          }
+
           if (data.history) _askHistory = trimChatHistory(data.history);
           else {
             _askHistory = trimChatHistory([
@@ -554,12 +604,14 @@
               { role: "BOT", text: data.reply },
             ]);
           }
+          thinking.stop();
           askReply.innerHTML = "";
-          renderMarkdown(askReply, data.reply || "(no reply)");
-          attachFeedbackControls(askReply, text, data.reply || "");
+          renderMarkdown(askReply, streamedText || data.reply || "(no reply)");
+          attachFeedbackControls(askReply, text, streamedText || data.reply || "");
           askReply.className = "ask-reply visible";
           await loadPlaces(); loadVisits();
         } catch (err) {
+          thinking.stop();
           askReply.textContent = "Error: " + err.message;
           askReply.className = "ask-reply visible loading";
         } finally {
@@ -574,19 +626,59 @@
         if (!apiInput.value.trim()) { toast("Set the API URL above first.", true); return; }
         forYouSend.disabled = true;
         askSend.disabled = true;
-        askReply.textContent = "finding beans you'll love…";
         askReply.className = "ask-reply visible loading";
+        const thinking = startThinkingStatus(askReply, [
+          "finding beans you'll love…",
+          "checking your taste preferences…",
+          "looking for a match…",
+        ]);
+        let streamedText = "";
         try {
-          const data = await api("/recommendations/beans", {
-            method: "POST",
-            body: authedJsonBody({}),
-          });
-          const recs = data.recommendations || "(no recommendations)";
+          const payload = authedJsonPayload({});
+          let data = null;
+          let streamed = false;
+          try {
+            streamed = await streamRecommendBeans(payload, {
+              onStatus: (s) => thinking.setLabel(s.label || "working…"),
+              onDelta: (chunk) => {
+                streamedText += chunk;
+                thinking.stop();
+                askReply.className = "ask-reply visible";
+                askReply.innerHTML = "";
+                renderMarkdown(askReply, streamedText);
+              },
+              onDone: (d) => { data = d; },
+              onError: (d) => { throw new Error(d?.error || "stream failed"); },
+            });
+          } catch (streamErr) {
+            console.warn("[dialin] beans stream failed, falling back:", streamErr);
+            if (streamedText) throw streamErr;
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (streamed && !data) {
+            if (streamedText) throw new Error("stream ended unexpectedly");
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (!streamed) {
+            data = await api("/recommendations/beans", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+          }
+
+          // Prefer live deltas — done payload used to newline-join tokens and overwrite good text.
+          const recs = streamedText || data?.recommendations || "(no recommendations)";
+          thinking.stop();
           askReply.innerHTML = "";
           renderMarkdown(askReply, recs);
           attachFeedbackControls(askReply, "For You: bean recommendations", recs);
           askReply.className = "ask-reply visible";
         } catch (err) {
+          thinking.stop();
           askReply.textContent = "Error: " + err.message;
           askReply.className = "ask-reply visible loading";
         } finally {
@@ -608,14 +700,52 @@
         cafesSend.disabled = true;
         forYouSend.disabled = true;
         askSend.disabled = true;
-        askReply.textContent = "scouting cafés in " + city + "…";
         askReply.className = "ask-reply visible loading";
+        const thinking = startThinkingStatus(askReply, [
+          "scouting cafés in " + city + "…",
+          "checking specialty consensus…",
+          "narrowing the shortlist…",
+        ]);
+        let streamedText = "";
         try {
-          const data = await api("/recommendations/cafes", {
-            method: "POST",
-            body: authedJsonBody({ city }),
-          });
-          const recs = data.recommendations || "(no recommendations)";
+          const payload = authedJsonPayload({ city });
+          let data = null;
+          let streamed = false;
+          try {
+            streamed = await streamRecommendCafes(payload, {
+              onStatus: (s) => thinking.setLabel(s.label || "working…"),
+              onDelta: (chunk) => {
+                streamedText += chunk;
+                thinking.stop();
+                askReply.className = "ask-reply visible";
+                askReply.innerHTML = "";
+                renderMarkdown(askReply, streamedText);
+              },
+              onDone: (d) => { data = d; },
+              onError: (d) => { throw new Error(d?.error || "stream failed"); },
+            });
+          } catch (streamErr) {
+            console.warn("[dialin] cafes stream failed, falling back:", streamErr);
+            if (streamedText) throw streamErr;
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (streamed && !data) {
+            if (streamedText) throw new Error("stream ended unexpectedly");
+            toast("Stream unavailable — using standard chat", true);
+            streamed = false;
+          }
+
+          if (!streamed) {
+            data = await api("/recommendations/cafes", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+          }
+
+          const recs = streamedText || data?.recommendations || "(no recommendations)";
+          thinking.stop();
           askReply.innerHTML = "";
           renderMarkdown(askReply, recs);
           attachFeedbackControls(askReply, "For You: cafés in " + city, recs);
@@ -626,6 +756,7 @@
             { role: "BOT", text: recs },
           ]);
         } catch (err) {
+          thinking.stop();
           askReply.textContent = "Error: " + err.message;
           askReply.className = "ask-reply visible loading";
         } finally {
@@ -645,6 +776,10 @@
       // ── places ────────────────────────────────────────────────────────────
       async function loadPlaces() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          renderSignedOutEmpty(placeListEl, "places");
+          return;
+        }
         try {
           const [rd, cd] = await Promise.all([
             api(withLegacyUserQuery("/roasters")),
@@ -658,7 +793,7 @@
           ].sort((a, b) => a.name.localeCompare(b.name));
           renderPlaces(_placesCache);
         } catch (err) {
-          placeListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          renderJournalLoadError(placeListEl, err, "places");
         }
       }
 
@@ -1057,11 +1192,15 @@
 
       async function loadVisits() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          renderSignedOutEmpty(visitListEl, "visits");
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/visits", "limit=25"));
           renderVisits(data.visits || []);
         } catch (err) {
-          visitListEl.innerHTML = `<div class="empty">${err.message}</div>`;
+          renderJournalLoadError(visitListEl, err, "visits");
         }
       }
 
@@ -1114,6 +1253,10 @@
 
       async function loadPreferences() {
         if (!apiInput.value.trim()) return;
+        if (needsSignIn()) {
+          document.getElementById("prefs-chip-text").textContent = "Sign in to set preferences →";
+          return;
+        }
         try {
           const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
@@ -1149,7 +1292,7 @@
       }
 
       document.getElementById("prefs-chip").addEventListener("click", async () => {
-        if (!apiInput.value.trim()) return;
+        if (!apiInput.value.trim() || needsSignIn()) return;
         try {
           const data = await api(withLegacyUserQuery("/profile"));
           const p = data.profile || {};
@@ -1214,6 +1357,11 @@
         if (!apiInput.value.trim()) {
           placeListEl.innerHTML = '<div class="empty">Set the API URL above to get started.</div>';
           visitListEl.innerHTML = '<div class="empty">Set the API URL above.</div>';
+          return;
+        }
+        if (needsSignIn()) {
+          renderSignedOutEmpty(placeListEl, "places");
+          renderSignedOutEmpty(visitListEl, "visits");
           return;
         }
         await loadPlaces();
@@ -1301,6 +1449,9 @@
           window.addEventListener("mouseup",   onUp);
         });
       })();
+
+      // Auth-aware first paint before Clerk finishes booting.
+      loadAll();
 
     </script>
   </body>
