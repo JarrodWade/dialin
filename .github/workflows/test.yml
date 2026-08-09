@@ -1,4 +1,4 @@
-name: test
+name: ci
 
 on:
   push:
@@ -6,12 +6,57 @@ on:
   pull_request:
 
 jobs:
-  pytest:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run unit tests
-        run: make test
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.lock.txt
+      - name: Ruff check
+        run: ruff check lambda tests evals scripts
+      - name: Ruff format
+        run: ruff format --check lambda tests evals scripts
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.lock.txt
+      - name: Run unit tests with coverage
+        run: pytest tests -q --cov=lambda --cov-report=term-missing
+
+  validators:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate glossary and gear canonical data
+        run: |
+          make glossary-validate
+          make gear-canonical-validate
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+        working-directory: terraform
+      - name: Terraform validate
+        run: terraform validate
+        working-directory: terraform
