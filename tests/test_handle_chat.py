@@ -71,7 +71,9 @@ def test_chat_daily_quota_exceeded_returns_429_without_calling_model(dynamodb_en
     handler = _reload_handler(monkeypatch)
 
     calls = {"n": 0}
-    monkeypatch.setattr(handler.bedrock, "generate_reply", lambda **kwargs: calls.__setitem__("n", calls["n"] + 1) or "ok")
+    monkeypatch.setattr(
+        handler.bedrock, "generate_reply", lambda **kwargs: calls.__setitem__("n", calls["n"] + 1) or "ok"
+    )
 
     event = {"body": json.dumps({"userId": "quota-user", "message": "hello"})}
     first = handler._handle_chat(event)

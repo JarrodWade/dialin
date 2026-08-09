@@ -115,10 +115,7 @@ def main() -> None:
                 break
             scan_kw["ExclusiveStartKey"] = lek
 
-        print(
-            f"dry-run: would process brews={brewed} coffees={coffees} visits={visits} "
-            f"(user filter={only or 'ALL'})"
-        )
+        print(f"dry-run: would process brews={brewed} coffees={coffees} visits={visits} (user filter={only or 'ALL'})")
         if not journal_rag.enabled():
             print(
                 "hint: embedding disabled until BEDROCK_EMBEDDING_MODEL_ID set; "

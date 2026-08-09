@@ -49,8 +49,11 @@ def _brew_drip_resolves_brewer() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Heart Coffee Roasters", city="Portland", state="OR")
         c = ddb.create_coffee(
-            user_id, roaster="Heart Coffee Roasters", name="Kenya Karatina",
-            roaster_id=r["roasterId"], origin="Kenya",
+            user_id,
+            roaster="Heart Coffee Roasters",
+            name="Kenya Karatina",
+            roaster_id=r["roasterId"],
+            origin="Kenya",
         )
         ddb.create_equipment(user_id, equip_type="BREWER", name="Hario V60 02")
         state["coffeeId"] = c["coffeeId"]

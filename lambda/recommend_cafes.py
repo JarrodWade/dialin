@@ -15,8 +15,8 @@ directly and expects this pipeline to see the patched version).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 import bedrock
 import ddb
@@ -29,10 +29,21 @@ _PEER_SEARCH_DOMAINS = ["reddit.com"]
 _PEER_SEARCH_MAX_RESULTS = 8
 
 # Cities that commonly collide across countries/states when the user omits a region.
-_AMBIGUOUS_CITIES = frozenset({
-    "athens", "portland", "springfield", "manchester", "birmingham", "rochester",
-    "arlington", "cambridge", "richmond", "alexandria", "georgetown",
-})
+_AMBIGUOUS_CITIES = frozenset(
+    {
+        "athens",
+        "portland",
+        "springfield",
+        "manchester",
+        "birmingham",
+        "rochester",
+        "arlington",
+        "cambridge",
+        "richmond",
+        "alexandria",
+        "georgetown",
+    }
+)
 
 # Expand common abbreviations so Reddit queries anchor the right place.
 _REGION_ALIASES: dict[str, str] = {
@@ -55,8 +66,17 @@ _AMBIGUOUS_CITY_REGIONS: dict[str, list[tuple[str, list[str]]]] = {
         (
             "Athens, Greece",
             [
-                "greece", "greek", "kolonaki", "plaka", "kifisia", "monastiraki",
-                "athens greece", "samba coffee", "kudu", "thisseio", "underdog coffee",
+                "greece",
+                "greek",
+                "kolonaki",
+                "plaka",
+                "kifisia",
+                "monastiraki",
+                "athens greece",
+                "samba coffee",
+                "kudu",
+                "thisseio",
+                "underdog coffee",
             ],
         ),
     ],
@@ -79,10 +99,18 @@ _CITY_ALIASES: dict[str, str] = {
 
 # Boroughs / inner metros that belong to a scout destination (lowercase).
 _METRO_BOROUGHS: dict[str, frozenset[str]] = {
-    "new york": frozenset({
-        "new york", "new york city", "nyc", "manhattan", "brooklyn", "queens",
-        "bronx", "staten island",
-    }),
+    "new york": frozenset(
+        {
+            "new york",
+            "new york city",
+            "nyc",
+            "manhattan",
+            "brooklyn",
+            "queens",
+            "bronx",
+            "staten island",
+        }
+    ),
 }
 
 
@@ -103,13 +131,9 @@ def _normalize_city(raw: str) -> str:
         raise ValueError("city is required")
     # NL wrappers ("give me recommendations in Osaka, Japan") — take the last
     # plausible geographic clause, not the first "in it is" inside "where it is".
-    _invalid = re.compile(
-        r"^(it is|it|this|that|there|here|the area|the city|the place)$", re.I
-    )
+    _invalid = re.compile(r"^(it is|it|this|that|there|here|the area|the city|the place)$", re.I)
     candidates: list[str] = []
-    for m in re.finditer(
-        r"\b(?:in|for|at)\s+([^,?.!]+(?:,\s*[^,?.!]+)?)", s, re.I
-    ):
+    for m in re.finditer(r"\b(?:in|for|at)\s+([^,?.!]+(?:,\s*[^,?.!]+)?)", s, re.I):
         part = m.group(1).strip()
         if part and not _invalid.match(part):
             candidates.append(part)
@@ -119,26 +143,14 @@ def _normalize_city(raw: str) -> str:
         raise ValueError("city must be a place name, not a pronoun")
     if re.match(r"^(please|look|where|tell|give|show|find|recommend)", s, re.I):
         raise ValueError("city must be a place name")
-    if re.search(
-        r"\b(coffeehead|coffee\s*co|roasters?|caf[eé]|espresso|cupworks?)\b", s, re.I
-    ):
-        raise ValueError(
-            "city must be a destination, not a venue name — use chat for a specific shop"
-        )
-    if re.search(
-        r"\b\w*(head|hound|works|lab|beans?|roasts?|brews?|grinds?)\b", s, re.I
-    ):
-        raise ValueError(
-            "city must be a destination, not a venue name — use chat for a specific shop"
-        )
-    if re.match(r"^[A-Z]{2,5}\s+\S", s) and not re.match(
-        r"^(SF|NYC|LA|DC|PHX|PDX)(\s|,|$)", s
-    ):
+    if re.search(r"\b(coffeehead|coffee\s*co|roasters?|caf[eé]|espresso|cupworks?)\b", s, re.I):
+        raise ValueError("city must be a destination, not a venue name — use chat for a specific shop")
+    if re.search(r"\b\w*(head|hound|works|lab|beans?|roasts?|brews?|grinds?)\b", s, re.I):
+        raise ValueError("city must be a destination, not a venue name — use chat for a specific shop")
+    if re.match(r"^[A-Z]{2,5}\s+\S", s) and not re.match(r"^(SF|NYC|LA|DC|PHX|PDX)(\s|,|$)", s):
         head = s.split(None, 1)[0]
         if head.isupper() and len(head) <= 5:
-            raise ValueError(
-                "city must be a destination, not a venue name — use chat for a specific shop"
-            )
+            raise ValueError("city must be a destination, not a venue name — use chat for a specific shop")
     if len(s) > _CITY_MAX_LEN:
         s = s[:_CITY_MAX_LEN].strip()
     return s
@@ -286,9 +298,7 @@ def _gather_city_context(user_id: str, dest: ParsedDestination) -> tuple[str, st
     if home:
         ctx.append(f"Home city: {home}.")
 
-    fav_roasters = [
-        str(x).strip() for x in (profile.get("favoriteRoasters") or []) if str(x).strip()
-    ]
+    fav_roasters = [str(x).strip() for x in (profile.get("favoriteRoasters") or []) if str(x).strip()]
     if fav_roasters:
         ctx.append("Favorite roasters (my class anchors): " + ", ".join(fav_roasters) + ".")
     fav_cafes = [str(x).strip() for x in (profile.get("favoriteCafes") or []) if str(x).strip()]
@@ -326,11 +336,7 @@ def _gather_city_context(user_id: str, dest: ParsedDestination) -> tuple[str, st
         else:
             tracked.append(f"Roaster (already tracked): {name}")
 
-    tracked_block = (
-        "\n".join(tracked)
-        if tracked
-        else f"No cafés or roasters saved in {dest.raw} yet."
-    )
+    tracked_block = "\n".join(tracked) if tracked else f"No cafés or roasters saved in {dest.raw} yet."
     return taste, tracked_block
 
 
@@ -429,14 +435,13 @@ def _anchor_followup_query(
         return f"best coffee roasters {resolved}"
     shorts = [_short_anchor_name(a) for a in anchors[:2]]
     seed_parts = list(dict.fromkeys(shorts))
-    if is_home:
+    if is_home and (
+        re.search(r"\bsatellite\b", scout_text, re.I) and "Satellite" not in seed_parts or len(seed_parts) == 1
+    ):
         # Home-turf: co-search anchor name(s) with community-list peers. Reddit
         # threads often batch local favorites ("Moxie, Satellite, …") when the
         # query names the anchor explicitly.
-        if re.search(r"\bsatellite\b", scout_text, re.I) and "Satellite" not in seed_parts:
-            seed_parts.append("Satellite")
-        elif len(seed_parts) == 1:
-            seed_parts.append("Satellite")
+        seed_parts.append("Satellite")
     seed = " ".join(seed_parts)
     return f"best specialty coffee {resolved} {seed}"
 
@@ -460,9 +465,7 @@ def _run_city_searches(
         # Home turf: seed follow-up with local anchor names (pulls peer lists).
         # Everywhere else: original roaster-led second query.
         if is_home and local_anchors:
-            followup = _anchor_followup_query(
-                resolved, local_anchors, is_home=True, scout_text=scout_block
-            )
+            followup = _anchor_followup_query(resolved, local_anchors, is_home=True, scout_text=scout_block)
         else:
             followup = f"best coffee roasters {resolved}"
         blocks.append(_dispatch_city_search(user_id, followup))
@@ -532,22 +535,12 @@ def _cafes_rank_user_block(
         )
     anchors_block = ""
     if local_anchors:
-        label = (
-            "LOCAL ANCHORS — lead with these (home city)"
-            if is_home
-            else "LOCAL ANCHORS — include if in results"
-        )
-        anchors_block = (
-            f"{label}\n"
-            + "\n".join(f"- {name}" for name in local_anchors)
-            + "\n\n"
-        )
+        label = "LOCAL ANCHORS — lead with these (home city)" if is_home else "LOCAL ANCHORS — include if in results"
+        anchors_block = f"{label}\n" + "\n".join(f"- {name}" for name in local_anchors) + "\n\n"
 
     return (
         f"RESOLVED DESTINATION (recommend for THIS place only): {resolved_destination}\n"
-        f"USER INPUT: {dest.raw}\n"
-        + ("HOME CITY: yes — lead with my local anchors.\n" if is_home else "")
-        + "\n"
+        f"USER INPUT: {dest.raw}\n" + ("HOME CITY: yes — lead with my local anchors.\n" if is_home else "") + "\n"
         "MY TASTE GRAPH\n"
         + taste_block
         + f"\n\nMY TRACKED VENUES IN {dest.raw.upper()}\n"

@@ -12,15 +12,16 @@ import json
 import logging
 import os
 import re
-from decimal import Decimal
 import urllib.error
 import urllib.request
-from typing import Any, Callable
+from collections.abc import Callable
+from decimal import Decimal
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import chat_context
 import ddb
 import journal_rag
-import chat_context
 
 _TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 _LOGGER = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def _log_trip_search_web_summary(
     if not _LOG_TRIP_WEBSEARCH or not chat_context.trip_place_discovery_active.get():
         return
     results = payload.get("results") or []
-    titles = [str((r.get("title") or ""))[:160] for r in results[:12]]
+    titles = [str(r.get("title") or "")[:160] for r in results[:12]]
     domains = list(include_domains) if include_domains else []
     _LOGGER.info(
         "trip_search_web cache_hit=%s maxResults=%s domains=%s n_results=%s query=%r titles=%s",
@@ -309,16 +310,19 @@ def _get_dialin_advice(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     # Grind delta vs best
     grind_note = None
     if best and last.get("grind") and best.get("grind") and last.get("grind") != best.get("grind"):
-        grind_note = f"Best brew: grind '{best['grind']}' (rated {best.get('rating')}/10) — last brew: '{last['grind']}'"
+        grind_note = (
+            f"Best brew: grind '{best['grind']}' (rated {best.get('rating')}/10) — last brew: '{last['grind']}'"
+        )
 
     # Rating trend over last 3 rated brews
     recent_rated = [float(b["rating"]) for b in brews[:5] if isinstance(b.get("rating"), (int, float, Decimal))]
     trend = None
     if len(recent_rated) >= 2:
+        rated_seq = " → ".join(str(int(r)) for r in reversed(recent_rated))
         if recent_rated[0] > recent_rated[-1]:
-            trend = f"improving (last {len(recent_rated)} rated brews: {' → '.join(str(int(r)) for r in reversed(recent_rated))})"
+            trend = f"improving (last {len(recent_rated)} rated brews: {rated_seq})"
         elif recent_rated[0] < recent_rated[-1]:
-            trend = f"declining (last {len(recent_rated)} rated brews: {' → '.join(str(int(r)) for r in reversed(recent_rated))})"
+            trend = f"declining (last {len(recent_rated)} rated brews: {rated_seq})"
         else:
             trend = f"plateau at {recent_rated[0]}/10"
 
@@ -410,9 +414,7 @@ def _update_equipment(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if "archived" in args and args["archived"] is not None:
         patch["archived"] = args["archived"]
     if not patch:
-        raise ValueError(
-            "provide at least one field to update: name, brand, model, notes, equipType, or archived"
-        )
+        raise ValueError("provide at least one field to update: name, brand, model, notes, equipType, or archived")
     updated = ddb.update_equipment(user_id, equip_id, patch)
     return {"equipment": updated}
 
@@ -433,9 +435,7 @@ def _update_preferences(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     if not args.get("skipDuplicateCheck"):
-        existing_cafe = ddb.find_matching_existing_cafe_by_place(
-            user_id, args["name"], args.get("city")
-        )
+        existing_cafe = ddb.find_matching_existing_cafe_by_place(user_id, args["name"], args.get("city"))
         if existing_cafe:
             return {
                 "duplicatePlace": True,
@@ -445,7 +445,7 @@ def _add_cafe(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
                 "hint": (
                     "This cafe is already on the user's list — use log_visit with cafeId \""
                     f'{existing_cafe["cafeId"]}" '
-                    '(and list_cafes if you need to confirm). '
+                    "(and list_cafes if you need to confirm). "
                     "Call add_cafe with skipDuplicateCheck: true only if the user explicitly wants a second entry."
                 ),
             }
@@ -580,18 +580,22 @@ def _visits_by_place_summary(visits: list[dict[str, Any]]) -> list[dict[str, Any
         m = meta[key]
         slim: list[dict[str, Any]] = []
         for r in rows:
-            slim.append({
-                "visitId": r.get("visitId"),
-                "visitDate": r.get("visitDate"),
-                "rating": _visit_rating_int(r.get("rating")),
-                "drinks": r.get("drinks") or [],
-            })
-        out.append({
-            "placeId": m["placeId"],
-            "placeName": m["placeName"],
-            "visitCount": len(rows),
-            "visits": slim,
-        })
+            slim.append(
+                {
+                    "visitId": r.get("visitId"),
+                    "visitDate": r.get("visitDate"),
+                    "rating": _visit_rating_int(r.get("rating")),
+                    "drinks": r.get("drinks") or [],
+                }
+            )
+        out.append(
+            {
+                "placeId": m["placeId"],
+                "placeName": m["placeName"],
+                "visitCount": len(rows),
+                "visits": slim,
+            }
+        )
 
     def _group_latest_date(g: dict[str, Any]) -> str:
         vis = g.get("visits") or []
@@ -625,9 +629,7 @@ def _list_visits(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 def _update_visit(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     visit_id = args["visitId"]
     patch = {
-        k: args[k]
-        for k in ("rating", "notes", "drinks", "visitDate", "placeName")
-        if k in args and args[k] is not None
+        k: args[k] for k in ("rating", "notes", "drinks", "visitDate", "placeName") if k in args and args[k] is not None
     }
     row = ddb.update_visit(user_id, visit_id, patch)
     journal_rag.try_sync_visit(user_id, row)
@@ -847,14 +849,16 @@ def _search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
             ),
         }
 
-    payload = json.dumps({
-        "api_key": _TAVILY_API_KEY,
-        "query": query,
-        "search_depth": "advanced",
-        "max_results": max_results,
-        "include_answer": True,
-        **({"include_domains": include_domains} if include_domains else {}),
-    }).encode()
+    payload = json.dumps(
+        {
+            "api_key": _TAVILY_API_KEY,
+            "query": query,
+            "search_depth": "advanced",
+            "max_results": max_results,
+            "include_answer": True,
+            **({"include_domains": include_domains} if include_domains else {}),
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://api.tavily.com/search",
@@ -944,16 +948,13 @@ def _youtube_video_id_from_input(raw: str) -> str | None:
 def _youtube_transcript(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     """Official captions transcript when available — shares Tavily quota + cache bucket."""
 
-    vid_in = (
-        args.get("video")
-        or args.get("videoUrl")
-        or args.get("videoId")
-        or args.get("url")
-        or ""
-    ).strip()
+    vid_in = (args.get("video") or args.get("videoUrl") or args.get("videoId") or args.get("url") or "").strip()
     video_id = _youtube_video_id_from_input(vid_in)
     if not video_id:
-        return {"ok": False, "error": "Need a youtube.com/watch, youtu.be, shorts, embed URL, or bare 11-char video id."}
+        return {
+            "ok": False,
+            "error": "Need a youtube.com/watch, youtu.be, shorts, embed URL, or bare 11-char video id.",
+        }
 
     raw_langs = args.get("languages")
     langs: list[str]
@@ -1048,8 +1049,6 @@ def _youtube_transcript(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-
-
 TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
@@ -1069,7 +1068,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         },
                         "nameContains": {
                             "type": "string",
-                            "description": "Case-insensitive substring on roaster name (e.g. \"Weekenders\").",
+                            "description": 'Case-insensitive substring on roaster name (e.g. "Weekenders").',
                         },
                         "includeArchived": {"type": "boolean"},
                     },
@@ -1092,8 +1091,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "properties": {
                         "name": {"type": "string", "description": "Canonical roaster name, e.g. 'Sey'"},
                         "city": {"type": "string", "description": "City only, e.g. 'Indianapolis'"},
-                        "state": {"type": "string", "description": "State or province abbreviation, e.g. 'IN', 'BC'. Infer from city when unambiguous."},
-                        "country": {"type": "string", "default": "US", "description": "ISO country code or name. Infer from city when unambiguous; default 'US'."},
+                        "state": {
+                            "type": "string",
+                            "description": (
+                                "State or province abbreviation, e.g. 'IN', 'BC'. Infer from city when unambiguous."
+                            ),
+                        },
+                        "country": {
+                            "type": "string",
+                            "default": "US",
+                            "description": "ISO country code or name. Infer from city when unambiguous; default 'US'.",
+                        },
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
                         "hasCafe": {
@@ -1312,7 +1320,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "rating": {"type": "integer", "minimum": 1, "maximum": 10},
                         "taste": {
                             "type": "string",
-                            "description": "Comma-separated descriptors: sour, sweet, bitter, balanced, grassy, harsh, etc.",
+                            "description": (
+                                "Comma-separated descriptors: sour, sweet, bitter, balanced, grassy, harsh, etc."
+                            ),
                         },
                         "notes": {"type": "string"},
                     },
@@ -1377,7 +1387,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "update_equipment",
             "description": (
-                "Update saved gear (rename e.g. Hario V60 02 → 01, edit brand/model/notes, change equipType, or retire). "
+                "Update saved gear (rename e.g. Hario V60 02 → 01, edit brand/model/notes, "
+                "change equipType, or retire). "
                 "Use equipId from the state snapshot or call list_equipment. "
                 "add_equipment only creates rows — it does not fix typos or sizes."
             ),
@@ -1411,7 +1422,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "toolSpec": {
             "name": "get_preferences",
             "description": (
-                "Read stored taste preferences, home city, IANA timezone field (persistent fallback — the web app normally "
+                "Read stored taste preferences, home city, IANA timezone field "
+                "(persistent fallback — the web app normally "
                 "sends browser timezone each /chat anyway), discovery habits, and experimental openness. "
                 "Call before recommending coffees, roasters, or cafés. "
                 "Fields include preferredRoastLevel (may be ultralight), preferredProcesses, "
@@ -1448,7 +1460,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "description": (
                                 "IANA timezone id for calendar-relative logging, e.g. America/Phoenix, "
                                 "Europe/Berlin. Persist when user states where they usually log visits "
-                                "from; improves \"last Sunday\" visitDate without asking them for dates."
+                                'from; improves "last Sunday" visitDate without asking them for dates.'
                             ),
                         },
                         "notes": {"type": "string"},
@@ -1505,7 +1517,12 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "required": ["query"],
                     "properties": {
                         "query": {"type": "string", "description": "Natural-language question for similarity search"},
-                        "topK": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Snippets to return (default 8)"},
+                        "topK": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12,
+                            "description": "Snippets to return (default 8)",
+                        },
                     },
                 }
             },
@@ -1519,7 +1536,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "(e.g. one-and-one, kopitiam; WDT, RDT, puck screen, SSP burrs, channeling, naked PF, flow profiling; "
                 "Rao spin, TDS). "
                 "Call first for 'what is X' when X is likely a menu, bar, or trendy home-barista term. "
-                "If found is false or the user needs deep threads or brand wars, use search_web with reddit.com (rule 3d / 3b)."
+                "If found is false or the user needs deep threads or brand wars, "
+                "use search_web with reddit.com (rule 3d / 3b)."
             ),
             "inputSchema": {
                 "json": {
@@ -1604,7 +1622,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "toolSpec": {
             "name": "add_cafe",
-                "description": (
+            "description": (
                 "Add a cafe to the user's tracked place list. "
                 "Set isRoaster: true if the cafe also roasts/sources beans the user can buy. "
                 "Always call list_cafes before add_cafe — same name+city returns DUPLICATE_PLACE; "
@@ -1617,10 +1635,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "required": ["name"],
                     "properties": {
                         "name": {"type": "string"},
-                        "neighborhood": {"type": "string", "description": "Neighborhood or specific location, e.g. Balboa"},
+                        "neighborhood": {
+                            "type": "string",
+                            "description": "Neighborhood or specific location, e.g. Balboa",
+                        },
                         "city": {"type": "string", "description": "City only, e.g. 'Indianapolis'"},
-                        "state": {"type": "string", "description": "State or province abbreviation, e.g. 'IN', 'BC'. Infer from city when unambiguous."},
-                        "country": {"type": "string", "default": "US", "description": "ISO country code or name. Infer from city when unambiguous; default 'US'."},
+                        "state": {
+                            "type": "string",
+                            "description": (
+                                "State or province abbreviation, e.g. 'IN', 'BC'. Infer from city when unambiguous."
+                            ),
+                        },
+                        "country": {
+                            "type": "string",
+                            "default": "US",
+                            "description": "ISO country code or name. Infer from city when unambiguous; default 'US'.",
+                        },
                         "website": {"type": "string"},
                         "notes": {"type": "string"},
                         "isRoaster": {
@@ -1658,7 +1688,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "properties": {
                         "nameContains": {
                             "type": "string",
-                            "description": "Case-insensitive substring (e.g. \"Anchor\" for Anchorhead).",
+                            "description": 'Case-insensitive substring (e.g. "Anchor" for Anchorhead).',
                         },
                         "city": {"type": "string"},
                         "includeArchived": {"type": "boolean"},
@@ -1676,7 +1706,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "— call **search_places** or list_roasters too **before** "
                 "saying it isn't saved or offering add_cafe or add_roaster. "
                 "City filter matches flexible stored values "
-                "(e.g. filter \"Kyoto\" matches \"Kyoto, Japan\"). Roaster-cafés saved under **Roasters** "
+                '(e.g. filter "Kyoto" matches "Kyoto, Japan"). Roaster-cafés saved under **Roasters** '
                 "with hasCafe are NOT returned here — call list_roasters or search_places. If city filter returns "
                 "empty but the user expects a named shop, use nameContains or omit city and scan."
             ),
@@ -1687,7 +1717,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "city": {"type": "string"},
                         "nameContains": {
                             "type": "string",
-                            "description": "Case-insensitive substring on cafe name (e.g. \"Weekenders\").",
+                            "description": 'Case-insensitive substring on cafe name (e.g. "Weekenders").',
                         },
                         "includeArchived": {"type": "boolean"},
                     },
@@ -1703,7 +1733,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "IMPORTANT: The app's 'also a roaster' badge for cafe-primary places is the boolean "
                 "isRoaster only — you must pass isRoaster: true to turn it on. "
                 "Putting 'they roast on site' only in notes does NOT set the badge. "
-                "After updating, the tool result echoes the saved cafe — confirm isRoaster in your head before telling the user it's done."
+                "After updating, the tool result echoes the saved cafe — confirm isRoaster "
+                "in your head before telling the user it's done."
             ),
             "inputSchema": {
                 "json": {
@@ -1721,7 +1752,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "archived": {"type": "boolean"},
                         "isRoaster": {
                             "type": "boolean",
-                            "description": "Set true so this cafe shows the roaster badge (on-site roasting). Required for that UI — not inferred from notes.",
+                            "description": (
+                                "Set true so this cafe shows the roaster badge (on-site roasting). "
+                                "Required for that UI — not inferred from notes."
+                            ),
                         },
                     },
                 }
@@ -1747,10 +1781,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "string",
                             "description": "Use for roaster rows (including walk-in visits logged from the app).",
                         },
-                        "placeName": {"type": "string", "description": "Display name of the place, stored for easy rendering"},
+                        "placeName": {
+                            "type": "string",
+                            "description": "Display name of the place, stored for easy rendering",
+                        },
                         "visitDate": {
                             "type": "string",
-                            "description": "YYYY-MM-DD; prefer Clock context + user phrasing rather than prompting for calendar trivia",
+                            "description": (
+                                "YYYY-MM-DD; prefer Clock context + user phrasing "
+                                "rather than prompting for calendar trivia"
+                            ),
                         },
                         "drinks": {
                             "type": "array",
@@ -1797,7 +1837,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 50,
-                            "description": "Default 40; use 50 when comparing many cafés or older visits may be missing.",
+                            "description": (
+                                "Default 40; use 50 when comparing many cafés or older visits may be missing."
+                            ),
                         },
                     },
                 }
@@ -1827,7 +1869,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         },
                         "visitDate": {
                             "type": "string",
-                            "description": "YYYY-MM-DD; prefer Clock context + user phrasing rather than prompting for calendar trivia",
+                            "description": (
+                                "YYYY-MM-DD; prefer Clock context + user phrasing "
+                                "rather than prompting for calendar trivia"
+                            ),
                         },
                         "placeName": {"type": "string", "description": "Denormalized display label only"},
                     },
@@ -1905,7 +1950,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "array",
                             "items": {"type": "string"},
                             "description": (
-                                "Domain allowlist. For Reddit-heavy answers use [\"reddit.com\"] alone. "
+                                'Domain allowlist. For Reddit-heavy answers use ["reddit.com"] alone. '
                                 "For cafes allow tripadvisor, etc. Omit for Tavily-wide results."
                             ),
                         },
@@ -1935,8 +1980,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "inputSchema": {
                 "json": {
                     "type": "object",
-            "required": ["video"],
-            "properties": {
+                    "required": ["video"],
+                    "properties": {
                         "video": {
                             "type": "string",
                             "description": (
@@ -1953,7 +1998,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "integer",
                             "minimum": 800,
                             "maximum": 48000,
-                            "description": "Max narration characters returned (long videos are clipped). Default ~22000.",
+                            "description": (
+                                "Max narration characters returned (long videos are clipped). Default ~22000."
+                            ),
                         },
                     },
                 }
@@ -1968,10 +2015,18 @@ TOOL_SPECS: list[dict[str, Any]] = [
 # tool availability must not depend on it — gating these broke plain
 # "log my visit to X" because the model had no tool to call.) Kept as a named
 # group for reference and tests.
-_PLACE_TOOL_NAMES = frozenset({
-    "add_cafe", "list_cafes", "update_cafe", "search_places",
-    "log_visit", "list_visits", "update_visit", "delete_visit",
-})
+_PLACE_TOOL_NAMES = frozenset(
+    {
+        "add_cafe",
+        "list_cafes",
+        "update_cafe",
+        "search_places",
+        "log_visit",
+        "list_visits",
+        "update_visit",
+        "delete_visit",
+    }
+)
 
 _YOUTUBE_TOOL_NAMES = frozenset({"get_youtube_transcript"})
 

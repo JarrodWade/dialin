@@ -13,9 +13,7 @@ from http.client import HTTPConnection
 
 
 def _start_server(stream_server_mod):
-    server = stream_server_mod.socketserver.ThreadingTCPServer(
-        ("127.0.0.1", 0), stream_server_mod._Handler
-    )
+    server = stream_server_mod.socketserver.ThreadingTCPServer(("127.0.0.1", 0), stream_server_mod._Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread

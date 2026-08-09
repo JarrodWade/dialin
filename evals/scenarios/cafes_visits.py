@@ -18,8 +18,9 @@ def _cafe_roaster_badge() -> H.Scenario:
         seed=seed,
         message="Anchorhead actually roasts their own beans now",
         checks=[
-            H.called("update_cafe", where=lambda a: H.truthy(a.get("isRoaster")),
-                     label="update_cafe(isRoaster truthy)"),
+            H.called(
+                "update_cafe", where=lambda a: H.truthy(a.get("isRoaster")), label="update_cafe(isRoaster truthy)"
+            ),
             H.not_called("add_cafe"),
             H.no_iteration_cap(),
             H.reply_excludes(["cafeid", "isroaster", "duplicate_place"]),
@@ -72,8 +73,12 @@ def _visit_correction_uses_update() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         cafe = ddb.create_cafe(user_id, name="Coava Coffee", city="Portland", state="OR")
         v = ddb.log_visit(
-            user_id, cafe_id=cafe["cafeId"], place_name="Coava Coffee",
-            visit_date="2026-06-10", drinks=["cortado"], rating=9,
+            user_id,
+            cafe_id=cafe["cafeId"],
+            place_name="Coava Coffee",
+            visit_date="2026-06-10",
+            drinks=["cortado"],
+            rating=9,
         )
         state["cafeId"] = cafe["cafeId"]
         state["visitId"] = v["visitId"]

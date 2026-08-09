@@ -151,15 +151,23 @@ def test_upsert_chunk_with_empty_text_deletes(dynamodb_env, monkeypatch):
     monkeypatch.setattr(rag, "embed_text", lambda text: [1.0, 0.0])
 
     rag.upsert_chunk(
-        "u1", kind="visit", entity_id="v1", text_for_embedding="great cortado",
-        display_text="great cortado", refs={"visitId": "v1"},
+        "u1",
+        kind="visit",
+        entity_id="v1",
+        text_for_embedding="great cortado",
+        display_text="great cortado",
+        refs={"visitId": "v1"},
     )
     out = rag.search("u1", "cortado")
     assert out["chunksLoaded"] == 1
 
     rag.upsert_chunk(
-        "u1", kind="visit", entity_id="v1", text_for_embedding="",
-        display_text="", refs={"visitId": "v1"},
+        "u1",
+        kind="visit",
+        entity_id="v1",
+        text_for_embedding="",
+        display_text="",
+        refs={"visitId": "v1"},
     )
     out = rag.search("u1", "cortado")
     assert out["chunksLoaded"] == 0

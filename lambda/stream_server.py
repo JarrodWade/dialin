@@ -34,7 +34,7 @@ logger = logging.getLogger("dialin.stream")
 
 
 def _emit_sse(wfile, event: str, data: Any) -> None:
-    frame = f"event: {event}\ndata: {json.dumps(data)}\n\n".encode("utf-8")
+    frame = f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
     wfile.write(frame)
     wfile.flush()
 
@@ -71,9 +71,7 @@ class _Handler(BaseHTTPRequestHandler):
             return {}
 
     def _resolve_user(self, body: dict[str, Any]) -> str:
-        bearer = auth.extract_bearer(
-            self.headers.get("Authorization") or self.headers.get("authorization")
-        )
+        bearer = auth.extract_bearer(self.headers.get("Authorization") or self.headers.get("authorization"))
         logger.info(
             "%s auth_header=%s body_userId=%s",
             self.path,
@@ -129,10 +127,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(
                 413,
                 {
-                    "error": (
-                        f"Message too long ({len(message)} chars; max {max_chars}). "
-                        "Trim it and try again."
-                    ),
+                    "error": (f"Message too long ({len(message)} chars; max {max_chars}). Trim it and try again."),
                     "code": "MESSAGE_TOO_LONG",
                 },
             )

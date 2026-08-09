@@ -58,11 +58,7 @@ def test_recommend_beans_runs_deterministic_pipeline(dynamodb_env, monkeypatch):
     class FakeClient:
         def converse(self, **kwargs):
             captured.update(kwargs)
-            return {
-                "output": {
-                    "message": {"content": [{"text": "**North America**\n- Hydrangea — clarity"}]}
-                }
-            }
+            return {"output": {"message": {"content": [{"text": "**North America**\n- Hydrangea — clarity"}]}}}
 
     monkeypatch.setattr(bedrock, "_client", FakeClient())
 
@@ -242,13 +238,7 @@ def test_recommend_cafes_runs_deterministic_pipeline(dynamodb_env, monkeypatch):
     class FakeClient:
         def converse(self, **kwargs):
             captured.update(kwargs)
-            return {
-                "output": {
-                    "message": {
-                        "content": [{"text": "**Cafés in Chicago**\n- Metric — pour-over bar"}]
-                    }
-                }
-            }
+            return {"output": {"message": {"content": [{"text": "**Cafés in Chicago**\n- Metric — pour-over bar"}]}}}
 
     monkeypatch.setattr(bedrock, "_client", FakeClient())
 
@@ -268,7 +258,7 @@ def test_recommend_cafes_runs_deterministic_pipeline(dynamodb_env, monkeypatch):
     system_text = captured["system"][0]["text"]
     assert "CANDIDATE POOL IS CLOSED" in system_text
     user_block = captured["messages"][0]["content"][0]["text"]
-    assert f"RESOLVED DESTINATION" in user_block
+    assert "RESOLVED DESTINATION" in user_block
     assert "Chicago" in user_block
     assert "CITY-SEARCH RESULTS" in user_block
     assert "Metric Coffee Chicago" in user_block
@@ -337,10 +327,7 @@ def test_format_consensus_block_flags_bar_first(dynamodb_env, monkeypatch):
 
     importlib.reload(bedrock)
 
-    results = (
-        "- thread: Coffee Movement, Ritual, Saint Frank.\n"
-        "- other: Coffee Movement (highly recommend), SPRO.\n"
-    )
+    results = "- thread: Coffee Movement, Ritual, Saint Frank.\n- other: Coffee Movement (highly recommend), SPRO.\n"
     block = bedrock._format_consensus_block(["Coffee movement", "Saint Frank"], results)
     assert "bar-first" in block.lower()
     assert "Coffee movement" in block
@@ -440,8 +427,9 @@ def test_parse_destination_strips_nl_scout_prefix(dynamodb_env, monkeypatch):
 
 
 def test_parse_destination_rejects_pronoun_city(dynamodb_env, monkeypatch):
-    import bedrock
     import pytest
+
+    import bedrock
 
     importlib.reload(bedrock)
 
@@ -459,8 +447,9 @@ def test_parse_destination_takes_last_geo_clause(dynamodb_env, monkeypatch):
 
 
 def test_parse_destination_rejects_venue_name(dynamodb_env, monkeypatch):
-    import bedrock
     import pytest
+
+    import bedrock
 
     importlib.reload(bedrock)
 
@@ -476,10 +465,7 @@ def test_clean_consensus_accepts_short_brand_sey(dynamodb_env, monkeypatch):
     importlib.reload(bedrock)
 
     assert bedrock._clean_consensus_candidate("Sey") == "Sey"
-    results = (
-        "- thread one: Sey, Dayglow, and La Cabra.\n"
-        "- thread two: SEY, Coffee Project NY, Black Fox.\n"
-    )
+    results = "- thread one: Sey, Dayglow, and La Cabra.\n- thread two: SEY, Coffee Project NY, Black Fox.\n"
     consensus = bedrock._extract_consensus_venues(results)
     assert any(c.lower() == "sey" for c in consensus)
 
@@ -533,9 +519,7 @@ def test_handler_returns_cafe_recommendations(dynamodb_env, monkeypatch):
         lambda user_id, city: f"- Metric — {city}",
     )
 
-    resp = handler._handle_recommend_cafes(
-        {"body": json.dumps({"userId": USER, "city": "Chicago"})}
-    )
+    resp = handler._handle_recommend_cafes({"body": json.dumps({"userId": USER, "city": "Chicago"})})
     assert resp["statusCode"] == 200
     body = json.loads(resp["body"])
     assert body["recommendations"] == "- Metric — Chicago"
@@ -561,9 +545,7 @@ def test_handler_cafes_unauthorized_without_user(dynamodb_env, monkeypatch):
 
     importlib.reload(handler)
 
-    resp = handler._handle_recommend_cafes(
-        {"body": json.dumps({"city": "Chicago"})}
-    )
+    resp = handler._handle_recommend_cafes({"body": json.dumps({"city": "Chicago"})})
     assert resp["statusCode"] == 401
 
 
@@ -580,7 +562,5 @@ def test_handler_cafes_502_on_model_failure(dynamodb_env, monkeypatch):
 
     monkeypatch.setattr(handler.bedrock, "recommend_cafes", boom)
 
-    resp = handler._handle_recommend_cafes(
-        {"body": json.dumps({"userId": USER, "city": "Chicago"})}
-    )
+    resp = handler._handle_recommend_cafes({"body": json.dumps({"userId": USER, "city": "Chicago"})})
     assert resp["statusCode"] == 502

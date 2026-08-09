@@ -233,8 +233,7 @@ def _handle_chat(event: dict[str, Any]) -> dict[str, Any]:
             413,
             {
                 "error": (
-                    f"Message too long ({len(message)} chars; max {_CHAT_MESSAGE_MAX_CHARS}). "
-                    "Trim it and try again."
+                    f"Message too long ({len(message)} chars; max {_CHAT_MESSAGE_MAX_CHARS}). Trim it and try again."
                 ),
                 "code": "MESSAGE_TOO_LONG",
             },
@@ -503,7 +502,7 @@ def _handle_create_brew(event: dict[str, Any]) -> dict[str, Any]:
     journal_rag.try_sync_brew(user_id, item)
     return _response(201, {"brew": item})
 
- 
+
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
@@ -584,7 +583,7 @@ def _handle_create_roaster(event: dict[str, Any]) -> dict[str, Any]:
                     "code": "DUPLICATE_PLACE",
                     "error": (
                         f'You already have "{hit.get("name", name)}" as a cafe. '
-                        "Edit that cafe and enable \"Also roasts beans\", or create a duplicate anyway."
+                        'Edit that cafe and enable "Also roasts beans", or create a duplicate anyway.'
                     ),
                     "existingType": "cafe",
                     "existingId": hit["cafeId"],
@@ -650,7 +649,7 @@ def _handle_update_brew(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_delete_brew(event: dict[str, Any]) -> dict[str, Any]:
-    qs = _qs(event)
+    _qs(event)
     user_id = _user_id(event)
     brew_id = (_path_params(event).get("brewId") or "").strip()
     if not user_id:
@@ -759,7 +758,7 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
                     "error": (
                         f'You already track "{cafe_dup.get("name", name)}" as a cafe. '
                         "Log visits on that cafe or edit it instead of adding twice "
-                        '(or skip duplicate check to create another entry anyway).'
+                        "(or skip duplicate check to create another entry anyway)."
                     ),
                     "existingType": "cafe",
                     "existingId": cafe_dup["cafeId"],
@@ -774,7 +773,7 @@ def _handle_create_cafe(event: dict[str, Any]) -> dict[str, Any]:
                     "code": "DUPLICATE_PLACE",
                     "error": (
                         f'You already have "{hit.get("name", name)}" as a roaster. '
-                        "Edit that roaster and enable \"Also has a cafe\", or create a duplicate anyway."
+                        'Edit that roaster and enable "Also has a cafe", or create a duplicate anyway.'
                     ),
                     "existingType": "roaster",
                     "existingId": hit["roasterId"],
@@ -836,7 +835,7 @@ def _handle_create_visit(event: dict[str, Any]) -> dict[str, Any]:
     user_id = _user_id(event)
     if not user_id:
         return _response(401, {"error": "Unauthorized"})
-    cafe_id    = (body.get("cafeId")    or "").strip() or None
+    cafe_id = (body.get("cafeId") or "").strip() or None
     roaster_id = (body.get("roasterId") or "").strip() or None
     place_name = (body.get("placeName") or "").strip() or None
     if not cafe_id and not roaster_id:

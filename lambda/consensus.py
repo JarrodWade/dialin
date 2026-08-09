@@ -10,12 +10,31 @@ from __future__ import annotations
 
 import re
 
-_CONSENSUS_SKIP = frozenset({
-    "reddit", "coffee", "cafe", "cafes", "shop", "shops", "roaster", "roasters",
-    "san francisco", "sf", "the bay", "bay area", "third wave", "specialty coffee",
-    "so much good coffee in the bay", "lots of good suggestions already",
-    "reply", "share", "more replies", "deleted", "people also ask",
-})
+_CONSENSUS_SKIP = frozenset(
+    {
+        "reddit",
+        "coffee",
+        "cafe",
+        "cafes",
+        "shop",
+        "shops",
+        "roaster",
+        "roasters",
+        "san francisco",
+        "sf",
+        "the bay",
+        "bay area",
+        "third wave",
+        "specialty coffee",
+        "so much good coffee in the bay",
+        "lots of good suggestions already",
+        "reply",
+        "share",
+        "more replies",
+        "deleted",
+        "people also ask",
+    }
+)
 
 _WEAK_LIST_RE = re.compile(
     r"on my list to (?:still )?visit|still visit are|have on my list|"

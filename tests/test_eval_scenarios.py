@@ -8,8 +8,6 @@ happens in ``make eval`` against real Bedrock.
 
 from __future__ import annotations
 
-import pytest
-
 from evals import fixtures
 from evals import harness as H
 from evals import scenarios as S

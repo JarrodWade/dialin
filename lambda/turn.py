@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Any
 
 import bedrock
 import chat_context
@@ -269,9 +270,7 @@ def _run_turn(
     ``force_trip_appendix`` overrides the heuristic router: pass ``False`` for
     self-contained flows (e.g. bean recommendations) that mention discovery/roasters
     but must NOT inherit the trip-scouting prompt's multi-search behavior."""
-    dest = _deterministic_city_scout_destination(
-        user_id, history, user_text, force_trip_appendix=force_trip_appendix
-    )
+    dest = _deterministic_city_scout_destination(user_id, history, user_text, force_trip_appendix=force_trip_appendix)
     if dest is not None:
         text = recommend_cafes.recommend_cafes(user_id, dest.raw)
         return TurnResult(
@@ -363,9 +362,7 @@ def _run_turn(
             messages.append({"role": "user", "content": tool_results})
         else:
             hit_cap = True
-            final_text_parts.append(
-                "(Stopped after maximum tool iterations. Try rephrasing.)"
-            )
+            final_text_parts.append("(Stopped after maximum tool iterations. Try rephrasing.)")
     finally:
         chat_context.trip_place_discovery_active.reset(trip_ctx_token)
 
@@ -504,9 +501,7 @@ def stream_turn(
     status events fire once a tool call's input has fully streamed in, so labels
     can reference the arguments (e.g. the search query).
     """
-    dest = _deterministic_city_scout_destination(
-        user_id, history, user_text, force_trip_appendix=force_trip_appendix
-    )
+    dest = _deterministic_city_scout_destination(user_id, history, user_text, force_trip_appendix=force_trip_appendix)
     if dest is not None:
         yield StreamEvent("status", {"tool": "_start", "label": f"scouting cafés in {dest.raw}…"})
         text = recommend_cafes.recommend_cafes(user_id, dest.raw)
@@ -656,9 +651,7 @@ def stream_turn(
             messages.append({"role": "user", "content": tool_results})
         else:
             hit_cap = True
-            final_text_parts.append(
-                "(Stopped after maximum tool iterations. Try rephrasing.)"
-            )
+            final_text_parts.append("(Stopped after maximum tool iterations. Try rephrasing.)")
     finally:
         chat_context.trip_place_discovery_active.reset(trip_ctx_token)
 

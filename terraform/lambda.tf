@@ -1,6 +1,6 @@
 locals {
   _lambda_bundle_trigger = sha256(join("", concat(
-    [filesha256("${path.module}/../lambda/requirements.txt")],
+    [filesha256("${path.module}/../lambda/requirements.lock.txt")],
     [filesha256("${path.module}/../lambda/coffee_glossary.json")],
     [filesha256("${path.module}/../lambda/gear_canonical.json")],
     [filesha256("${path.module}/../lambda/run.sh")],
@@ -49,7 +49,7 @@ ROOT="${path.module}/../lambda"
 ROOT="$(cd "$ROOT" && pwd)"
 rm -rf "$ROOT/build"
 mkdir -p "$ROOT/build"
-python3 -m pip install -q -r "$ROOT/requirements.txt" -t "$ROOT/build" \
+python3 -m pip install -q -r "$ROOT/requirements.lock.txt" -t "$ROOT/build" \
   --platform manylinux2014_x86_64 \
   --python-version 3.12 \
   --implementation cp \

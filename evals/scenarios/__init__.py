@@ -19,17 +19,17 @@ if TYPE_CHECKING:  # avoid importing the harness (and lambda deps) at module imp
 _MODULES = ("coffees", "equipment", "cafes_visits", "corrections", "trips", "recall")
 
 
-def suites() -> dict[str, list["Scenario"]]:
+def suites() -> dict[str, list[Scenario]]:
     """Map suite name -> its scenarios. Imported lazily so the lambda path is set up first."""
-    out: dict[str, list["Scenario"]] = {}
+    out: dict[str, list[Scenario]] = {}
     for name in _MODULES:
         mod = import_module(f"evals.scenarios.{name}")
         out[name] = list(getattr(mod, "SCENARIOS", []))
     return out
 
 
-def all_scenarios() -> list["Scenario"]:
-    out: list["Scenario"] = []
+def all_scenarios() -> list[Scenario]:
+    out: list[Scenario] = []
     for scenarios in suites().values():
         out.extend(scenarios)
     return out

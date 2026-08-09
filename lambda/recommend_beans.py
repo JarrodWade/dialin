@@ -24,7 +24,7 @@ here as ``bedrock.<name>`` — see ``turn.py``'s module docstring for why.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import bedrock
 import ddb
@@ -50,14 +50,8 @@ def _gather_seed_roasters(user_id: str) -> tuple[list[str], list[str]]:
     favorites first, since they're the user's stated north star — used to seed
     the ``roasters like {…}`` peer search."""
     profile = ddb.get_profile(user_id) or {}
-    favorites = [
-        str(x).strip() for x in (profile.get("favoriteRoasters") or []) if str(x).strip()
-    ]
-    logged = [
-        str(r.get("name", "")).strip()
-        for r in ddb.list_roasters(user_id)
-        if str(r.get("name", "")).strip()
-    ]
+    favorites = [str(x).strip() for x in (profile.get("favoriteRoasters") or []) if str(x).strip()]
+    logged = [str(r.get("name", "")).strip() for r in ddb.list_roasters(user_id) if str(r.get("name", "")).strip()]
 
     known: list[str] = []
     seen: set[str] = set()
@@ -118,27 +112,19 @@ def _run_peer_searches(user_id: str, seeds: list[str]) -> str:
     return "\n\n".join(blocks).strip()
 
 
-def _format_recommendations(
-    user_id: str, seeds: list[str], known: list[str], results_text: str
-) -> str:
+def _format_recommendations(user_id: str, seeds: list[str], known: list[str], results_text: str) -> str:
     """Single tool-less model call: rank + format strictly from ``results_text``."""
     user_block = _beans_rank_user_block(user_id, seeds, known, results_text)
     return turn._converse_text(bedrock._FOR_YOU_RANKER_SYSTEM, user_block)
 
 
-def _beans_rank_user_block(
-    user_id: str, seeds: list[str], known: list[str], results_text: str
-) -> str:
+def _beans_rank_user_block(user_id: str, seeds: list[str], known: list[str], results_text: str) -> str:
     profile = ddb.get_profile(user_id) or {}
     ctx: list[str] = []
     if seeds:
         ctx.append("Roasters I already love (my class anchors): " + ", ".join(seeds) + ".")
     if known:
-        ctx.append(
-            "Roasters already in my journal/favorites — DO NOT recommend these back: "
-            + ", ".join(known)
-            + "."
-        )
+        ctx.append("Roasters already in my journal/favorites — DO NOT recommend these back: " + ", ".join(known) + ".")
     roast = str(profile.get("preferredRoastLevel") or "").strip()
     if roast:
         ctx.append(f"My preferred roast level: {roast}.")

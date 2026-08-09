@@ -19,7 +19,8 @@ content only needs to be coherent enough that the model does not loop or stall.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # query substring (lowercased) -> list of (title, snippet) result rows.
 # A match means "the model searched for this city/topic"; content is flavour.
@@ -93,9 +94,7 @@ def fake_search_web(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def fake_youtube_transcript(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     _ = user_id
-    vid = str(
-        args.get("video") or args.get("videoUrl") or args.get("videoId") or args.get("url") or ""
-    ).strip()
+    vid = str(args.get("video") or args.get("videoUrl") or args.get("videoId") or args.get("url") or "").strip()
     return {
         "videoId": vid[:11] or "stub0000000",
         "languageCode": "en",

@@ -26,15 +26,13 @@ import os
 import re
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import boto3
 from botocore.config import Config
-from zoneinfo import ZoneInfo
 
-import chat_context
 import ddb
-import tools
-
+import tools  # noqa: F401 — facade attribute for tests/evals that monkeypatch bedrock.tools
 
 # Prompt text lives in lambda/prompts/*.md, not as inline Python string literals —
 # keeps large prompts diffable/reviewable on their own and out of the control-flow
@@ -89,6 +87,7 @@ def _effective_tz_for_user(user_id: str, *, client_timezone: str | None) -> tupl
         return env_z, "server CHAT_LOCAL_TIMEZONE default"
     return ZoneInfo("UTC"), "UTC (no client TZ, profile TZ, nor CHAT_LOCAL_TIMEZONE)"
 
+
 # Some Nova/Claude models like to emit <thinking>...</thinking> blocks even
 # when not asked to. Strip them before returning to the user.
 _THINKING_RE = re.compile(r"<thinking>.*?</thinking>\s*", re.DOTALL | re.IGNORECASE)
@@ -96,6 +95,7 @@ _THINKING_RE = re.compile(r"<thinking>.*?</thinking>\s*", re.DOTALL | re.IGNOREC
 
 def _strip_meta(text: str) -> str:
     return _THINKING_RE.sub("", text).strip()
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,10 +121,7 @@ def chat_clock_system_text(
 ) -> str:
     """Dynamic system preamble: anchor dates for resolving relative phrases without questioning the user."""
     now = now_utc or datetime.now(UTC)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
-    else:
-        now = now.astimezone(UTC)
+    now = now.replace(tzinfo=UTC) if now.tzinfo is None else now.astimezone(UTC)
     tz, tz_source = _effective_tz_for_user(user_id, client_timezone=client_timezone)
     local = now.astimezone(tz)
     local_date = local.date()
@@ -142,7 +139,7 @@ def chat_clock_system_text(
         f"- localNow: {local.strftime('%Y-%m-%d %H:%M')} ({weekdays[local.weekday()]})\n"
         f"- localTodayISO: {local_date.isoformat()}\n"
         f"- yesterdayLocalISO: {yesterday}\n"
-        "- commonRelativeHintsLocal (ISO dates; \"last Monday/Sunday\" = prior occurrence before today):\n"
+        '- commonRelativeHintsLocal (ISO dates; "last Monday/Sunday" = prior occurrence before today):\n'
         f"  - impliedLastMonday: {last_mon}\n"
         f"  - impliedLastSunday: {last_sun}\n"
     )
@@ -194,9 +191,7 @@ def _journal_snapshot_text(user_id: str) -> str:
                 parts.append(f"{c['gramsRemaining']}g left")
             lines.append(" ".join(parts))
         if cap and len(coffees) > cap:
-            lines.append(
-                f"  …and {len(coffees) - cap} more active coffees not shown; call list_coffees for the rest."
-            )
+            lines.append(f"  …and {len(coffees) - cap} more active coffees not shown; call list_coffees for the rest.")
     else:
         lines.append("Coffees: none active.")
 
@@ -218,9 +213,7 @@ def _journal_snapshot_text(user_id: str) -> str:
         lines.append(f"Equipment ({len(equipment)} active):")
         shown = equipment[:cap] if cap else equipment
         for e in shown:
-            lines.append(
-                f"  - {e.get('name', '?')} ({e.get('equipType', '')}) [equipId={e['equipId']}]"
-            )
+            lines.append(f"  - {e.get('name', '?')} ({e.get('equipType', '')}) [equipId={e['equipId']}]")
         if cap and len(equipment) > cap:
             lines.append(
                 f"  …and {len(equipment) - cap} more saved equipment not shown; call list_equipment for the rest."
@@ -291,9 +284,9 @@ _FOR_YOU_CAFES_RANKER_SYSTEM = _load_prompt("cafes_ranker.md")
 
 import consensus  # noqa: E402
 import prompt_router  # noqa: E402
-import turn  # noqa: E402
 import recommend_beans as _recommend_beans  # noqa: E402
 import recommend_cafes as _recommend_cafes  # noqa: E402
+import turn  # noqa: E402
 
 # turn.py — chat-turn assembly/execution.
 TurnResult = turn.TurnResult

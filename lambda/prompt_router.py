@@ -95,9 +95,8 @@ def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> b
         return False
     t = scan.lower().replace("cafés", "cafes").replace("café", "cafe")
 
-    if _LOG_VISIT_PHRASE.search(t):
-        if not _TRIP_APPENDIX_DUAL_INTENT_GUARD.search(t):
-            return False
+    if _LOG_VISIT_PHRASE.search(t) and not _TRIP_APPENDIX_DUAL_INTENT_GUARD.search(t):
+        return False
 
     for p in _APPENDIX_TRIGGERS_SIMPLE:
         if re.search(p, t):
@@ -107,10 +106,7 @@ def want_trip_place_discovery_appendix(history: list[dict], user_text: str) -> b
     if rec_or_suggest and _mentions_venue_topic(t):
         return True
 
-    if _TRAVEL_PLACE_PROBE.search(t) and _mentions_venue_topic(t):
-        return True
-
-    return False
+    return bool(_TRAVEL_PLACE_PROBE.search(t) and _mentions_venue_topic(t))
 
 
 _RE_YOUTUBE = re.compile(

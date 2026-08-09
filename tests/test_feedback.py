@@ -86,9 +86,7 @@ def test_handler_requires_bot_message(dynamodb_env, monkeypatch):
 
     importlib.reload(handler)
 
-    resp = handler._handle_chat_feedback(
-        {"body": json.dumps({"userId": USER, "userMessage": "hi"})}
-    )
+    resp = handler._handle_chat_feedback({"body": json.dumps({"userId": USER, "userMessage": "hi"})})
     assert resp["statusCode"] == 400
 
 

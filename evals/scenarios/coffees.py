@@ -42,8 +42,11 @@ def _snapshot_absent_coffee() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Sweet Bloom Coffee Roasters", city="Lakewood", state="CO")
         ddb.create_coffee(
-            user_id, roaster="Sweet Bloom Coffee Roasters", name="Colombia El Paraiso",
-            roaster_id=r["roasterId"], origin="Colombia",
+            user_id,
+            roaster="Sweet Bloom Coffee Roasters",
+            name="Colombia El Paraiso",
+            roaster_id=r["roasterId"],
+            origin="Colombia",
         )
 
     return H.Scenario(
@@ -73,10 +76,7 @@ def _add_coffee_preserves_process() -> H.Scenario:
         id="add_coffee_preserves_process",
         rule="CORE-2a",
         seed=seed,
-        message=(
-            "Add a new bag from Sey: Ethiopia Gedeb, double anaerobic natural, "
-            "roasted 2026-06-01, 250g"
-        ),
+        message=("Add a new bag from Sey: Ethiopia Gedeb, double anaerobic natural, roasted 2026-06-01, 250g"),
         checks=[
             H.called("add_coffee", where=lambda a: bool(a.get("roasterId"))),
             H.called("add_coffee", where=process_kept, label="add_coffee(process preserves 'anaerobic')"),

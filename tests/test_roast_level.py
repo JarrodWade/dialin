@@ -18,9 +18,13 @@ def test_create_coffee_normalizes_roast_level(dynamodb_env):
 
 def test_roast_level_aliases_and_spacing(dynamodb_env):
     ddb = dynamodb_env["ddb"]
-    assert ddb.create_coffee(user_id=USER, roaster="R", name="A", roast_level="Medium Dark")["roastLevel"] == "medium-dark"
+    assert (
+        ddb.create_coffee(user_id=USER, roaster="R", name="A", roast_level="Medium Dark")["roastLevel"] == "medium-dark"
+    )
     assert ddb.create_coffee(user_id=USER, roaster="R", name="B", roast_level="French")["roastLevel"] == "dark"
-    assert ddb.create_coffee(user_id=USER, roaster="R", name="C", roast_level="ultra-light")["roastLevel"] == "ultralight"
+    assert (
+        ddb.create_coffee(user_id=USER, roaster="R", name="C", roast_level="ultra-light")["roastLevel"] == "ultralight"
+    )
 
 
 def test_unknown_roast_level_kept_lenient(dynamodb_env):

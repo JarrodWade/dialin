@@ -27,7 +27,7 @@ import statistics
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -167,7 +167,7 @@ def _render_markdown(
     totals: dict[str, Any],
 ) -> str:
     lines: list[str] = []
-    lines.append(f"# dialin eval report — {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
+    lines.append(f"# dialin eval report — {datetime.now(UTC).isoformat(timespec='seconds')}")
     lines.append("")
     lines.append(f"- model: `{model_id}`")
     lines.append(f"- scenarios: {len(summaries)} × {reps} reps = {len(summaries) * reps} turns")
@@ -238,7 +238,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reps", type=int, default=3, help="Reps per scenario (default 3).")
     parser.add_argument("--model", default=os.environ.get("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID))
     parser.add_argument("--table", default=os.environ.get("EVAL_TABLE_NAME", DEFAULT_TABLE))
-    parser.add_argument("--region", default=os.environ.get("BEDROCK_REGION") or os.environ.get("AWS_REGION") or "us-east-1")
+    parser.add_argument(
+        "--region", default=os.environ.get("BEDROCK_REGION") or os.environ.get("AWS_REGION") or "us-east-1"
+    )
     parser.add_argument("--report-dir", default=str(DEFAULT_REPORT_DIR))
     parser.add_argument("--save-baseline", action="store_true", help="Write this run's pass-rates as the baseline.")
     parser.add_argument("--no-baseline", action="store_true", help="Skip baseline diff in the report.")
@@ -334,11 +336,13 @@ def main(argv: list[str] | None = None) -> int:
     # Write reports.
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     md = _render_markdown(summaries, model_id=args.model, reps=args.reps, baseline=baseline, totals=totals)
     (report_dir / f"{ts}.md").write_text(md)
     (report_dir / f"{ts}.json").write_text(
-        json.dumps({"model": args.model, "reps": args.reps, "totals": totals, "scenarios": summaries}, indent=2, default=str)
+        json.dumps(
+            {"model": args.model, "reps": args.reps, "totals": totals, "scenarios": summaries}, indent=2, default=str
+        )
     )
 
     if args.save_baseline:

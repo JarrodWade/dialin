@@ -1,4 +1,4 @@
-.PHONY: init plan apply destroy fmt validate ui logs test test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate web-config eval eval-list
+.PHONY: init plan apply destroy fmt validate ui logs test lint lint-fix lock test-chat test-coffees deploy-lambda lambda-bundle backfill-journal-rag glossary-validate gear-canonical-validate web-config eval eval-list
 
 ARGS ?=
 
@@ -21,9 +21,29 @@ gear-canonical-validate:
 
 # Unit + moto integration tests (no AWS credentials or Bedrock).
 VENV ?= $(CURDIR)/.venv
+DEV_REQUIREMENTS ?= $(CURDIR)/requirements-dev.lock.txt
+LAMBDA_REQUIREMENTS ?= $(CURDIR)/lambda/requirements.lock.txt
+
+lock:
+	uv pip compile lambda/requirements.txt -o lambda/requirements.lock.txt \
+	  --python-platform manylinux2014_x86_64 --python-version 3.12
+	uv pip compile requirements-dev.txt -o requirements-dev.lock.txt --python-version 3.12
+
+lint:
+	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
+	@"$(VENV)/bin/pip" install -q -r "$(DEV_REQUIREMENTS)"
+	@"$(VENV)/bin/ruff" check lambda tests evals scripts
+	@"$(VENV)/bin/ruff" format --check lambda tests evals scripts
+
+lint-fix:
+	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
+	@"$(VENV)/bin/pip" install -q -r "$(DEV_REQUIREMENTS)"
+	@"$(VENV)/bin/ruff" check --fix lambda tests evals scripts
+	@"$(VENV)/bin/ruff" format lambda tests evals scripts
+
 test:
 	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
-	@"$(VENV)/bin/pip" install -q -r "$(CURDIR)/requirements-dev.txt"
+	@"$(VENV)/bin/pip" install -q -r "$(DEV_REQUIREMENTS)"
 	@"$(VENV)/bin/pytest" "$(CURDIR)/tests" -q
 
 web-config:
@@ -38,7 +58,7 @@ web-config:
 #           make eval ARGS='--save-baseline'
 eval:
 	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
-	@"$(VENV)/bin/pip" install -q -r "$(CURDIR)/requirements-dev.txt"
+	@"$(VENV)/bin/pip" install -q -r "$(DEV_REQUIREMENTS)"
 	@cd "$(CURDIR)" && "$(VENV)/bin/python" -m evals.run_evals $(ARGS)
 
 # List scenarios without touching AWS or the model.
@@ -59,10 +79,10 @@ ui:
 	@echo "Open http://localhost:$(UI_PORT)/"; \
 	cd web && python3 -m http.server $(UI_PORT)
 
-# Match Terraform’s Lambda zip: deps from requirements.txt + *.py into lambda/build/.
+# Match Terraform’s Lambda zip: deps from requirements.lock.txt + *.py into lambda/build/.
 lambda-bundle:
 	@ROOT=$$(pwd)/lambda; rm -rf "$$ROOT/build" && mkdir -p "$$ROOT/build"; \
-	  python3 -m pip install -q -r "$$ROOT/requirements.txt" -t "$$ROOT/build" \
+	  python3 -m pip install -q -r "$$ROOT/requirements.lock.txt" -t "$$ROOT/build" \
 	    --platform manylinux2014_x86_64 \
 	    --python-version 3.12 \
 	    --implementation cp \

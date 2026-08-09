@@ -61,8 +61,7 @@ def _fetch(table: Any, only_user: str, limit: int) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if only_user:
         kwargs: dict[str, Any] = {
-            "KeyConditionExpression": Key("PK").eq(f"USER#{only_user}")
-            & Key("SK").begins_with("FEEDBACK#"),
+            "KeyConditionExpression": Key("PK").eq(f"USER#{only_user}") & Key("SK").begins_with("FEEDBACK#"),
             "ScanIndexForward": False,
         }
         while True:

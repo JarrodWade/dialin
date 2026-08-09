@@ -130,9 +130,7 @@ def test_stream_converse_text_done_joins_tokens_without_newlines(dynamodb_env, m
             ]
         )
 
-    monkeypatch.setattr(
-        bedrock, "_client", type("C", (), {"converse_stream": staticmethod(fake_converse_stream)})()
-    )
+    monkeypatch.setattr(bedrock, "_client", type("C", (), {"converse_stream": staticmethod(fake_converse_stream)})())
 
     events = list(bedrock._stream_converse_text("sys", "user"))
     deltas = [e.data for e in events if e.type == "delta"]

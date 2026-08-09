@@ -13,8 +13,11 @@ def _brew_correction_uses_update() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Sweet Bloom Coffee Roasters", city="Lakewood", state="CO")
         c = ddb.create_coffee(
-            user_id, roaster="Sweet Bloom Coffee Roasters", name="Colombia El Paraiso",
-            roaster_id=r["roasterId"], origin="Colombia",
+            user_id,
+            roaster="Sweet Bloom Coffee Roasters",
+            name="Colombia El Paraiso",
+            roaster_id=r["roasterId"],
+            origin="Colombia",
         )
         b = ddb.create_brew(user_id=user_id, coffee_id=c["coffeeId"], method="Espresso", grind="Ode 4", rating=7)
         state["coffeeId"] = c["coffeeId"]
@@ -37,7 +40,9 @@ def _delete_needs_confirm() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Onyx Coffee Lab", city="Rogers", state="AR")
         ddb.create_coffee(
-            user_id, roaster="Onyx Coffee Lab", name="Geometry Blend",
+            user_id,
+            roaster="Onyx Coffee Lab",
+            name="Geometry Blend",
             roaster_id=r["roasterId"],
         )
 

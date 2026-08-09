@@ -9,7 +9,7 @@ import logging
 import math
 import os
 import struct
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -33,7 +33,7 @@ _bedrock: Any = None
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _br() -> Any:
@@ -184,9 +184,7 @@ def _list_user_chunks(user_id: str) -> tuple[list[dict[str, Any]], bool]:
     items: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
         "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("RAGCHUNK#"),
-        "ProjectionExpression": (
-            "#sk, displayText, embeddingPacked, embeddingDim, refs, ragKind, ragEntityId"
-        ),
+        "ProjectionExpression": ("#sk, displayText, embeddingPacked, embeddingDim, refs, ragKind, ragEntityId"),
         "ExpressionAttributeNames": {"#sk": "SK"},
     }
     while True:
@@ -354,10 +352,7 @@ def sync_visit(user_id: str, visit: dict[str, Any]) -> None:
     if not vid:
         return
     drinks = visit.get("drinks") or []
-    if isinstance(drinks, list):
-        drinks_s = ", ".join(str(d) for d in drinks if d)
-    else:
-        drinks_s = _safe_str(drinks)
+    drinks_s = ", ".join(str(d) for d in drinks if d) if isinstance(drinks, list) else _safe_str(drinks)
     lines = [
         "Cafe visit journal.",
         f"Place: {_safe_str(visit.get('placeName'))}.",

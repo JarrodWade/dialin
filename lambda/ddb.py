@@ -22,6 +22,7 @@ GSI1 (brews by coffee, time-ordered):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -29,7 +30,7 @@ import re
 import time
 import uuid
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from statistics import mean
 from typing import Any
@@ -67,7 +68,7 @@ def _marshal(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _new_id(prefix: str) -> str:
@@ -97,9 +98,7 @@ def coerce_bool(v: Any) -> bool:
         s = v.strip().lower()
         if s in ("", "0", "false", "no", "n", "off", "null", "none"):
             return False
-        if s in ("1", "true", "yes", "y", "on"):
-            return True
-        return False
+        return s in ("1", "true", "yes", "y", "on")
     return bool(v)
 
 
@@ -115,8 +114,7 @@ def _query_all_by_sk_prefix(user_id: str, sk_prefix: str) -> list[dict[str, Any]
     cafes) feed the chat journal snapshot, so a truncated page would hide data."""
     items: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
-        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with(sk_prefix),
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with(sk_prefix),
     }
     while True:
         resp = _table.query(**kwargs)
@@ -154,9 +152,7 @@ def _cities_soft_match(city_a: str | None, city_b: str | None) -> bool:
     return a == b or a in b or b in a
 
 
-def find_matching_existing_cafe_by_place(
-    user_id: str, name: str, city: str | None = None
-) -> dict[str, Any] | None:
+def find_matching_existing_cafe_by_place(user_id: str, name: str, city: str | None = None) -> dict[str, Any] | None:
     """Return an active cafe row if normalized name+city Soft-matches another café."""
     want = _normalize_place_name(name)
     if not want:
@@ -170,16 +166,12 @@ def find_matching_existing_cafe_by_place(
     return None
 
 
-def find_matching_cafe_for_new_roaster(
-    user_id: str, name: str, city: str | None = None
-) -> dict[str, Any] | None:
+def find_matching_cafe_for_new_roaster(user_id: str, name: str, city: str | None = None) -> dict[str, Any] | None:
     """Return an active cafe item if it likely duplicates this roaster (same place)."""
     return find_matching_existing_cafe_by_place(user_id, name, city)
 
 
-def find_matching_roaster_for_new_cafe(
-    user_id: str, name: str, city: str | None = None
-) -> dict[str, Any] | None:
+def find_matching_roaster_for_new_cafe(user_id: str, name: str, city: str | None = None) -> dict[str, Any] | None:
     """Return an active roaster item if it likely duplicates this cafe (same place)."""
     want = _normalize_place_name(name)
     if not want:
@@ -221,9 +213,7 @@ def search_places(
         seen.add(key)
         out.append(row)
 
-    for c in list_cafes(
-        user_id, city=city, name_contains=nc, include_archived=include_archived
-    ):
+    for c in list_cafes(user_id, city=city, name_contains=nc, include_archived=include_archived):
         _add(
             {
                 "placeType": "cafe",
@@ -234,9 +224,7 @@ def search_places(
                 "isRoaster": c.get("isRoaster"),
             }
         )
-    for r in list_roasters(
-        user_id, city=city, name_contains=nc, include_archived=include_archived
-    ):
+    for r in list_roasters(user_id, city=city, name_contains=nc, include_archived=include_archived):
         _add(
             {
                 "placeType": "roaster",
@@ -261,9 +249,7 @@ def search_places(
         if cid:
             cafe = get_cafe(user_id, cid)
             if cafe and (include_archived or not cafe.get("archived")):
-                if city and city.strip() and not _city_matches_user_filter(
-                    cafe.get("city"), city
-                ):
+                if city and city.strip() and not _city_matches_user_filter(cafe.get("city"), city):
                     continue
                 _add(
                     {
@@ -280,9 +266,7 @@ def search_places(
         if rid:
             roaster = get_roaster(user_id, rid)
             if roaster and (include_archived or not roaster.get("archived")):
-                if city and city.strip() and not _city_matches_user_filter(
-                    roaster.get("city"), city
-                ):
+                if city and city.strip() and not _city_matches_user_filter(roaster.get("city"), city):
                     continue
                 _add(
                     {
@@ -568,9 +552,7 @@ def delete_coffee(user_id: str, coffee_id: str) -> list[str]:
 
 
 def get_coffee(user_id: str, coffee_id: str) -> dict[str, Any] | None:
-    resp = _table.get_item(
-        Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}
-    )
+    resp = _table.get_item(Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"})
     item = resp.get("Item")
     row = _strip_keys(item) if item else None
     if row:
@@ -634,8 +616,16 @@ def update_coffee(
 
 
 VALID_METHODS = {
-    "V60", "AeroPress", "Espresso", "FrenchPress", "Chemex",
-    "Kalita", "Origami", "OXO Rapid Brewer", "Moka", "ColdBrew",
+    "V60",
+    "AeroPress",
+    "Espresso",
+    "FrenchPress",
+    "Chemex",
+    "Kalita",
+    "Origami",
+    "OXO Rapid Brewer",
+    "Moka",
+    "ColdBrew",
 }
 
 
@@ -681,9 +671,7 @@ def _apply_coffee_stock_delta(user_id: str, coffee_id: str, delta_g: float) -> N
             Key={"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"},
             UpdateExpression="SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now",
             ConditionExpression=(
-                "attribute_exists(PK) "
-                "AND attribute_exists(gramsRemaining) "
-                "AND gramsRemaining >= :dose"
+                "attribute_exists(PK) AND attribute_exists(gramsRemaining) AND gramsRemaining >= :dose"
             ),
             ExpressionAttributeValues={
                 ":dose": Decimal(str(consume)),
@@ -695,10 +683,7 @@ def _apply_coffee_stock_delta(user_id: str, coffee_id: str, delta_g: float) -> N
             raise
         refreshed = get_coffee(user_id, coffee_id)
         remaining = (refreshed or {}).get("gramsRemaining")
-        raise ValueError(
-            f"insufficient stock on coffee {coffee_id} for {consume}g "
-            f"(remaining: {remaining}g)"
-        ) from e
+        raise ValueError(f"insufficient stock on coffee {coffee_id} for {consume}g (remaining: {remaining}g)") from e
 
 
 def _list_all_brews_for_coffee(user_id: str, coffee_id: str) -> list[dict[str, Any]]:
@@ -706,8 +691,7 @@ def _list_all_brews_for_coffee(user_id: str, coffee_id: str) -> list[dict[str, A
     items: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
         "IndexName": "GSI1",
-        "KeyConditionExpression": Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
-        & Key("GSI1SK").begins_with("BREW#"),
+        "KeyConditionExpression": Key("GSI1PK").eq(f"COFFEE#{coffee_id}") & Key("GSI1SK").begins_with("BREW#"),
         "FilterExpression": Attr("userId").eq(user_id),
         "ScanIndexForward": False,
     }
@@ -796,20 +780,12 @@ def create_brew(
                     {
                         "Update": {
                             "TableName": _TABLE_NAME,
-                            "Key": _marshal(
-                                {"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}
-                            ),
-                            "UpdateExpression": (
-                                "SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now"
-                            ),
+                            "Key": _marshal({"PK": f"USER#{user_id}", "SK": f"COFFEE#{coffee_id}"}),
+                            "UpdateExpression": ("SET gramsRemaining = gramsRemaining - :dose, updatedAt = :now"),
                             "ConditionExpression": (
-                                "attribute_exists(PK) "
-                                "AND attribute_exists(gramsRemaining) "
-                                "AND gramsRemaining >= :dose"
+                                "attribute_exists(PK) AND attribute_exists(gramsRemaining) AND gramsRemaining >= :dose"
                             ),
-                            "ExpressionAttributeValues": _marshal(
-                                {":dose": Decimal(str(dose_g)), ":now": iso_ts}
-                            ),
+                            "ExpressionAttributeValues": _marshal({":dose": Decimal(str(dose_g)), ":now": iso_ts}),
                         }
                     },
                     {"Put": {"TableName": _TABLE_NAME, "Item": _marshal(item)}},
@@ -845,8 +821,7 @@ def _find_timeline_item_by_id(
     if not eid:
         return None
     kwargs: dict[str, Any] = {
-        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with(sk_prefix),
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with(sk_prefix),
         "FilterExpression": Attr(id_attribute).eq(eid),
         "ScanIndexForward": False,
         "Limit": _TIMELINE_QUERY_PAGE,
@@ -872,18 +847,26 @@ def get_brew(user_id: str, brew_id: str) -> dict[str, Any] | None:
 
 def _brew_sk(user_id: str, brew_id: str) -> str:
     """Return the full SK for a brew, raising ValueError if not found."""
-    row = _find_timeline_item_by_id(
-        user_id, "BREW#", "brewId", brew_id, projection="SK"
-    )
+    row = _find_timeline_item_by_id(user_id, "BREW#", "brewId", brew_id, projection="SK")
     if not row:
         raise ValueError(f"brew {brew_id} not found")
     return row["SK"]
 
 
 _BREW_EDITABLE = {
-    "method", "doseG", "yieldG", "waterG", "grind",
-    "grinderId", "machineId", "brewerId",
-    "timeS", "tempC", "rating", "taste", "notes",
+    "method",
+    "doseG",
+    "yieldG",
+    "waterG",
+    "grind",
+    "grinderId",
+    "machineId",
+    "brewerId",
+    "timeS",
+    "tempC",
+    "rating",
+    "taste",
+    "notes",
 }
 
 
@@ -1111,9 +1094,7 @@ def list_equipment(
         items = [i for i in items if _equipment_row_active(i)]
     if equip_type:
         want_et = (equip_type or "").strip().upper()
-        items = [
-            i for i in items if (i.get("equipType") or "").strip().upper() == want_et
-        ]
+        items = [i for i in items if (i.get("equipType") or "").strip().upper() == want_et]
     # Normalize type casing for clients (strict JS filters and legacy lowercase rows).
     for i in items:
         raw_et = i.get("equipType")
@@ -1150,9 +1131,7 @@ def update_equipment(
     if "equipType" in updates:
         updates["equipType"] = updates["equipType"].upper()
         if updates["equipType"] not in EQUIP_TYPES:
-            raise ValueError(
-                f"unknown equipType {updates['equipType']!r}; one of {sorted(EQUIP_TYPES)}"
-            )
+            raise ValueError(f"unknown equipType {updates['equipType']!r}; one of {sorted(EQUIP_TYPES)}")
     if not updates:
         raise ValueError("no allowed fields to update")
 
@@ -1192,16 +1171,16 @@ def update_equipment(
 
 
 _PROFILE_FIELDS = {
-    "preferredOrigins",       # list[str]
-    "preferredProcesses",     # list[str]
-    "preferredRoastLevel",    # str (light/medium/dark/ultralight)
-    "dislikedNotes",          # list[str]
-    "favoriteRoasters",       # list[str]
-    "favoriteCafes",          # list[str]
-    "homeCity",               # str
-    "timezone",               # str IANA TZ, e.g. America/New_York (used when inferring relative visit dates)
-    "notes",                  # str (freeform memory)
-    "discoveryChannels",      # list[str] — how they find coffee (e.g. subscription boxes)
+    "preferredOrigins",  # list[str]
+    "preferredProcesses",  # list[str]
+    "preferredRoastLevel",  # str (light/medium/dark/ultralight)
+    "dislikedNotes",  # list[str]
+    "favoriteRoasters",  # list[str]
+    "favoriteCafes",  # list[str]
+    "homeCity",  # str
+    "timezone",  # str IANA TZ, e.g. America/New_York (used when inferring relative visit dates)
+    "notes",  # str (freeform memory)
+    "discoveryChannels",  # list[str] — how they find coffee (e.g. subscription boxes)
     "experimentalPreference",  # str: "" | "open" | "seek" — taste for funky/co-ferment lots
 }
 
@@ -1340,9 +1319,7 @@ def _city_matches_user_filter(stored_raw: str | None, filter_city: str) -> bool:
     head = s.split(",")[0].strip()
     if head == q:
         return True
-    if head.startswith(q + "-") or head.startswith(q + " "):
-        return True
-    return False
+    return bool(head.startswith(q + "-") or head.startswith(q + " "))
 
 
 def list_cafes(
@@ -1411,8 +1388,8 @@ def _iso_ts_to_datetime(iso_ts: Any) -> datetime:
         raise ValueError("empty iso")
     dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _visit_drinks_list(raw: Any) -> list[str]:
@@ -1477,7 +1454,7 @@ def log_visit(
             recent_scope = list_visits(user_id, cafe_id=cid_raw, limit=50)
         else:
             recent_scope = list_visits(user_id, roaster_id=rid_raw, limit=50)
-        now_dt = datetime.now(timezone.utc)
+        now_dt = datetime.now(UTC)
         window_td = timedelta(seconds=win_secs)
         dup_row: dict[str, Any] | None = None
         for row in recent_scope:
@@ -1544,9 +1521,7 @@ def get_visit(user_id: str, visit_id: str) -> dict[str, Any] | None:
 
 
 def _visit_sk(user_id: str, visit_id: str) -> str:
-    row = _find_timeline_item_by_id(
-        user_id, "VISIT#", "visitId", visit_id, projection="SK"
-    )
+    row = _find_timeline_item_by_id(user_id, "VISIT#", "visitId", visit_id, projection="SK")
     if not row:
         raise ValueError(f"visit {visit_id} not found")
     return row["SK"]
@@ -1601,9 +1576,7 @@ def delete_visit(user_id: str, visit_id: str) -> None:
     )
 
 
-def _visit_matches_place_name(
-    user_id: str, visit: dict[str, Any], needle: str
-) -> bool:
+def _visit_matches_place_name(user_id: str, visit: dict[str, Any], needle: str) -> bool:
     """True if needle matches placeName or the linked cafe/roaster display name."""
     if needle in (visit.get("placeName") or "").lower():
         return True
@@ -1637,8 +1610,7 @@ def list_visits(
     if place_id:
         resp = _table.query(
             IndexName="GSI1",
-            KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{place_id}")
-            & Key("GSI1SK").begins_with("VISIT#"),
+            KeyConditionExpression=Key("GSI1PK").eq(f"CAFE#{place_id}") & Key("GSI1SK").begins_with("VISIT#"),
             FilterExpression=Attr("userId").eq(user_id),
             ScanIndexForward=False,
             Limit=fetch_limit,
@@ -1646,8 +1618,7 @@ def list_visits(
         items = resp.get("Items", [])
     else:
         resp = _table.query(
-            KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-            & Key("SK").begins_with("VISIT#"),
+            KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("VISIT#"),
             ScanIndexForward=False,
             Limit=fetch_limit,
         )
@@ -1671,8 +1642,7 @@ def summarize_coffee(user_id: str, coffee_id: str) -> dict[str, Any]:
 
     resp = _table.query(
         IndexName="GSI1",
-        KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
-        & Key("GSI1SK").begins_with("BREW#"),
+        KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}") & Key("GSI1SK").begins_with("BREW#"),
         FilterExpression=Attr("userId").eq(user_id),
         ScanIndexForward=False,
     )
@@ -1741,8 +1711,7 @@ def list_brews(
     if coffee_id:
         resp = _table.query(
             IndexName="GSI1",
-            KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}")
-            & Key("GSI1SK").begins_with("BREW#"),
+            KeyConditionExpression=Key("GSI1PK").eq(f"COFFEE#{coffee_id}") & Key("GSI1SK").begins_with("BREW#"),
             FilterExpression=Attr("userId").eq(user_id),
             ScanIndexForward=False,
             Limit=limit,
@@ -1750,8 +1719,7 @@ def list_brews(
         items = resp.get("Items", [])
     else:
         resp = _table.query(
-            KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-            & Key("SK").begins_with("BREW#"),
+            KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("BREW#"),
             ScanIndexForward=False,
             Limit=limit * (3 if method else 1),
         )
@@ -1825,7 +1793,7 @@ def consume_websearch_quota(user_id: str, monthly_limit: int) -> tuple[bool, int
     if monthly_limit <= 0:
         return True, -1
 
-    ym = datetime.now(timezone.utc).strftime("%Y-%m")
+    ym = datetime.now(UTC).strftime("%Y-%m")
     pk = f"USER#{user_id}"
     sk = f"USAGE#WEBSEARCH#{ym}"
 
@@ -1833,9 +1801,7 @@ def consume_websearch_quota(user_id: str, monthly_limit: int) -> tuple[bool, int
         resp = _table.update_item(
             Key={"PK": pk, "SK": sk},
             UpdateExpression=(
-                "ADD callCount :one "
-                "SET itemType = :it, updatedAt = :now, "
-                "expiresAt = if_not_exists(expiresAt, :exp)"
+                "ADD callCount :one SET itemType = :it, updatedAt = :now, expiresAt = if_not_exists(expiresAt, :exp)"
             ),
             ExpressionAttributeValues={
                 ":one": 1,
@@ -1865,7 +1831,7 @@ def consume_chat_quota(user_id: str, daily_limit: int) -> tuple[bool, int]:
     if daily_limit <= 0:
         return True, -1
 
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     pk = f"USER#{user_id}"
     sk = f"USAGE#CHAT#{day}"
 
@@ -1873,9 +1839,7 @@ def consume_chat_quota(user_id: str, daily_limit: int) -> tuple[bool, int]:
         resp = _table.update_item(
             Key={"PK": pk, "SK": sk},
             UpdateExpression=(
-                "ADD turnCount :one "
-                "SET itemType = :it, updatedAt = :now, "
-                "expiresAt = if_not_exists(expiresAt, :exp)"
+                "ADD turnCount :one SET itemType = :it, updatedAt = :now, expiresAt = if_not_exists(expiresAt, :exp)"
             ),
             ExpressionAttributeValues={
                 ":one": 1,
@@ -1904,18 +1868,14 @@ def refund_chat_quota(user_id: str, daily_limit: int) -> None:
     give the reservation back so a failed turn does not burn the user's daily budget."""
     if daily_limit <= 0:
         return
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    try:
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    with contextlib.suppress(ClientError):
         _table.update_item(
             Key={"PK": f"USER#{user_id}", "SK": f"USAGE#CHAT#{day}"},
             UpdateExpression="ADD turnCount :neg SET updatedAt = :now",
             ConditionExpression="attribute_exists(turnCount) AND turnCount > :zero",
             ExpressionAttributeValues={":neg": -1, ":zero": 0, ":now": _now_iso()},
         )
-    except ClientError:
-        # Best-effort: counter already at 0 / absent, or a transient error. The
-        # daily window resets anyway, so never fail the request over a refund.
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1951,8 +1911,7 @@ def create_chat_feedback(
 def list_chat_feedback(user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
     """Return recent feedback items for a user, newest first."""
     resp = _table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with("FEEDBACK#"),
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("FEEDBACK#"),
         ScanIndexForward=False,
         Limit=min(max(1, limit), 200),
     )

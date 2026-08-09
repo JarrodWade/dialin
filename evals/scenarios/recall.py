@@ -25,12 +25,19 @@ def _dialin_advice_for_method() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Sweet Bloom Coffee Roasters", city="Lakewood", state="CO")
         c = ddb.create_coffee(
-            user_id, roaster="Sweet Bloom Coffee Roasters", name="Colombia El Paraiso",
-            roaster_id=r["roasterId"], origin="Colombia",
+            user_id,
+            roaster="Sweet Bloom Coffee Roasters",
+            name="Colombia El Paraiso",
+            roaster_id=r["roasterId"],
+            origin="Colombia",
         )
         cid = c["coffeeId"]
-        ddb.create_brew(user_id=user_id, coffee_id=cid, method="Espresso", grind="Ode 3", rating=6, taste="sour, bright")
-        ddb.create_brew(user_id=user_id, coffee_id=cid, method="Espresso", grind="Ode 2", rating=8, taste="balanced, syrupy")
+        ddb.create_brew(
+            user_id=user_id, coffee_id=cid, method="Espresso", grind="Ode 3", rating=6, taste="sour, bright"
+        )
+        ddb.create_brew(
+            user_id=user_id, coffee_id=cid, method="Espresso", grind="Ode 2", rating=8, taste="balanced, syrupy"
+        )
         state["coffeeId"] = cid
 
     return H.Scenario(
@@ -41,8 +48,9 @@ def _dialin_advice_for_method() -> H.Scenario:
         checks=[
             H.called(
                 "get_dialin_advice",
-                where=lambda a: str(a.get("method") or "").lower() == "espresso"
-                and a.get("coffeeId") == state.get("coffeeId"),
+                where=lambda a: (
+                    str(a.get("method") or "").lower() == "espresso" and a.get("coffeeId") == state.get("coffeeId")
+                ),
                 label="get_dialin_advice(El Paraiso, Espresso)",
             ),
             H.no_iteration_cap(),
@@ -56,8 +64,11 @@ def _best_pick_uses_summarize() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "Onyx Coffee Lab", city="Rogers", state="AR")
         c = ddb.create_coffee(
-            user_id, roaster="Onyx Coffee Lab", name="Ethiopia Guji",
-            roaster_id=r["roasterId"], origin="Ethiopia",
+            user_id,
+            roaster="Onyx Coffee Lab",
+            name="Ethiopia Guji",
+            roaster_id=r["roasterId"],
+            origin="Ethiopia",
         )
         cid = c["coffeeId"]
         ddb.create_brew(user_id=user_id, coffee_id=cid, method="V60", grind="Ode 5", rating=7, taste="floral")
@@ -93,12 +104,19 @@ def _specific_brew_recall_uses_brew_tool() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         r = ddb.create_roaster(user_id, "S&W Craft Roasters", city="Nashville", state="TN")
         c = ddb.create_coffee(
-            user_id, roaster="S&W Craft Roasters", name="Divino Nino White Honey Geisha",
-            roaster_id=r["roasterId"], origin="Colombia",
+            user_id,
+            roaster="S&W Craft Roasters",
+            name="Divino Nino White Honey Geisha",
+            roaster_id=r["roasterId"],
+            origin="Colombia",
         )
         ddb.create_brew(
-            user_id=user_id, coffee_id=c["coffeeId"], method="OXO Rapid Brewer",
-            grind="Soup method", rating=9, taste="lemon cake, syrupy",
+            user_id=user_id,
+            coffee_id=c["coffeeId"],
+            method="OXO Rapid Brewer",
+            grind="Soup method",
+            rating=9,
+            taste="lemon cake, syrupy",
         )
         state["coffeeId"] = c["coffeeId"]
 

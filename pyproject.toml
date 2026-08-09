@@ -1,0 +1,20 @@
+[project]
+name = "dialin"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["lambda", "."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["lambda", "tests", "evals", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"lambda/bedrock.py" = ["E402"]
+"lambda/stream_server.py" = ["SIM105"]
+"tests/**" = ["SIM117"]
