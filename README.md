@@ -15,6 +15,7 @@ Log your beans, gear, and brews. Ask the bot for extraction advice grounded in y
 - **Dial-in advice** — surfaces your best brew for a given coffee+method, computes grind delta, ratio drift, and rating trend
 - **Taste preferences** — persistent memory (origins, processes, roasters, cafes, home city)
 - **Cafe recommendations** — city-aware, tiered confidence, no hallucination
+- **For You (Explore)** — web-grounded bean and café picks from your taste graph (`/explore.html`; `POST /recommendations/beans|cafes`)
 - **Coffee glossary** — curated drink, regional, and gear terms; **GET /glossary** and in-chat `lookup_coffee_term` share the same JSON
 
 ---
@@ -81,6 +82,10 @@ This checks JSON syntax and duplicate normalized aliases (same rules as the look
 | PATCH | `/visits/{visitId}` | Edit a logged visit (rating, notes, drinks, date, display name) |
 | DELETE | `/visits/{visitId}` | Permanently delete a visit |
 | GET / PATCH | `/profile` | Get / update taste preferences |
+| POST | `/recommendations/beans` | For You bean shortlist grounded in taste graph + web search |
+| POST | `/recommendations/cafes` | For You café shortlist for a destination city (body: `{city}`) |
+| POST | `/chat/feedback` | Store a "not quite right" signal on a chat turn |
+| GET | `/chat/feedback` | List recent chat feedback rows (newest first) |
 
 `POST /chat` is fully buffered — the client waits for the whole tool loop plus
 the final answer. An optional streaming variant, `POST /chat/stream`, is
@@ -135,7 +140,7 @@ terraform init
 terraform apply
 ```
 
-Applying builds the Lambda zip with **`pip install -r ../lambda/requirements.txt`** locally; you need **Python 3** and **internet** on that machine.
+Applying builds the Lambda zip with **`pip install -r ../lambda/requirements.lock.txt`** locally; you need **Python 3** and **internet** on that machine. Regenerate lockfiles after editing `lambda/requirements.txt` or `requirements-dev.txt` with `make lock` (requires [uv](https://docs.astral.sh/uv/)).
 
 Copy the `api_url` output value.
 
@@ -149,13 +154,23 @@ make ui UI_PORT=8001
 
 Paste the API URL into the input at the top of the UI.
 
-### Tests
+### Tests and quality checks
 
 ```bash
-make test   # pytest + moto DynamoDB; creates .venv if needed
+make test      # pytest + moto DynamoDB; creates .venv if needed
+make lint      # ruff check + format --check
+make lint-fix  # auto-fix ruff issues
+make lock      # regenerate requirements*.lock.txt (needs uv)
 ```
 
-Covers tool dispatch error envelopes and a golden-path journal flow (roaster → coffee → brew → visit) without Bedrock or AWS credentials.
+Covers tool dispatch error envelopes and a golden-path journal flow (roaster → coffee → brew → visit) without Bedrock or AWS credentials. CI (`.github/workflows/test.yml`) runs lint, tests with coverage, glossary/gear validators, and `terraform fmt`/`validate` on every push/PR.
+
+Optional local hooks (same checks as CI, on staged files only):
+
+```bash
+pip install pre-commit   # or: uv pip install pre-commit
+pre-commit install
+```
 
 Chat history: set `chatHistoryTurnLimit` in `web/dialin-config.js` to match Lambda `CHAT_HISTORY_TURN_LIMIT` (default 24 messages).
 

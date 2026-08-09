@@ -23,7 +23,7 @@ The "Set API URL" field is dev scaffolding. For a real product the API URL shoul
 
 ### 3. Lock down CORS
 
-`api_gateway.tf` currently has `allow_origins = ["*"]`. Once you have a domain, replace with the exact origin.
+CORS is driven by `var.cors_allowed_origins` in Terraform (default `["*"]` for local dev). For a real domain, set explicit origins in `terraform.tfvars` — e.g. `cors_allowed_origins = ["https://your-domain.example"]`.
 
 ---
 
@@ -86,7 +86,7 @@ Do not prioritize these for personal/solo use:
 
 1. Set `clerk_jwt_issuer` in Terraform and set `ALLOW_CLIENT_USER_ID=false` — Lambda already verifies session JWTs against Clerk's JWKS on every request, so this just makes it mandatory instead of optional (no API Gateway authorizer needed; Clerk's default tokens lack `aud`, which is why verification lives in Lambda, not at the edge)
 2. Remove the manual user id field and `userId` from all client payloads now that it's unauthenticated dead weight
-3. Lock CORS to your domain
+3. Lock CORS to your domain via `cors_allowed_origins` in Terraform (replace the default `["*"]`)
 4. Add S3 + CloudFront hosting via Terraform
 5. Upgrade Tavily; add query cache
 6. Add per-user rate limiting via API Gateway usage plans

@@ -57,7 +57,7 @@ seeded scratch DynamoDB  +  live Bedrock converse  +  local tool dispatch
 
 **Phase 2 (done):** scenarios + live runner.
 - `fixtures.py` — canned external-IO stubs + `install()`/restore.
-- `scenarios/` — 19 scenarios across rule families, tagged by rule.
+- `scenarios/` — 20 scenarios across rule families, tagged by rule.
 - `run_evals.py` — live CLI: scratch table, N reps, scoring, md+json report,
   baseline diff.
 - `make eval` / `make eval-list`; CI smoke test over all scenarios.
@@ -152,6 +152,7 @@ Scenarios are plain Python (callable predicates > YAML). A scenario is:
 from typing import Any
 from evals import harness as H
 
+
 def _cafe_roaster_badge() -> H.Scenario:
     def seed(ddb: Any, user_id: str) -> None:
         ddb.create_cafe(user_id, name="Anchorhead", city="Seattle", state="WA")
@@ -168,6 +169,7 @@ def _cafe_roaster_badge() -> H.Scenario:
         ],
     )
 
+
 SCENARIOS = [_cafe_roaster_badge(), ...]
 ```
 
@@ -176,13 +178,17 @@ To reference an id created by the seed inside a check, share a `state` dict:
 ```python
 def _build():
     state: dict[str, Any] = {}
+
     def seed(ddb, u):
         c = ddb.create_coffee(u, roaster="Onyx", name="Guji", origin="Ethiopia")
         state["coffeeId"] = c["coffeeId"]
+
     return H.Scenario(
-        id="...", rule="CORE-3", seed=seed, message="dial in my Guji on espresso",
-        checks=[H.called("get_dialin_advice",
-                         where=lambda a: a.get("coffeeId") == state.get("coffeeId"))],
+        id="...",
+        rule="CORE-3",
+        seed=seed,
+        message="dial in my Guji on espresso",
+        checks=[H.called("get_dialin_advice", where=lambda a: a.get("coffeeId") == state.get("coffeeId"))],
     )
 ```
 

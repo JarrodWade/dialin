@@ -1,7 +1,7 @@
 project_name        = "dialin"
 region              = "us-east-1"
 bedrock_model_id    = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-max_output_tokens   = 400
+max_output_tokens   = 600
 max_tool_iterations      = 12
 chat_max_web_searches   = 4
 chat_history_turn_limit = 24
